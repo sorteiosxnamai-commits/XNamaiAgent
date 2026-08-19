@@ -1,0 +1,25 @@
+{
+  "eventName": "conversationFragment",
+  "conversationId": "conv_fixture_expired",
+  "visitor": {
+    "id": "visitor_fixture",
+    "source": "instagram",
+    "sourceChannelRef": "ig_biz_fixture",
+    "sourceConversationRef": "ig_user_fixture"
+  },
+  "messages": [
+    {
+      "type": "visitor",
+      "id": "msg_expired_1",
+      "text": "Qual o valor?",
+      "createdAt": "2026-08-05T20:00:00Z",
+      "reply_to": {
+        "story": {
+          "id": "story_expired_001",
+          "media_type": "image",
+          "expires_at": "2020-01-01T00:00:00Z"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "_comment": "Sanitized image Story with signed-looking query stripped from fixture (operational URL shape documented separately).",
+  "eventName": "conversationFragment",
+  "conversationId": "conv_fixture_image",
+  "visitor": {
+    "id": "visitor_fixture",
+    "source": "instagram",
+    "sourceChannelRef": "ig_biz_fixture",
+    "sourceConversationRef": "ig_user_fixture"
+  },
+  "messages": [
+    {
+      "type": "visitor",
+      "id": "msg_image_1",
+      "text": "Quanto custa esse?",
+      "createdAt": "2026-08-05T20:00:00Z",
+      "reply_to": {
+        "story": {
+          "id": "story_image_001",
+          "url": "https://scontent.cdninstagram.com/v/t51/x.jpg?oe=ABC&oh=SECRETTOKEN",
+          "media_type": "image"
+        }
+      }
+    }
+  ]
+}

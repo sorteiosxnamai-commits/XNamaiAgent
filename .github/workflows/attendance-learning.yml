@@ -1,0 +1,39 @@
+# Hourly self-learning over recent agent attendances.
+# Calls the production cron endpoint (same auth as Vercel crons).
+
+name: Attendance Learning
+
+on:
+  schedule:
+    # Every hour at minute 10 (offset from Vercel :00 to diversify load)
+    - cron: "10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  learn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run attendance learning cron
+        env:
+          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AGENT_BASE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing AGENT_BASE_URL or CRON_SECRET secrets"
+            exit 1
+          fi
+          BASE="${AGENT_BASE_URL%/}"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${BASE}/api/cron/attendance-learning" \
+            | tee /tmp/learning.json
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("/tmp/learning.json"))
+          print("summary:", json.dumps(data, ensure_ascii=False))
+          if not data.get("ok", True):
+              sys.exit(1)
+          PY

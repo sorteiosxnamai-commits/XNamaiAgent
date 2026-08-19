@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/remarketing",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/product-image-index",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/attendance-learning",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/instagram-story-media-retention",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-inbox",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

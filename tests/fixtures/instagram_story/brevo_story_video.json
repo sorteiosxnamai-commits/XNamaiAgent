@@ -1,0 +1,26 @@
+{
+  "eventName": "conversationFragment",
+  "conversationId": "conv_fixture_video",
+  "visitor": {
+    "id": "visitor_fixture",
+    "source": "instagram",
+    "sourceChannelRef": "ig_biz_fixture",
+    "sourceConversationRef": "ig_user_fixture"
+  },
+  "messages": [
+    {
+      "type": "visitor",
+      "id": "msg_video_1",
+      "text": "Qual é o modelo?",
+      "createdAt": "2026-08-05T20:00:00Z",
+      "reply_to": {
+        "story": {
+          "id": "story_video_001",
+          "url": "https://scontent.cdninstagram.com/v/t50/video.mp4?oe=ABC&oh=SECRET",
+          "media_type": "video",
+          "thumbnail_url": "https://scontent.cdninstagram.com/v/t51/thumb.jpg?oe=ABC&oh=SECRET"
+        }
+      }
+    }
+  ]
+}

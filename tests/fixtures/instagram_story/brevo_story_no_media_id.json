@@ -1,0 +1,24 @@
+{
+  "eventName": "conversationFragment",
+  "conversationId": "conv_fixture_no_id",
+  "visitor": {
+    "id": "visitor_fixture",
+    "source": "instagram",
+    "sourceChannelRef": "ig_biz_fixture",
+    "sourceConversationRef": "ig_user_fixture"
+  },
+  "messages": [
+    {
+      "type": "visitor",
+      "id": "msg_no_id_1",
+      "text": "Manda o link",
+      "createdAt": "2026-08-05T20:00:00Z",
+      "reply_to": {
+        "story": {
+          "url": "https://scontent.cdninstagram.com/v/t51/x.jpg",
+          "media_type": "image"
+        }
+      }
+    }
+  ]
+}
