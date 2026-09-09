@@ -37,6 +37,11 @@ async def _customer_context_for(incoming: IncomingMessage) -> dict[str, Any]:
 
 async def _send_reply(incoming: IncomingMessage, result: AgentResult) -> dict[str, Any]:
     provider = (incoming.provider or "").lower()
+    if provider == "ycloud":
+        from app.channels.ycloud_whatsapp import send_ycloud_reply
+
+        return await send_ycloud_reply(incoming, result)
+
     if provider == "meta" or (
         (incoming.channel or "").lower() == "instagram"
         and str(getattr(get_settings(), "instagram_ingress_provider", "meta")).lower()

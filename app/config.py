@@ -667,6 +667,24 @@ class Settings(BaseSettings):
         alias="INSTAGRAM_INGRESS_PROVIDER",
     )
 
+    # YCloud WhatsApp transport — additive to Brevo. Default off until canary.
+    # Routing needs no provider switch: the webhook route sets provider="ycloud"
+    # on the inbound, and the worker sends the reply back through the same one.
+    ycloud_webhook_enabled: bool = Field(
+        default=False,
+        alias="YCLOUD_WEBHOOK_ENABLED",
+    )
+    ycloud_api_key: str = Field(default="", alias="YCLOUD_API_KEY")
+    ycloud_webhook_secret: str = Field(default="", alias="YCLOUD_WEBHOOK_SECRET")
+    # Business number this deployment answers for. Inbound addressed to any
+    # other number is logged and dropped before the agent runs.
+    ycloud_whatsapp_from: str = Field(default="", alias="YCLOUD_WHATSAPP_FROM")
+    ycloud_waba_id: str = Field(default="", alias="YCLOUD_WABA_ID")
+    ycloud_base_url: str = Field(
+        default="https://api.ycloud.com/v2",
+        alias="YCLOUD_BASE_URL",
+    )
+
     # Instagram Story ↔ product recognition (default off until real payload validated).
     instagram_story_recognition_enabled: bool = Field(
         default=False,
@@ -807,6 +825,7 @@ class Settings(BaseSettings):
         "mp_access_token", "mercadopago_access_token",
         "meta_app_secret", "meta_ig_app_secret", "meta_verify_token",
         "meta_page_access_token",
+        "ycloud_api_key", "ycloud_webhook_secret",
         mode="before",
     )
     @classmethod

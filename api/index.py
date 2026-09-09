@@ -1351,6 +1351,170 @@ async def meta_instagram_webhook(request: Request):
     )
 
 
+@app.post("/api/webhooks/ycloud/whatsapp")
+async def ycloud_whatsapp_webhook(request: Request):
+    """YCloud WhatsApp webhook → same durable inbox / worker / agent as Brevo.
+
+    ACK note: like the Meta route, the agent turn runs inline before the 200.
+    YCloud redelivers when the ACK is slow; a redelivery is absorbed by the
+    inbox idempotency key and by claim_inbound_message, so it costs work but
+    never produces a second reply.
+    """
+    from app.channels.ycloud_whatsapp import (
+        YCLOUD_INBOUND_EVENT,
+        YCLOUD_STATUS_EVENT,
+        parse_ycloud_inbound_message,
+        parse_ycloud_status_update,
+        resolve_ycloud_tenant,
+        verify_ycloud_signature,
+        ycloud_event_type,
+        ycloud_webhook_enabled,
+    )
+
+    settings = get_settings()
+    if not ycloud_webhook_enabled():
+        raise HTTPException(status_code=404, detail={"error": "ycloud_webhook_disabled"})
+
+    body = await request.body()
+    signature_header = (
+        request.headers.get("ycloud-signature")
+        or request.headers.get("YCloud-Signature")
+        or request.headers.get("x-ycloud-signature")
+    )
+    if not verify_ycloud_signature(
+        secret=str(getattr(settings, "ycloud_webhook_secret", "") or ""),
+        body=body,
+        signature_header=signature_header,
+    ):
+        log_event(
+            "ycloud.webhook.signature_rejected",
+            {
+                "has_signature": bool((signature_header or "").strip()),
+                "secret_configured": bool(
+                    str(getattr(settings, "ycloud_webhook_secret", "") or "").strip()
+                ),
+                "body_bytes": len(body),
+            },
+        )
+        raise HTTPException(
+            status_code=401, detail={"error": "invalid_ycloud_signature"}
+        )
+
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (JSONDecodeError, UnicodeDecodeError):
+        payload = None
+    if not isinstance(payload, dict):
+        log_event("ycloud.webhook.skipped", {"reason": "invalid_json"})
+        return JSONResponse({"ok": True, "skipped": "invalid_json"})
+
+    event = ycloud_event_type(payload)
+    log_event(
+        "ycloud.webhook.received",
+        {"event": event or None, "body_bytes": len(body)},
+    )
+
+    if event == YCLOUD_STATUS_EVENT:
+        log_event(
+            "ycloud.message_status_updated",
+            parse_ycloud_status_update(payload) or {"status": None},
+        )
+        return JSONResponse({"ok": True, "event": event, "skipped": "status_only"})
+
+    if event != YCLOUD_INBOUND_EVENT:
+        return JSONResponse(
+            {"ok": True, "event": event or None, "skipped": "unsupported_event"}
+        )
+
+    incoming = parse_ycloud_inbound_message(payload)
+    if incoming is None:
+        return JSONResponse(
+            {"ok": True, "event": event, "skipped": "unsupported_message"}
+        )
+
+    metadata = incoming.channel_metadata or {}
+    resolution = resolve_ycloud_tenant(
+        to=metadata.get("ycloud_to"),
+        waba_id=metadata.get("ycloud_waba_id"),
+        settings=settings,
+    )
+    if not resolution.ok:
+        # Unknown destination: record it and stop. Never guess a tenant.
+        log_event(
+            "ycloud.webhook.tenant_unresolved",
+            {
+                "event": event,
+                "failure_code": resolution.failure_code,
+                "message_id_present": bool(incoming.message_id),
+            },
+        )
+        return JSONResponse(
+            {
+                "ok": True,
+                "event": event,
+                "skipped": "tenant_unresolved",
+                "reason": resolution.failure_code,
+            }
+        )
+
+    runtime = get_current_turn()
+    if runtime is not None:
+        runtime.channel = incoming.channel
+        runtime.conversation_key = (
+            incoming.conversation_id or incoming.sender_key or "unresolved"
+        )
+
+    from app.ingress.inbox import enqueue_inbound
+
+    created, inbox_id = enqueue_inbound(
+        provider="ycloud",
+        channel=incoming.channel,
+        message_id=incoming.message_id,
+        conversation_key=incoming.conversation_id or incoming.sender_key,
+        visitor_id=incoming.visitor_id,
+        sender_key=incoming.sender_key,
+        event_name=event,
+        payload={
+            "normalized": incoming.model_dump(mode="json"),
+            "raw": incoming.raw,
+        },
+    )
+    queued = [{"created": created, "inbox_id": inbox_id}]
+    log_event(
+        "ycloud.inbound_accepted",
+        {
+            "created": created,
+            "inbox_id": inbox_id,
+            "tenant_source": resolution.source,
+            "text_chars": len(incoming.text or ""),
+        },
+    )
+
+    # Process inline so the customer gets a real-time reply: the shared
+    # process-inbox cron is a daily backstop, not a dispatcher.
+    worker_result = None
+    try:
+        from app.ingress.worker import process_inbox_batch
+
+        worker_result = await process_inbox_batch(limit=5)
+    except Exception as exc:  # noqa: BLE001 — never 5xx back to YCloud
+        log_exception(
+            "ycloud.webhook.inline_worker_failed",
+            exc,
+            {"inbox_id": inbox_id},
+        )
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "provider": "ycloud",
+            "event": event,
+            "queued": queued,
+            "worker": worker_result,
+        }
+    )
+
+
 @app.get("/api/admin/rollout", dependencies=[Depends(verify_admin_token)])
 async def admin_rollout_status():
     """Read-only rollout snapshot + rollback checklist (mutate via Vercel env)."""
