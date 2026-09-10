@@ -1,8 +1,13 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 def _strip_secret(value: str) -> str:
@@ -14,8 +19,54 @@ def _strip_secret(value: str) -> str:
     return cleaned
 
 
+#: Campos em que "" é valor legítimo, não "não preenchido": openai_gateway usa
+#: a string vazia para NÃO enviar reasoning.effort / text.verbosity à OpenAI.
+_EMPTY_IS_MEANINGFUL = ("OPENAI_REASONING_EFFORT", "OPENAI_TEXT_VERBOSITY")
+
+
+class _KeepMeaningfulEmptySource(EnvSettingsSource):
+    """Reintroduz apenas os campos de _EMPTY_IS_MEANINGFUL descartados por
+    env_ignore_empty, e somente quando estão vazios."""
+
+    def __init__(self, settings_cls: type[BaseSettings]) -> None:
+        super().__init__(settings_cls, env_ignore_empty=False)
+
+    def __call__(self) -> dict[str, Any]:
+        values = super().__call__()
+        return {
+            key: value
+            for key, value in values.items()
+            if key in _EMPTY_IS_MEANINGFUL and value == ""
+        }
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # env_ignore_empty: a Vercel entrega env vars não preenchidas como "",
+    # o que quebrava o boot com 120 erros de validação. Tratar "" como ausente
+    # faz o default do Field valer.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        env_ignore_empty=True,
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            _KeepMeaningfulEmptySource(settings_cls),
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     environment: str = Field(default="production", alias="ENVIRONMENT")
     log_level: str = Field(default="info", alias="LOG_LEVEL")
