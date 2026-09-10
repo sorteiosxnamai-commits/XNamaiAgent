@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 from json import JSONDecodeError
 from uuid import uuid4
 
@@ -285,6 +286,28 @@ async def root():
 AGENT_VERSION = "openai-db-context-multichannel-runtime-v7"
 
 
+def _env_diagnostics(settings) -> dict[str, bool | int]:
+    """Compara os.environ (raw) com o Settings carregado.
+
+    DIAGNÓSTICO TEMPORÁRIO — remover quando a origem da perda for identificada.
+    Expõe apenas presença e comprimento; nenhum valor, prefixo ou sufixo.
+    """
+    raw_db = os.getenv("DATABASE_URL") or ""
+    raw_key = os.getenv("OPENAI_API_KEY") or ""
+    settings_db = getattr(settings, "database_url", "") or ""
+    settings_key = getattr(settings, "openai_api_key", "") or ""
+    return {
+        "raw_database_url_present": bool(raw_db),
+        "raw_database_url_len": len(raw_db),
+        "settings_database_url_present": bool(settings_db),
+        "settings_database_url_len": len(settings_db),
+        "raw_openai_api_key_present": bool(raw_key),
+        "raw_openai_api_key_len": len(raw_key),
+        "settings_openai_api_key_present": bool(settings_key),
+        "settings_openai_api_key_len": len(settings_key),
+    }
+
+
 @app.get("/api/health")
 async def health():
     settings = get_settings()
@@ -300,6 +323,12 @@ async def health():
         "ok": True,
         "agent_version": AGENT_VERSION,
         "agent_mode": "openai_with_db_context",
+        # DIAGNÓSTICO TEMPORÁRIO: separa "a Vercel não entregou" de "o Settings
+        # perdeu". env_ignore_empty torna ausente e vazio indistinguíveis no
+        # Settings, então a leitura raw de os.environ é a única testemunha.
+        # Somente presença e comprimento — nunca valores. Remover após o
+        # diagnóstico.
+        "env_diagnostics": _env_diagnostics(settings),
         "openai_configured": bool(openai_key),
         "openai_key_format_ok": openai_key.startswith(("sk-", "sk-proj-")),
         "openai_key_length": len(openai_key),
