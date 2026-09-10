@@ -56,8 +56,6 @@ SECRET_VAR_NAMES: tuple[str, ...] = (
     "DATABASE_URL",
     "ADMIN_API_TOKEN",
     "BREVO_API_KEY",
-    "MERCADOPAGO_ACCESS_TOKEN",
-    "MP_ACCESS_TOKEN",
     "CRON_SECRET",
 )
 
@@ -285,7 +283,7 @@ def build_zip(
 ) -> Path:
     base = root or REPO_ROOT
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = output or (base / "dist" / f"NSAgentForSorteios-release-{stamp}.zip")
+    out = output or (base / "dist" / f"XNamaiAgent-release-{stamp}.zip")
     files = iter_release_files(base)
     classified = classify_package_secrets(files, root=base)
     blocking = [f for f in classified if f.blocking]

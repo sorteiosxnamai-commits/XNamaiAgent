@@ -22,11 +22,30 @@ def _allow_critique_llm_without_risk(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_capability_catalog_includes_order_payment_apis():
+def test_capability_catalog_exposes_neutral_order_apis():
+    """O catálogo continua publicando a consulta de pedido — agora neutra.
+
+    ``get_order_payment`` era capability específica do provider legado e saiu do
+    registry; ``get_order`` é a capacidade genérica equivalente e permanece
+    retryable, que é a propriedade que o loop de crítica depende.
+    """
     catalog = build_capability_catalog()
-    assert "get_order_payment" in catalog["commerce_apis"]
-    assert "get_order_payment" in RETRYABLE_API_NAMES
+    assert "get_order" in catalog["commerce_apis"]
+    assert "get_order" in RETRYABLE_API_NAMES
+    assert "get_order_payment" not in catalog["commerce_apis"]
     assert catalog["policy"]
+
+
+def test_capability_catalog_never_auto_retries_a_mutation():
+    """Propriedade de segurança genérica: o loop automático nunca muta estado."""
+    from app.commerce.tools import MUTATION_TOOL_NAMES
+
+    catalog = build_capability_catalog()
+    assert MUTATION_TOOL_NAMES.isdisjoint(RETRYABLE_API_NAMES)
+    for name in MUTATION_TOOL_NAMES:
+        assert _fill_api_arguments(
+            RecommendedApiCall(name=name, arguments={"order_id": "1"}), {}
+        ) is None
 
 
 def test_fill_api_arguments_uses_order_seed():
@@ -35,7 +54,7 @@ def test_fill_api_arguments_uses_order_seed():
         result=AgentResult(reply_text="x", intent="commerce"),
     )
     args = _fill_api_arguments(
-        RecommendedApiCall(name="get_order_payment", arguments={}),
+        RecommendedApiCall(name="get_order", arguments={}),
         seeds,
     )
     assert args == {"order_id": "25400"}
@@ -89,7 +108,7 @@ async def test_critique_enforce_retries_api_and_regenerates(monkeypatch):
                 summary="link exists in transcript",
                 recommended_apis=[
                     RecommendedApiCall(
-                        name="get_order_payment",
+                        name="get_order",
                         arguments={"order_id": "25400"},
                         reason="recover payment url",
                     )
@@ -156,7 +175,7 @@ async def test_critique_enforce_retries_api_and_regenerates(monkeypatch):
     assert report.regenerated is True
     assert report.approved is True
     assert "pagamento.php" in final.reply_text
-    assert calls["tools"][0][0] == "get_order_payment"
+    assert calls["tools"][0][0] == "get_order"
     assert final.response_metadata["response_critique"]["attempts"] == 2
 
 
@@ -173,7 +192,7 @@ async def test_critique_shadow_does_not_change_reply(monkeypatch):
             issues=["bad"],
             summary="bad",
             recommended_apis=[
-                RecommendedApiCall(name="get_order_payment", arguments={"order_id": "1"})
+                RecommendedApiCall(name="get_order", arguments={"order_id": "1"})
             ],
         )
 

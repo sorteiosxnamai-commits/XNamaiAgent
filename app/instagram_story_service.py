@@ -1002,7 +1002,7 @@ async def resolve_story_product_question(
             resolved_at=datetime.now(timezone.utc),
         )
 
-    from .tray_tools import execute_tool as default_execute
+    from .commerce.tools import execute_tool as default_execute
 
     tool = execute_tool or default_execute
     candidates = await match_story_to_catalog(

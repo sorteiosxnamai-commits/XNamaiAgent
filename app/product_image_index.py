@@ -12,7 +12,7 @@ from .config import get_settings
 from .db import get_conn
 from .openai_runtime import execute_openai_call
 from .product_media import official_product_image
-from .tray_tools import execute_tool
+from .commerce.tools import execute_tool
 from .turn_runtime import LLMCallBudgetExceeded
 
 

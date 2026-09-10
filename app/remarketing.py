@@ -10,7 +10,6 @@ from app.config import get_remarketing_touch_hours, get_settings
 from app.db import get_conn, to_jsonb
 from app.models import IncomingMessage
 from app.repository import normalize_phone
-from app.tray_adapter_client import TrayAdapterClient
 
 
 OPT_OUT_PHRASES = {
@@ -640,74 +639,22 @@ async def run_remarketing_batch(limit: int | None = None) -> dict[str, int]:
     sent = 0
     failed = 0
     for item in items:
-        message_text = ""
         order_id = str(item.get("order_id") or "").strip()
         cart_session_id = str(item.get("cart_session_id") or "").strip()
         if order_id or cart_session_id:
-            try:
-                tray = TrayAdapterClient()
-                if not order_id:
-                    order_lookup = await tray.list_orders(session_id=cart_session_id)
-                    if (
-                        not isinstance(order_lookup, dict)
-                        or order_lookup.get("success") is False
-                        or order_lookup.get("error")
-                    ):
-                        raise RuntimeError("cart_order_verification_failed")
-                    orders = order_lookup.get("orders")
-                    matching_order = next(
-                        (
-                            order
-                            for order in orders
-                            if isinstance(order, dict)
-                            and (order.get("order_id") or order.get("id"))
-                        ),
-                        None,
-                    ) if isinstance(orders, list) else None
-                    if matching_order:
-                        order_id = str(
-                            matching_order.get("order_id")
-                            or matching_order.get("id")
-                            or ""
-                        ).strip()
-
-                if not order_id:
-                    raise LookupError("no_order_for_cart")
-
-                payment_result = await tray.get_order_payment(order_id)
-                payment = (
-                    payment_result.get("payment")
-                    if isinstance(payment_result, dict)
-                    else None
-                )
-                if isinstance(payment, dict) and payment.get("has_payment") is True:
-                    complete_paid_remarketing(
-                        int(item["conversation_status_id"]),
-                        int(item["id"]),
-                    )
-                    continue
-                if (
-                    not isinstance(payment_result, dict)
-                    or payment_result.get("success") is False
-                    or payment_result.get("error")
-                    or not isinstance(payment, dict)
-                    or payment.get("has_payment") is not False
-                ):
-                    raise RuntimeError("order_payment_verification_failed")
-                item["stage"] = "awaiting_payment"
-                item["payment_url"] = _safe_link(payment.get("payment_url"))
-            except LookupError:
-                pass
-            except Exception:
-                finish_remarketing_attempt(
-                    int(item["id"]),
-                    message_text=message_text,
-                    send_ok=False,
-                    provider_response={"verification": "failed"},
-                    error="order_payment_verification_failed",
-                )
-                failed += 1
-                continue
+            # Este item so poderia ser disparado depois de confirmar que o pedido
+            # ainda nao foi pago. Sem fonte comercial configurada a verificacao e
+            # impossivel: falhar FECHADO. Nunca inventar estado comercial e nunca
+            # cobrar quem ja comprou.
+            finish_remarketing_attempt(
+                int(item["id"]),
+                message_text="",
+                send_ok=False,
+                provider_response={"verification": "unavailable"},
+                error="commerce_provider_unavailable",
+            )
+            failed += 1
+            continue
 
         message_text = _build_remarketing_message(item)
         incoming = IncomingMessage(

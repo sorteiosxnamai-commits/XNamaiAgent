@@ -40,6 +40,25 @@ from .site_knowledge import (
 
 LOCAL_LOOKUP_UNAVAILABLE = "N\u00e3o consegui consultar seus dados neste momento. Tente novamente em instantes."
 
+# As constantes de `site_knowledge` (SITE_URL / STORE_URL / NS_SALES_WHATSAPP)
+# podem estar vazias: na Parte 1 n\u00e3o h\u00e1 fonte oficial configurada. A regra desta
+# migra\u00e7\u00e3o \u2014 a mesma j\u00e1 aplicada em `app/simulation.py` \u2014 \u00e9: constante vazia \u2192
+# DECLARAR "n\u00e3o configurado" e OMITIR a frase inteira. Nunca interpolar vazio
+# ("...em ."), nunca encaminhar para uma fonte morta e nunca afirmar um fato que
+# n\u00e3o pode ser confirmado (por exemplo, que existe uma rodada aberta).
+STORE_NOT_CONFIGURED_NOTICE = "Loja oficial n\u00e3o configurada neste canal."
+PHONE_REGISTRATION_NOT_CONFIGURED = "Cadastro de telefone n\u00e3o configurado neste canal."
+
+
+def _optional_sentence(sentence: str, *sources: str) -> str:
+    """Frase que s\u00f3 existe quando TODAS as fontes interpoladas est\u00e3o configuradas.
+
+    Devolve `sentence` (j\u00e1 com um espa\u00e7o \u00e0 esquerda quando n\u00e3o vazia) ou "".
+    """
+    if not all((source or "").strip() for source in sources):
+        return ""
+    return sentence
+
 
 def _greeting(display_name: str | None) -> str:
     cleaned = (display_name or "").strip()
@@ -238,10 +257,13 @@ def build_coupon_code_reply(message: IncomingMessage) -> AgentResult:
     preferences = get_user_preferences(user_id)
     display_name = resolve_display_name(account.get("name"), preferences)
     suffix = _personalized_suffix(user_id, preferences, message.sender_phone, display_name)
+    store_sentence = (
+        f"Use em {STORE_URL} no checkout." if STORE_URL else STORE_NOT_CONFIGURED_NOTICE
+    )
     return AgentResult(
         reply_text=(
             f"{_greeting(display_name)} Seu Cartão Presente: código *{code}* | saldo {balance}. "
-            f"Use em {STORE_URL} no checkout. Código pessoal e intransferível.{suffix}"
+            f"{store_sentence} Código pessoal e intransferível.{suffix}"
         ),
         intent="coupon_code",
         handoff_required=False,
@@ -280,20 +302,29 @@ def build_simulation_reply(message: IncomingMessage) -> AgentResult:
     payment_method = detect_payment_method(message.text)
 
     if not account.get("found") and credit_cents <= 0 and product_cents is None:
+        register_sentence = (
+            f"Você também pode cadastrar seu telefone em {SITE_URL} para eu usar seu saldo real."
+            if SITE_URL
+            else PHONE_REGISTRATION_NOT_CONFIGURED
+        )
         return AgentResult(
             reply_text=(
-                f"Para simular o uso do Cartão Presente, informe o valor do relógio (ex.: de R$ 10 mil) "
-                f"ou cadastre seu telefone em {SITE_URL} para eu usar seu saldo real."
+                f"Para simular o uso do Cartão Presente, informe o valor do relógio (ex.: de R$ 10 mil). "
+                f"{register_sentence}"
             ),
             intent="simulation",
             handoff_required=False,
         )
 
     if not account.get("found") and credit_cents <= 0 and product_cents is not None:
+        register_sentence = _optional_sentence(
+            f"Cadastre seu telefone em {SITE_URL} ou ", SITE_URL
+        )
+        applied_hint = "informe" if register_sentence else "Informe"
         return AgentResult(
             reply_text=(
                 f"Consigo simular o desconto no produto de {format_cents_to_brl(product_cents)}, "
-                f"mas preciso do seu saldo. Cadastre seu telefone em {SITE_URL} ou informe quanto quer aplicar "
+                f"mas preciso do seu saldo. {register_sentence}{applied_hint} quanto quer aplicar "
                 f"(ex.: R$ 800 de Cartão Presente)."
             ),
             intent="simulation",
@@ -329,8 +360,9 @@ def build_current_raffle_reply(message: IncomingMessage | None = None) -> AgentR
     if raffle.get("lookup_error"):
         return AgentResult(
             reply_text=(
-                f"Não consegui consultar o sorteio aberto agora. "
-                f"Tente novamente em instantes ou acesse {SITE_URL}."
+                "Não consegui consultar o sorteio aberto agora. "
+                "Tente novamente em instantes."
+                f"{_optional_sentence(f' Você também pode acessar {SITE_URL}.', SITE_URL)}"
             ),
             intent="current_raffle",
             handoff_required=False,
@@ -338,10 +370,12 @@ def build_current_raffle_reply(message: IncomingMessage | None = None) -> AgentR
         )
 
     if raffle.get("error") == "database_not_configured":
+        # Sem fonte oficial não dá para afirmar que existe rodada aberta — nem
+        # para encaminhar a um site que não está configurado. Declarar a ausência.
         return AgentResult(
             reply_text=(
-                f"Consulta de sorteio indisponível no momento. "
-                f"Acompanhe a rodada aberta em {SITE_URL}."
+                "Consulta de sorteio não configurada. "
+                "Não consigo confirmar se há rodada aberta agora."
             ),
             intent="current_raffle",
             handoff_required=False,
@@ -351,8 +385,8 @@ def build_current_raffle_reply(message: IncomingMessage | None = None) -> AgentR
     if not raffle.get("found"):
         return AgentResult(
             reply_text=(
-                f"No momento não há sorteio com status aberto. "
-                f"Acompanhe novas rodadas em {SITE_URL}."
+                "No momento não há sorteio com status aberto."
+                f"{_optional_sentence(f' Acompanhe novas rodadas em {SITE_URL}.', SITE_URL)}"
             ),
             intent="current_raffle",
             handoff_required=False,
@@ -360,7 +394,7 @@ def build_current_raffle_reply(message: IncomingMessage | None = None) -> AgentR
 
     lines = [
         f"Sorteio aberto: *{raffle.get('title') or 'Rodada aberta'}*.",
-        f"Prêmio: {raffle.get('prize_name') or 'consulte o site'}.",
+        f"Prêmio: {raffle.get('prize_name') or 'não informado'}.",
         f"Status: {raffle.get('status') or 'open'}.",
     ]
     if raffle.get("quota_price_brl"):
@@ -369,7 +403,8 @@ def build_current_raffle_reply(message: IncomingMessage | None = None) -> AgentR
     if available:
         preview = _format_available_numbers_list(available, max_chars=280)
         lines.append(f"Números disponíveis ({len(available)}): {preview}.")
-    lines.append(f"Participe em {SITE_URL}.")
+    if SITE_URL:
+        lines.append(f"Participe em {SITE_URL}.")
     reply_text = " ".join(lines)
     if message:
         vip = get_vip_profile(message.sender_phone)
@@ -399,10 +434,11 @@ def _format_available_numbers_list(numbers: list[str], max_chars: int) -> str:
         shown.append(number)
 
     hidden = len(numbers) - len(shown)
+    full_list_hint = _optional_sentence(f"; lista completa em {SITE_URL}", SITE_URL)
     if not shown:
-        return f"{numbers[0]}… (+{len(numbers) - 1} números; veja a lista completa em {SITE_URL})"
+        return f"{numbers[0]}… (+{len(numbers) - 1} números{full_list_hint})"
     if hidden > 0:
-        return f"{', '.join(shown)}… (+{hidden} números; lista completa em {SITE_URL})"
+        return f"{', '.join(shown)}… (+{hidden} números{full_list_hint})"
     return ", ".join(shown)
 
 
@@ -411,10 +447,11 @@ def build_available_numbers_reply(message: IncomingMessage) -> AgentResult:
     result = find_available_numbers_for_open_draw()
 
     if result.get("error") == "database_not_configured":
+        # Sem fonte oficial não há grade para consultar nem site para indicar.
         return AgentResult(
             reply_text=(
-                f"Consulta de números indisponível no momento. "
-                f"Veja a grade em {SITE_URL}."
+                "Consulta de números não configurada. "
+                "Não consigo confirmar a grade de números agora."
             ),
             intent="available_numbers",
             handoff_required=False,
@@ -423,8 +460,8 @@ def build_available_numbers_reply(message: IncomingMessage) -> AgentResult:
     if result.get("lookup_error"):
         return AgentResult(
             reply_text=(
-                f"Não consegui listar os números agora. "
-                f"Consulte a grade disponível em {SITE_URL}."
+                "Não consegui listar os números agora. Tente novamente em instantes."
+                f"{_optional_sentence(f' A grade também fica disponível em {SITE_URL}.', SITE_URL)}"
             ),
             intent="available_numbers",
             handoff_required=False,
@@ -433,8 +470,9 @@ def build_available_numbers_reply(message: IncomingMessage) -> AgentResult:
     if result.get("error") == "no_open_draw":
         return AgentResult(
             reply_text=(
-                f"No momento não há sorteio aberto. Acompanhe novas rodadas em {SITE_URL} "
-                f"ou fale com a equipe no WhatsApp {NS_SALES_WHATSAPP}."
+                "No momento não há sorteio aberto."
+                f"{_optional_sentence(f' Acompanhe novas rodadas em {SITE_URL}.', SITE_URL)}"
+                f"{_optional_sentence(f' Você também pode falar com a equipe no WhatsApp {NS_SALES_WHATSAPP}.', NS_SALES_WHATSAPP)}"
             ),
             intent="available_numbers",
             handoff_required=False,
@@ -453,18 +491,22 @@ def build_available_numbers_reply(message: IncomingMessage) -> AgentResult:
     if count == 0:
         if result.get("total_count") is None:
             reply_text = (
-                f"Sorteio *{title}* aberto. Consulte a grade de números disponíveis em {SITE_URL}."
+                f"Sorteio *{title}* aberto. Não tenho a grade de números disponíveis para consultar agora."
+                f"{_optional_sentence(f' Ela pode ser consultada em {SITE_URL}.', SITE_URL)}"
             )
         else:
             reply_text = (
-                f"No sorteio *{title}*, todos os números já foram confirmados (pagamento aprovado). "
-                f"Acompanhe novas rodadas em {SITE_URL}."
+                f"No sorteio *{title}*, todos os números já foram confirmados (pagamento aprovado)."
+                f"{_optional_sentence(f' Acompanhe novas rodadas em {SITE_URL}.', SITE_URL)}"
             )
     else:
+        # A regra de confirmação de vaga é genérica e não depende de fonte
+        # externa: preservada mesmo sem site configurado.
         reply_text = (
             f"Sorteio *{title}*. {prize_line}"
-            f"{count} número(s) disponível(is): {numbers_text}. "
-            f"Escolha e participe em {SITE_URL}. A vaga só confirma após compensação do pagamento."
+            f"{count} número(s) disponível(is): {numbers_text}."
+            f"{_optional_sentence(f' Escolha e participe em {SITE_URL}.', SITE_URL)}"
+            " A vaga só confirma após compensação do pagamento."
         )
 
     vip = get_vip_profile(message.sender_phone)
@@ -540,8 +582,8 @@ def build_raffle_history_reply(message: IncomingMessage) -> AgentResult:
 
     return AgentResult(
         reply_text=(
-            f"Ainda não encontramos participações aprovadas no seu cadastro. "
-            f"Confira sorteios passados e resultados em {SITE_URL}."
+            "Ainda não encontramos participações aprovadas no seu cadastro."
+            f"{_optional_sentence(f' Confira sorteios passados e resultados em {SITE_URL}.', SITE_URL)}"
         ),
         intent="raffle_history",
         handoff_required=False,

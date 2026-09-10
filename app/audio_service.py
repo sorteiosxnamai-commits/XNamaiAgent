@@ -81,7 +81,7 @@ def extract_audio_attachment(payload: dict[str, Any]) -> dict[str, Any] | None:
 
 async def download_audio_file(url: str) -> tuple[bytes, str]:
     headers = {
-        "User-Agent": "NewStoreAgent/1.0",
+        "User-Agent": "XNamaiAgent/1.0",
         "Accept": "audio/*,*/*",
     }
     async with httpx.AsyncClient(timeout=60, follow_redirects=True, headers=headers) as client:

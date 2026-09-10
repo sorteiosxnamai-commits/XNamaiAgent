@@ -9,7 +9,7 @@ def test_turn_quality_event_redacts_conversation_key():
         channel="whatsapp",
     )
     runtime.openai_call_count = 2
-    runtime.tray_call_count = 1
+    runtime.commerce_call_count = 1
     runtime.openai_input_tokens = 10
     runtime.openai_output_tokens = 5
     runtime.openai_api_route = "canary_responses"

@@ -520,12 +520,12 @@ def validate_factual_response(
         }
         for item in pack.evidence[:40]
     ]
+    # Sem allowlist configurada nenhum domínio é confiável: fail-closed. O
+    # fallback anterior confiava nos domínios da marca legada, o que deixaria
+    # links dela passarem por fato oficial mesmo sem fonte comercial.
     domains = {
         domain.lower().strip()
-        for domain in (
-            trusted_domains
-            or {"sorteionewstore.com.br", "newstoresorteios.com.br"}
-        )
+        for domain in (trusted_domains or set())
         if domain.strip()
     }
     text = result.reply_text or ""

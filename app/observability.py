@@ -291,7 +291,7 @@ def _checkout_customer_fields(payload: dict[str, Any]) -> list[str]:
     )
 
 
-def summarize_tray_result(result: dict[str, Any] | None) -> dict[str, Any]:
+def summarize_commerce_result(result: dict[str, Any] | None) -> dict[str, Any]:
     payload = result if isinstance(result, dict) else {}
     summary: dict[str, Any] = {
         "ok": "error" not in payload,
@@ -375,7 +375,7 @@ def log_event(event: str, payload: dict[str, Any] | None = None) -> None:
     }
     if runtime is not None and full_obs_enabled():
         body["openai_call_count"] = runtime.openai_call_count
-        body["tray_call_count"] = runtime.tray_call_count
+        body["commerce_call_count"] = runtime.commerce_call_count
         body["execution_path"] = runtime.execution_path
     if payload:
         body.update(
@@ -402,7 +402,7 @@ def log_exception(event: str, exc: BaseException, payload: dict[str, Any] | None
     log_event(event, details)
 
 
-def record_tray_observation(
+def record_commerce_observation(
     *,
     tool: str,
     arguments: dict[str, Any] | None,
@@ -415,11 +415,11 @@ def record_tray_observation(
         "ok": isinstance(result, dict) and "error" not in result,
         "elapsed_ms": round(elapsed_ms, 2),
         "arguments": redact_value(arguments or {}),
-        "result": summarize_tray_result(result if isinstance(result, dict) else {}),
+        "result": summarize_commerce_result(result if isinstance(result, dict) else {}),
     }
     if runtime is not None:
-        runtime.tray_calls.append(observation)
-    log_event("tray.call", observation)
+        runtime.commerce_calls.append(observation)
+    log_event("commerce.call", observation)
 
 
 def record_openai_observation(

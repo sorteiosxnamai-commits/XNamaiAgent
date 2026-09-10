@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     environment: str = Field(default="production", alias="ENVIRONMENT")
     log_level: str = Field(default="info", alias="LOG_LEVEL")
-    app_name: str = Field(default="NewStoreAgent", alias="APP_NAME")
+    app_name: str = Field(default="XNamaiAgent", alias="APP_NAME")
     dry_run: bool = Field(default=True, alias="DRY_RUN")
 
     brevo_webhook_secret: str = Field(default="", alias="BREVO_WEBHOOK_SECRET")
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     # Role-specific models (fall back to OPENAI_MODEL when empty).
     openai_main_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MAIN_MODEL")
     openai_fast_model: str = Field(default="gpt-4.1-nano", alias="OPENAI_FAST_MODEL")
-    openai_agent_name: str = Field(default="NewStoreAgent", alias="OPENAI_AGENT_NAME")
+    openai_agent_name: str = Field(default="XNamaiAgent", alias="OPENAI_AGENT_NAME")
     openai_transcribe_model: str = Field(default="whisper-1", alias="OPENAI_TRANSCRIBE_MODEL")
     openai_tts_model: str = Field(default="gpt-4o-mini-tts", alias="OPENAI_TTS_MODEL")
     openai_tts_voice: str = Field(default="nova", alias="OPENAI_TTS_VOICE")
@@ -360,8 +360,11 @@ class Settings(BaseSettings):
         default="enforce",
         alias="AGENT_FACTUAL_VALIDATION_MODE",
     )
+    #: Domínios cujos links a validação factual aceita como fato oficial.
+    #: Vazio por padrão: sem fonte oficial configurada nenhum domínio é confiável
+    #: (mesma regra fail-closed do resto da Parte 1).
     agent_trusted_fact_domains: str = Field(
-        default="sorteionewstore.com.br,newstoresorteios.com.br",
+        default="",
         alias="AGENT_TRUSTED_FACT_DOMAINS",
     )
     agent_conversation_lock_enabled: bool = Field(
@@ -465,7 +468,7 @@ class Settings(BaseSettings):
         default=True,
         alias="AGENT_SEND_IDEMPOTENCY_ENABLED",
     )
-    # Phase 13: short TTL Tray product cache (off disables all kinds).
+    # Phase 13: short TTL commerce product cache (off disables all kinds).
     agent_product_cache_enabled: bool = Field(
         default=True,
         alias="AGENT_PRODUCT_CACHE_ENABLED",
@@ -528,10 +531,6 @@ class Settings(BaseSettings):
         default=True,
         alias="AGENT_CATALOG_INDEX_READ_ENABLED",
     )
-    agent_catalog_index_fallback_to_tray: bool = Field(
-        default=True,
-        alias="AGENT_CATALOG_INDEX_FALLBACK_TO_TRAY",
-    )
     agent_catalog_index_max_age_seconds: int = Field(
         default=86_400,
         alias="AGENT_CATALOG_INDEX_MAX_AGE_SECONDS",
@@ -565,9 +564,6 @@ class Settings(BaseSettings):
         default=False,
         alias="AGENT_HTTP_OBS_LOGS",
     )
-
-    tray_adapter_url: str = Field(default="", alias="TRAY_ADAPTER_URL")
-    tray_adapter_token: str = Field(default="", alias="TRAY_ADAPTER_TOKEN")
 
     audio_inbound_enabled: bool = Field(default=True, alias="AUDIO_INBOUND_ENABLED")
     audio_outbound_enabled: bool = Field(default=True, alias="AUDIO_OUTBOUND_ENABLED")
@@ -634,19 +630,6 @@ class Settings(BaseSettings):
         alias="CHECKOUT_CEP_LOOKUP_URL",
     )
 
-    # Mercado Pago PIX direto no chat (fase 1+: create; webhook depois).
-    # Default off até o fluxo de venda ligar o canal.
-    pix_direct_enabled: bool = Field(default=False, alias="PIX_DIRECT_ENABLED")
-    mp_access_token: str = Field(default="", alias="MP_ACCESS_TOKEN")
-    mercadopago_access_token: str = Field(
-        default="",
-        alias="MERCADOPAGO_ACCESS_TOKEN",
-    )
-    mp_base_url: str = Field(
-        default="https://api.mercadopago.com",
-        alias="MP_BASE_URL",
-    )
-    pix_exp_min: int = Field(default=30, alias="PIX_EXP_MIN", ge=1, le=1440)
     public_url: str = Field(default="", alias="PUBLIC_URL")
 
     supabase_url: str = Field(default="", alias="SUPABASE_URL")
@@ -655,9 +638,6 @@ class Settings(BaseSettings):
 
     # Agent-owned Postgres (ai_* tables, sessions, memory, image index).
     database_url: str = Field(default="", alias="DATABASE_URL")
-    # Sorteio/raffle domain Postgres (users, draw/draws, payments, app_config_new).
-    # Falls back to DATABASE_URL when empty (legacy shared-DB setups).
-    sorteio_database_url: str = Field(default="", alias="SORTEIO_DATABASE_URL")
     auto_create_tables: bool = Field(default=False, alias="AUTO_CREATE_TABLES")
     remarketing_enabled: bool = Field(default=False, alias="REMARKETING_ENABLED")
     remarketing_cron_secret: str = Field(default="", alias="CRON_SECRET")
@@ -671,8 +651,8 @@ class Settings(BaseSettings):
     brevo_reply_mode: str = Field(default="auto", alias="BREVO_REPLY_MODE")
     brevo_agent_id: str = Field(default="", alias="BREVO_AGENT_ID")
     brevo_agent_email: str = Field(default="", alias="BREVO_AGENT_EMAIL")
-    brevo_agent_name: str = Field(default="NewStoreAgent", alias="BREVO_AGENT_NAME")
-    brevo_received_from: str = Field(default="NewStoreAgent", alias="BREVO_RECEIVED_FROM")
+    brevo_agent_name: str = Field(default="XNamaiAgent", alias="BREVO_AGENT_NAME")
+    brevo_received_from: str = Field(default="XNamaiAgent", alias="BREVO_RECEIVED_FROM")
     brevo_allowed_channels: str = Field(
         # Instagram temporarily off — re-add "instagram" when social DM is stable.
         default="whatsapp,facebook",
@@ -872,8 +852,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "openai_api_key", "admin_api_token", "brevo_webhook_secret", "brevo_api_key",
-        "tray_adapter_token", "remarketing_cron_secret",
-        "mp_access_token", "mercadopago_access_token",
+        "remarketing_cron_secret",
         "meta_app_secret", "meta_ig_app_secret", "meta_verify_token",
         "meta_page_access_token",
         "ycloud_api_key", "ycloud_webhook_secret",
@@ -920,7 +899,7 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("public_url", "mp_base_url", mode="before")
+    @field_validator("public_url", mode="before")
     @classmethod
     def normalize_public_base_url(cls, value: object) -> object:
         if isinstance(value, str):
@@ -986,28 +965,10 @@ class Settings(BaseSettings):
         object.__setattr__(self, "agent_history_limit", limit)
         return self
 
-    def resolved_mp_access_token(self) -> str:
-        return self.mp_access_token or self.mercadopago_access_token or ""
-
-    def pix_notification_url(self) -> str | None:
-        base = (self.public_url or "").strip().rstrip("/")
-        if not base:
-            return None
-        return f"{base}/api/payments/webhook"
-
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-
-
-def resolved_sorteio_database_url(settings: Settings | None = None) -> str:
-    """Raffle DB URL; falls back to agent DATABASE_URL for legacy shared setups."""
-    cfg = settings or get_settings()
-    dedicated = str(getattr(cfg, "sorteio_database_url", "") or "").strip()
-    if dedicated:
-        return dedicated
-    return str(getattr(cfg, "database_url", "") or "").strip()
 
 
 def get_allowed_channels(settings: Settings) -> set[str]:

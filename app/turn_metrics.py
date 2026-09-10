@@ -39,10 +39,10 @@ def build_turn_quality_event(
     cache = runtime.context_snapshot.get("cache") or {}
     if not isinstance(cache, dict):
         cache = {}
-    tray_latency = 0.0
-    for item in runtime.tray_calls:
+    commerce_latency = 0.0
+    for item in runtime.commerce_calls:
         try:
-            tray_latency += float(item.get("elapsed_ms") or 0)
+            commerce_latency += float(item.get("elapsed_ms") or 0)
         except (TypeError, ValueError):
             continue
     prompt_tokens = int(runtime.openai_input_tokens or 0)
@@ -63,7 +63,7 @@ def build_turn_quality_event(
         "model": model or getattr(settings, "openai_model", None),
         "openai_api_route": runtime.openai_api_route,
         "openai_calls": runtime.openai_call_count,
-        "tool_calls": runtime.tray_call_count,
+        "tool_calls": runtime.commerce_call_count,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": prompt_tokens + completion_tokens,
@@ -73,7 +73,7 @@ def build_turn_quality_event(
             2,
         ),
         "stage_durations_ms": dict(runtime.stage_durations_ms),
-        "tray_latency_ms": round(tray_latency, 2),
+        "commerce_latency_ms": round(commerce_latency, 2),
         "judge_triggered": bool(runtime.judge_triggered or judge.get("triggered")),
         "factual_valid": bool(validation.get("valid", True)),
         "fallback_reason": fallback,

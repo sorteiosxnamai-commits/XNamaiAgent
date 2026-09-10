@@ -67,11 +67,6 @@ from .payment_service import (
     inspect_order_payment,
     inspect_payment_options,
 )
-from .pix_checkout_service import (
-    generate_direct_pix_checkout,
-    refresh_direct_pix_checkout,
-    should_use_direct_pix,
-)
 from .shipping_service import list_shipping_methods, quote_shipping, select_shipping
 from .order_service import (
     confirm_prepared_order,
@@ -105,7 +100,7 @@ from .product_retrieval import (
     specific_product_search_terms,
 )
 from .catalog_cache import ensure_brand_pool_in_candidates
-from .tray_tools import execute_tool
+from .commerce.tools import execute_tool
 
 
 SALES_PLANNER_INSTRUCTIONS = """
@@ -1489,8 +1484,6 @@ async def _confirm_current_order_review(
         "branch_taken": (
             "order_created"
             if final_state.order_id
-            else "pix_pending"
-            if final_state.pix_payment_id
             else "order_not_created"
         ),
     })
@@ -2680,15 +2673,6 @@ async def _fulfill_confirmed_order(
     message: IncomingMessage | None = None,
 ) -> AgentResult:
     """After explicit order confirmation: direct PIX (if enabled) or Tray order+link."""
-    if should_use_direct_pix(state):
-        return await generate_direct_pix_checkout(
-            state=state,
-            execute=execute_tool,
-            conversation_id=message.conversation_id if message else None,
-            sender_key=message.sender_key if message else None,
-            sender_phone=message.sender_phone if message else None,
-            channel=message.channel if message else None,
-        )
     return await _create_order_with_payment_lookup(state)
 
 
@@ -2957,14 +2941,11 @@ async def _handle_sales_message_inner(
         "current_purchase_stage": state.purchase_stage,
     })
     if interpretation is not None and interpretation.payment_action == "order_payment":
-        if state.pix_payment_id and not state.order_id:
-            payment_result = await refresh_direct_pix_checkout(state=state)
-        else:
-            payment_result = await inspect_order_payment(
-                state=state,
-                execute=execute_tool,
-                order_id=interpretation.order_id,
-            )
+        payment_result = await inspect_order_payment(
+            state=state,
+            execute=execute_tool,
+            order_id=interpretation.order_id,
+        )
         return await _respond_to_commerce_service(
             message=message,
             plan=plan,

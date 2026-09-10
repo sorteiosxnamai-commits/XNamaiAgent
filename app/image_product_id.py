@@ -164,7 +164,7 @@ async def download_image_file(
         getattr(settings, "agent_image_download_max_bytes", 8_000_000)
     )
     headers = {
-        "User-Agent": "NewStoreAgent/1.0",
+        "User-Agent": "XNamaiAgent/1.0",
         "Accept": "image/*,*/*",
     }
     async with httpx.AsyncClient(

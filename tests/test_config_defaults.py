@@ -5,12 +5,22 @@ def test_openai_model_fallback_is_gpt_4_1_mini():
     assert Settings.model_fields["openai_model"].default == "gpt-4.1-mini"
 
 
-def test_pix_direct_defaults_are_safe_off():
-    assert Settings.model_fields["pix_direct_enabled"].default is False
-    assert Settings.model_fields["pix_exp_min"].default == 30
-    assert (
-        Settings.model_fields["mp_base_url"].default == "https://api.mercadopago.com"
-    )
+def test_no_payment_gateway_settings_exist():
+    """A config não pode mais ligar/desligar um gateway de pagamento legado.
+
+    Substitui ``test_pix_direct_defaults_are_safe_off``: os campos que aquele
+    teste mantinha "seguros em off" deixaram de existir junto com os módulos
+    PIX/Mercado Pago. Sem campo não há flag para ligar por engano.
+    """
+    forbidden = {
+        "pix_direct_enabled",
+        "pix_exp_min",
+        "mp_base_url",
+        "mp_access_token",
+        "mercadopago_access_token",
+    }
+    present = forbidden & set(Settings.model_fields)
+    assert not present, f"config ainda expõe campos de pagamento: {sorted(present)}"
 
 
 def test_history_window_defaults_separate_model_and_recovery():
@@ -79,3 +89,44 @@ def test_persona_and_memory_rollout_defaults():
     assert Settings.model_fields["agent_learning_auto_activate"].default is False
     assert Settings.model_fields["agent_full_obs_logs"].default is False
     assert Settings.model_fields["agent_http_obs_logs"].default is False
+
+
+# --- Gate 5 / Task 11: identidade técnica XNamai e remoção das envs Tray ---
+
+
+def test_app_name_default_is_xnamai():
+    assert Settings.model_fields["app_name"].default == "XNamaiAgent"
+
+
+def test_openai_agent_name_default_is_xnamai():
+    """Campo puramente técnico: nenhum leitor no runtime, não chega a canal/prompt/banco."""
+    assert Settings.model_fields["openai_agent_name"].default == "XNamaiAgent"
+
+
+def test_no_tray_env_fields():
+    tray_fields = [name for name in Settings.model_fields if "tray" in name.lower()]
+    assert tray_fields == []
+
+
+def test_no_tray_env_aliases():
+    aliases = [
+        str(field.alias or "")
+        for field in Settings.model_fields.values()
+    ]
+    assert [alias for alias in aliases if "TRAY" in alias.upper()] == []
+
+
+def test_brevo_identity_defaults_are_xnamai():
+    """Envio e supressão de eco usam a mesma identidade técnica neutra."""
+    assert Settings.model_fields["brevo_agent_name"].default == "XNamaiAgent"
+    assert Settings.model_fields["brevo_received_from"].default == "XNamaiAgent"
+
+
+def test_persona_lookup_keys_are_untouched():
+    assert Settings.model_fields["agent_persona_tenant_id"].default == "newstore"
+    assert Settings.model_fields["agent_persona_key"].default == "newstore_commercial"
+
+
+def test_settings_boot_without_env_file():
+    settings = Settings(_env_file=None)
+    assert settings.app_name == "XNamaiAgent"

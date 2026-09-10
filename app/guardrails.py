@@ -289,10 +289,21 @@ def detect_blocked_request(text: str) -> str | None:
 
 
 def default_safe_handoff() -> str:
-    from .site_knowledge import HUMAN_SUPPORT_MESSAGE, SITE_URL
+    """Recusa segura de tópico bloqueado.
 
-    return (
-        "Para sua segurança, vou encaminhar esse atendimento para a equipe da New Store. "
-        f"{HUMAN_SUPPORT_MESSAGE} "
-        f"Você também pode acessar sua conta em {SITE_URL}."
-    )
+    Sem canal humano nem site oficial configurados (Parte 1), a mensagem declara
+    a ausência e OMITE as frases que dependeriam dessas fontes, em vez de
+    prometer um encaminhamento que não existe ou apontar para uma URL vazia.
+    """
+    from .site_knowledge import HUMAN_SUPPORT_MESSAGE, NS_SALES_WHATSAPP, SITE_URL
+
+    parts = ["Para sua segurança, não posso seguir com esse assunto por aqui."]
+    if NS_SALES_WHATSAPP:
+        parts.append(
+            f"Vou encaminhar esse atendimento para a equipe humana no WhatsApp {NS_SALES_WHATSAPP}."
+        )
+    else:
+        parts.append(HUMAN_SUPPORT_MESSAGE)
+    if SITE_URL:
+        parts.append(f"Você também pode acessar sua conta em {SITE_URL}.")
+    return " ".join(parts)

@@ -17,8 +17,6 @@ from app.commerce_context import (
 from app.models import IncomingMessage, SalesInterpretation
 from app.payment_service import inspect_payment_options
 from app.sales_agent import SALES_INTERPRETER_INSTRUCTIONS
-from app.tray_adapter_client import TrayAdapterClient
-from app.tray_tools import execute_tool
 
 
 def _reference():
@@ -294,64 +292,3 @@ def test_whatsapp_hides_cart_url_everywhere_and_site_exposes_it():
     site_result = current_cart_reply(site, checkout_question=False)
     assert site_result.commercial_data["cart"]["cart_url"].startswith("https://")
     assert "redirect_cart_service.php" in site_result.reply_text
-
-
-class _FakeResponse:
-    status_code = 200
-
-    def json(self):
-        return {"success": True}
-
-
-class _FakeHttp:
-    def __init__(self):
-        self.calls = []
-
-    async def request(self, *args, **kwargs):
-        self.calls.append((args, kwargs))
-        return _FakeResponse()
-
-
-@pytest.mark.asyncio
-async def test_client_uses_absolute_quantity_internal_put_contract():
-    http = _FakeHttp()
-    client = TrayAdapterClient("https://adapter.example", "secret", http)
-    await client.set_cart_item_quantity(
-        session_id="S1", product_id=803, variant_id=None, quantity=1,
-    )
-    args, kwargs = http.calls[0]
-    assert args == ("PUT", "https://adapter.example/internal/carts/S1/items")
-    assert kwargs["json"] == {
-        "product_id": "803", "quantity": 1,
-    }
-
-
-@pytest.mark.asyncio
-async def test_internal_quantity_tool_preserves_reconciled_facts():
-    class Adapter:
-        async def set_cart_item_quantity(self, **arguments):
-            assert arguments["session_id"] == "S1"
-            return {
-                "success": True,
-                "changed": True,
-                "already_satisfied": False,
-                "cart": {
-                    "session_id": "S1",
-                    "subtotal": "3799.99",
-                    "total": "3799.99",
-                    "items": [{
-                        "product_id": 803, "variant_id": None,
-                        "quantity": 1, "unit_price": "3799.99",
-                    }],
-                },
-            }
-
-    result = await execute_tool(
-        "set_cart_item_quantity",
-        {"session_id": "S1", "product_id": "803", "variant_id": None, "quantity": 1},
-        Adapter(),
-    )
-    assert result["changed"] is True
-    assert result["already_satisfied"] is False
-    assert result["items"][0]["quantity"] == 1
-    assert result["total"] == "3799.99"

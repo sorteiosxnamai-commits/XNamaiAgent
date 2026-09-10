@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from .models import AgentResult, IncomingMessage
-from .tray_tools import execute_tool
+from .commerce.tools import execute_tool
 
 
 COMMERCE_UNAVAILABLE = "N\u00e3o consegui consultar as informa\u00e7\u00f5es da loja neste momento. Tente novamente em instantes."

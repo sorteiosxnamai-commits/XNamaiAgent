@@ -38,5 +38,10 @@ def test_gather_customer_facts_includes_simulation_block(monkeypatch):
     facts = gather_customer_facts(message, {"found": True, "user_id": 1, "name": "Tironi Silva"})
 
     assert facts["primary_intent"] == "simulation"
-    assert facts["simulation"]["final_brl"] == "R$ 9.890,00"
     assert facts["account"]["balance_brl"] == "R$ 110,00"
+    # O bloco de simulação continua sendo montado (comportamento genérico do
+    # cérebro); sem tabela oficial configurada ele não pode declarar abatimento.
+    assert facts["simulation"]["credit_cents"] == 11000
+    assert facts["simulation"]["product_cents"] == 1_000_000
+    assert facts["simulation"]["eligible"] is False
+    assert facts["simulation"]["final_brl"] == "R$ 10.000,00"

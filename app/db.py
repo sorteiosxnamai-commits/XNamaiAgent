@@ -4,7 +4,7 @@ from typing import Any, Iterator
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from .config import get_settings, resolved_sorteio_database_url
+from .config import get_settings
 from .runtime_context import register_database_call
 
 
@@ -33,24 +33,6 @@ def get_conn() -> Iterator[psycopg.Connection]:
         raise RuntimeError("DATABASE_URL is not configured")
     register_database_call()
     conn = psycopg.connect(settings.database_url, row_factory=dict_row, connect_timeout=10)
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-@contextmanager
-def get_sorteio_conn() -> Iterator[psycopg.Connection]:
-    """Sorteio/raffle Postgres (users, draws, payments). Falls back to DATABASE_URL."""
-    url = resolved_sorteio_database_url()
-    if not url:
-        raise RuntimeError("SORTEIO_DATABASE_URL (or DATABASE_URL fallback) is not configured")
-    register_database_call()
-    conn = psycopg.connect(url, row_factory=dict_row, connect_timeout=10)
     try:
         yield conn
         conn.commit()
@@ -200,55 +182,6 @@ def ensure_tables() -> None:
 
                 CREATE INDEX IF NOT EXISTS idx_ai_customer_commerce_sessions_sender_phone
                 ON public.ai_customer_commerce_sessions(sender_phone);
-
-                CREATE TABLE IF NOT EXISTS public.ai_pix_payments (
-                  id bigserial PRIMARY KEY,
-                  mp_payment_id text NOT NULL,
-                  status text NOT NULL DEFAULT 'pending',
-                  amount_cents integer NOT NULL,
-                  currency text NOT NULL DEFAULT 'BRL',
-                  description text,
-                  payer_email text,
-                  qr_code text,
-                  qr_code_base64 text,
-                  external_reference text,
-                  date_of_expiration timestamptz,
-                  expires_at timestamptz,
-                  conversation_id text,
-                  sender_key text,
-                  sender_phone text,
-                  channel text,
-                  cart_session_id text,
-                  checkout_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
-                  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-                  paid_at timestamptz,
-                  settlement_status text NOT NULL DEFAULT 'none'
-                    CHECK (
-                      settlement_status IN (
-                        'none', 'pending', 'processing',
-                        'completed', 'failed', 'skipped'
-                      )
-                    ),
-                  tray_order_id text,
-                  settled_at timestamptz,
-                  settlement_error text,
-                  last_webhook_at timestamptz,
-                  raw_create jsonb NOT NULL DEFAULT '{}'::jsonb,
-                  raw_last_status jsonb NOT NULL DEFAULT '{}'::jsonb,
-                  created_at timestamptz NOT NULL DEFAULT now(),
-                  updated_at timestamptz NOT NULL DEFAULT now(),
-                  CONSTRAINT uq_ai_pix_payments_mp_payment_id UNIQUE (mp_payment_id)
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_ai_pix_payments_status_created
-                ON public.ai_pix_payments(status, created_at DESC);
-
-                CREATE INDEX IF NOT EXISTS idx_ai_pix_payments_sender_key
-                ON public.ai_pix_payments(sender_key);
-
-                CREATE INDEX IF NOT EXISTS idx_ai_pix_payments_settlement
-                ON public.ai_pix_payments(settlement_status, status)
-                WHERE status = 'approved';
 
                 CREATE TABLE IF NOT EXISTS public.ai_agent_persona_versions (
                     id bigserial PRIMARY KEY,

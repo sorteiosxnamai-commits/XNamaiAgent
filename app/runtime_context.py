@@ -39,10 +39,10 @@ def runtime_stage(name: str) -> Iterator[None]:
             context.finish_stage(name)
 
 
-def register_tray_call() -> None:
+def register_commerce_call() -> None:
     context = get_current_turn()
     if context is not None:
-        context.tray_call_count += 1
+        context.commerce_call_count += 1
 
 
 def register_database_call() -> None:

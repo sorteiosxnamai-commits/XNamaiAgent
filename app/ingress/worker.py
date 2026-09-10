@@ -23,10 +23,8 @@ from app.observability import log_event, log_exception
 
 
 async def _customer_context_for(incoming: IncomingMessage) -> dict[str, Any]:
-    if incoming.sender_phone:
-        from app.repository import find_customer_profile_by_phone
-
-        return find_customer_profile_by_phone(incoming.sender_phone)
+    # Parte 1: o perfil de cliente vinha do banco de sorteio/NewStore, que saiu do
+    # runtime. Sem provider comercial, o contexto de cliente e sempre "nao encontrado".
     return {
         "found": False,
         "channel": incoming.channel,

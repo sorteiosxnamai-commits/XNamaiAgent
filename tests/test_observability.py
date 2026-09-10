@@ -6,7 +6,7 @@ from app.observability import (
     summarize_commerce_state,
     summarize_history_turns,
     summarize_openai_messages,
-    summarize_tray_result,
+    summarize_commerce_result,
     summarize_webhook_payload,
 )
 
@@ -47,8 +47,8 @@ def test_summarize_commerce_and_openai_messages():
     assert messages[1]["preview"].find("[CPF]") >= 0
 
 
-def test_summarize_tray_result_keeps_useful_flags():
-    summary = summarize_tray_result(
+def test_summarize_commerce_result_keeps_useful_flags():
+    summary = summarize_commerce_result(
         {
             "success": True,
             "order_id": "25400",

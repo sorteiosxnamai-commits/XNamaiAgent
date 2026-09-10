@@ -56,7 +56,7 @@ class TurnRuntimeContext(BaseModel):
     openai_transport_attempts: int = 0
     responses_attempts: int = 0
     chat_fallback_attempts: int = 0
-    tray_call_count: int = 0
+    commerce_call_count: int = 0
     database_call_count: int = 0
     openai_input_tokens: int = 0
     openai_output_tokens: int = 0
@@ -77,7 +77,7 @@ class TurnRuntimeContext(BaseModel):
     llm_avoided_reasons: list[dict[str, object]] = Field(default_factory=list)
     integration_failures: dict[str, int] = Field(default_factory=dict)
     llm_budget: LLMCallBudget = Field(default_factory=LLMCallBudget)
-    tray_calls: list[dict[str, object]] = Field(default_factory=list)
+    commerce_calls: list[dict[str, object]] = Field(default_factory=list)
     openai_calls: list[dict[str, object]] = Field(default_factory=list)
     context_snapshot: dict[str, object] = Field(default_factory=dict)
     inbound_snapshot: dict[str, object] = Field(default_factory=dict)
@@ -242,7 +242,7 @@ class TurnRuntimeContext(BaseModel):
             "openai_transport_attempts": self.openai_transport_attempts,
             "responses_attempts": self.responses_attempts,
             "chat_fallback_attempts": self.chat_fallback_attempts,
-            "tray_call_count": self.tray_call_count,
+            "commerce_call_count": self.commerce_call_count,
             "database_call_count": self.database_call_count,
             "openai_input_tokens": self.openai_input_tokens,
             "openai_output_tokens": self.openai_output_tokens,
@@ -263,13 +263,13 @@ class TurnRuntimeContext(BaseModel):
                 "enforce": self.llm_budget.enforce,
             },
             "integration_failures": dict(self.integration_failures),
-            "tray_tools": [
+            "commerce_tools": [
                 {
                     "tool": item.get("tool"),
                     "ok": item.get("ok"),
                     "elapsed_ms": item.get("elapsed_ms"),
                 }
-                for item in self.tray_calls[:20]
+                for item in self.commerce_calls[:20]
             ],
             "openai_calls": list(self.openai_calls[:12]),
             "inbound": dict(self.inbound_snapshot),

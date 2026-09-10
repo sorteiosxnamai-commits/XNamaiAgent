@@ -325,17 +325,23 @@ async def test_ranking_removes_incompatible_brand_model_candidate(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rules_use_local_flow_without_tray(monkeypatch):
+async def test_rules_use_local_flow_without_commerce_provider(monkeypatch):
+    """Regra genérica: FAQ de regulamento é fluxo local e nunca chama o comercial.
+
+    O conteúdo do regulamento legado saiu do runtime (Task 10). Sem base oficial
+    a resposta declara explicitamente "não configurado" — nunca inventa regra.
+    """
     from app import openai_agent
     import app.sales_agent as sales_agent
 
     settings = _settings(openai_api_key="")
     monkeypatch.setattr(openai_agent, "get_settings", lambda: settings)
     monkeypatch.setattr(sales_agent, "get_settings", lambda: settings)
-    monkeypatch.setattr("app.commerce_router.execute_tool", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("rules must not call Tray")))
+    monkeypatch.setattr("app.commerce_router.execute_tool", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("rules must not call the commerce provider")))
     result = await openai_agent.generate_agent_reply_async(IncomingMessage(text="como funciona o sorteio?"), {})
     assert result.intent == "rules_faq"
-    assert "Lotomania" in result.reply_text
+    assert "não configurado" in result.reply_text.casefold()
+    assert "Lotomania" not in result.reply_text
 
 
 @pytest.mark.asyncio
@@ -370,34 +376,40 @@ async def _async_result(intent):
 
 
 @pytest.mark.asyncio
-async def test_health_exposes_only_tray_flags(monkeypatch):
+async def test_health_exposes_commerce_provider_and_no_legacy_flags(monkeypatch):
+    """Fronteira nova: health publica o provider comercial, nunca flags Tray."""
     import api.index as index
 
     settings = _settings()
     monkeypatch.setattr(index, "get_settings", lambda: settings)
     payload = await index.health()
-    assert payload["tray_adapter_configured"] is True
-    assert payload["tray_tools_enabled"] is True
-    assert settings.tray_adapter_token not in str(payload)
-    assert settings.tray_adapter_url not in str(payload)
+    assert payload["commerce_provider"] == "null"
+    assert "tray_adapter_configured" not in payload
+    assert "tray_tools_enabled" not in payload
+    serialized = str(payload)
+    assert "tray" not in serialized.casefold()
+    assert settings.tray_adapter_token not in serialized
+    assert settings.tray_adapter_url not in serialized
 
 
 @pytest.mark.asyncio
-async def test_tray_diagnostic_uses_client_and_is_admin_protected(monkeypatch):
+async def test_legacy_tray_diagnostic_endpoint_no_longer_exists(monkeypatch):
+    """O endpoint de diagnóstico do TrayAdapter foi removido junto com o cliente.
+
+    Cobertura equivalente da fronteira nova: a rota não existe mais e o módulo
+    da API não expõe cliente comercial legado algum.
+    """
     import api.index as index
     import app.security as security
 
     settings = _settings()
     monkeypatch.setattr(index, "get_settings", lambda: settings)
     monkeypatch.setattr(security, "get_settings", lambda: settings)
-    calls = []
 
-    class FakeTrayClient:
-        async def search_products(self, **kwargs):
-            calls.append(kwargs)
-            return {"products": []}
+    assert not hasattr(index, "TrayAdapterClient")
+    paths = {getattr(route, "path", "") for route in index.app.routes}
+    assert not [path for path in paths if "tray" in path.casefold()]
 
-    monkeypatch.setattr(index, "TrayAdapterClient", FakeTrayClient)
     from api.index import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -405,13 +417,7 @@ async def test_tray_diagnostic_uses_client_and_is_admin_protected(monkeypatch):
             "/api/integrations/tray/test",
             headers={"Authorization": "Bearer admin-secret"},
         )
-    assert response.status_code == 200
-    assert response.json() == {
-        "success": True,
-        "tray_adapter_connected": True,
-        "products_accessible": True,
-    }
-    assert calls == [{"limit": 1}]
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

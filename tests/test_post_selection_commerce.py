@@ -33,62 +33,6 @@ def _interpretation(**overrides):
     return SalesInterpretation(**payload)
 
 
-@pytest.mark.asyncio
-async def test_real_wrapped_detail_price_reaches_cart_post():
-    from app.tray_tools import execute_tool
-
-    class Adapter:
-        def __init__(self):
-            self.calls = []
-
-        async def get_product(self, product_id):
-            return {
-                "data": {
-                    "product": {
-                        "id": product_id,
-                        "current_price": "6199.99",
-                        "available": True,
-                    }
-                }
-            }
-
-        async def create_cart(self, **kwargs):
-            self.calls.append(kwargs)
-            return {
-                "cart_id": "C1",
-                "session_id": "S1",
-                "cart_url": "https://loja.example/checkout/S1",
-            }
-
-        async def get_cart_complete(self, session_id):
-            return {
-                "cart": {
-                    "session_id": session_id,
-                    "total": "6199.99",
-                    "items": [{"product_id": "1025", "quantity": 1}],
-                }
-            }
-
-    adapter = Adapter()
-
-    async def execute(tool, arguments):
-        return await execute_tool(tool, arguments, adapter)
-
-    result = await create_cart_items_checkout(
-        item_requests=[CartItemRequest(_reference("1025"), quantity=1)],
-        state=CommerceConversationState(),
-        execute=execute,
-    )
-
-    assert len(adapter.calls) == 1
-    assert adapter.calls[0]["product_id"] == "1025"
-    assert adapter.calls[0]["variant_id"] is None
-    assert adapter.calls[0]["quantity"] == 1
-    assert adapter.calls[0]["price"] == "6199.99"
-    assert len(adapter.calls[0]["session_id"]) == 32
-    int(adapter.calls[0]["session_id"], 16)
-    assert result.safety_reason is None
-
 
 def test_cart_price_resolution_uses_positive_structured_commercial_value():
     from app.product_retrieval import resolve_commercial_price

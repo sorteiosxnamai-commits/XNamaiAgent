@@ -60,7 +60,7 @@ from .repository import detect_third_party_account_inquiry, find_coupon_balance_
 from .site_knowledge import HUMAN_SUPPORT_MESSAGE, build_site_knowledge_text, NS_SALES_WHATSAPP
 from .vip_profiles import build_vip_openai_context, get_vip_profile, pick_vip_nickname
 from .user_preferences import detect_preferred_name_update
-from .tray_tools import TOOL_SCHEMAS, execute_tool
+from .commerce.tools import TOOL_SCHEMAS, execute_tool
 from .sales_agent import (
     GREETING_REPLY,
     OUT_OF_SCOPE_REPLY,
@@ -384,13 +384,7 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
         {"role": "system", "content": system_instructions},
         {"role": "user", "content": build_agent_input(message, customer_context, facts)},
     ]
-    tools = (
-        TOOL_SCHEMAS
-        if facts.get("primary_intent") == "commerce"
-        and settings.tray_adapter_url
-        and settings.tray_adapter_token
-        else None
-    )
+    tools = TOOL_SCHEMAS if facts.get("primary_intent") == "commerce" else None
     try:
         from .openai_errors import OpenAIGatewayError
         from .openai_gateway import generate_text_output, run_tool_loop_output
@@ -1068,7 +1062,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 fallback_reason=interpretation._fallback_reason,
                 interpretation_confidence=interpretation.confidence,
             )
-    print("[openai.agent] routing", {"mode": "openai_with_db_context_and_tools", "primary_intent": facts.get("primary_intent"), "has_openai_key": bool(get_settings().openai_api_key), "tray_tools_enabled": bool(get_settings().tray_adapter_url and get_settings().tray_adapter_token)})
+    print("[openai.agent] routing", {"mode": "openai_with_db_context_and_tools", "primary_intent": facts.get("primary_intent"), "has_openai_key": bool(get_settings().openai_api_key), "commerce_tools_enabled": bool(TOOL_SCHEMAS)})
     result = await generate_openai_reply_async(message, customer_context, facts)
     return _annotate_agent_result(
         result,

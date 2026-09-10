@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 
 from app.security import verify_brevo_webhook, verify_admin_token, verify_remarketing_cron
 from app.persona_admin_api import router as persona_admin_router
-from app.pix_webhook_api import router as pix_payments_router
 from app.webhook_parser import (
     inbound_skip_reason,
     parse_brevo_conversations_payload,
@@ -33,6 +32,7 @@ from app.db import (
 )
 from app.inbound_coalesce import is_caption_echo_of_recent_image
 from app.config import get_allowed_channels, get_settings
+from app.commerce.provider import get_commerce_provider
 from app.rollout import build_rollout_status
 from app.conversation_lock import (
     ConversationLockUnavailable,
@@ -49,7 +49,6 @@ from app.runtime_context import (
     runtime_stage,
     set_current_turn,
 )
-from app.tray_adapter_client import TrayAdapterClient, TrayAdapterError
 from app.turn_runtime import LLMCallBudget, TurnRuntimeContext
 from app.observability import (
     log_event,
@@ -58,9 +57,8 @@ from app.observability import (
     summarize_webhook_payload,
 )
 
-app = FastAPI(title="NewStoreAgent Webhook", version="1.0.0")
+app = FastAPI(title="XNamaiAgent Webhook", version="1.0.0")
 app.include_router(persona_admin_router)
-app.include_router(pix_payments_router)
 
 
 def _request_trace_id(request: Request) -> str:
@@ -375,12 +373,6 @@ async def health():
             True,
         ),
         "database_configured": bool(settings.database_url),
-        "sorteio_database_configured": bool(
-            getattr(settings, "sorteio_database_url", "") or settings.database_url
-        ),
-        "sorteio_database_dedicated": bool(
-            str(getattr(settings, "sorteio_database_url", "") or "").strip()
-        ),
         "brevo_send_configured": bool(
             settings.brevo_api_key
             and (
@@ -408,21 +400,7 @@ async def health():
         "audio_outbound_enabled": settings.audio_outbound_enabled,
         "supabase_storage_configured": bool(settings.supabase_url and settings.supabase_service_key),
         "dry_run": settings.dry_run,
-        "tray_adapter_configured": bool(settings.tray_adapter_url and settings.tray_adapter_token),
-        "tray_tools_enabled": bool(settings.tray_adapter_url and settings.tray_adapter_token),
-        "pix_direct_enabled": bool(getattr(settings, "pix_direct_enabled", False)),
-        "pix_mp_configured": bool(
-            (
-                getattr(settings, "resolved_mp_access_token", None)()
-                if callable(getattr(settings, "resolved_mp_access_token", None))
-                else (
-                    getattr(settings, "mp_access_token", "")
-                    or getattr(settings, "mercadopago_access_token", "")
-                )
-            )
-        ),
-        "pix_public_url_configured": bool(getattr(settings, "public_url", "")),
-        "pix_webhook_path": "/api/payments/webhook",
+        "commerce_provider": get_commerce_provider().name,
         "remarketing_enabled": getattr(settings, "remarketing_enabled", False),
         "remarketing_cron_configured": bool(
             getattr(settings, "remarketing_cron_secret", "")
@@ -448,28 +426,6 @@ async def health():
         ),
         "meta_ig_graph": await _probe_meta_ig_graph(),
         "rollout": build_rollout_status(settings),
-    }
-
-
-@app.get("/api/integrations/tray/test", dependencies=[Depends(verify_admin_token)])
-async def test_tray_integration():
-    try:
-        await TrayAdapterClient().search_products(limit=1)
-    except TrayAdapterError as exc:
-        print("[tray.integration] diagnostic_failed", {"status_code": exc.status_code})
-        return JSONResponse(
-            status_code=503,
-            content={
-                "success": False,
-                "tray_adapter_connected": False,
-                "products_accessible": False,
-                "error": "tray_adapter_unavailable",
-            },
-        )
-    return {
-        "success": True,
-        "tray_adapter_connected": True,
-        "products_accessible": True,
     }
 
 

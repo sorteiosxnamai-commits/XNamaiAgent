@@ -1,101 +1,74 @@
+"""Contrato genérico de formas de pagamento do cérebro comercial.
+
+Provider-agnóstico: todos os testes injetam ``execute`` e exercitam
+``inspect_payment_options`` / ``_order_payment_revalidation`` / ``_responder_contract``,
+que não conhecem provider algum. Os dois testes que validavam o *normalizador de
+payload do TrayAdapter* foram removidos junto com o módulo (`app/tray_tools.py`);
+o payload já normalizado permanece aqui como literal para preservar a cobertura
+genérica de seleção exata de parcela e de restrições de pagamento por produto.
+"""
+
 import pytest
 
 from app.commerce_context import CommerceConversationState, evolve_commerce_state
 from app.payment_service import inspect_payment_options
-from app.tray_tools import execute_tool
 from app.sales_agent import _order_payment_revalidation, _responder_contract
 
-
-def _adapter_payload():
-    plots = [
-        {
-            "installments": count,
-            "value": value,
-            "interest": int(count > 2),
-            "interest_value": "4.50" if count > 2 else "0.00",
-            "discount_value": "0.00",
-            "base_value": "1200.00",
-            "order_total": total,
-        }
-        for count, value, total in (
-            (1, "1100.00", "1100.00"),
-            (2, "600.00", "1200.00"),
-            (10, "125.00", "1250.00"),
-            (12, "108.33", "1299.96"),
-        )
-    ]
-    return {
-        "payment_options": [
+#: Payload já normalizado (forma neutra que qualquer CommerceProvider deve devolver).
+NORMALIZED_PAYMENT_OPTIONS = {
+    "payment_options": {
+        "pix": {
+            "id": "P1",
+            "name": "Pagamento instantâneo",
+            "discount_value": 100.0,
+            "plots": [{"count": 1, "value": 1100.0}],
+        },
+        "card": {
+            "id": "C1",
+            "name": "Crédito",
+            "plots": [
+                {"count": 1, "value": 1100.0},
+                {"count": 2, "value": 600.0},
+                {"count": 10, "value": 125.0},
+                {"count": 12, "value": 108.33},
+            ],
+        },
+        "installments": [
             {
-                "id": "P1",
-                "name": "Pagamento instantâneo",
-                "text": "Pague com Pix",
-                "card": 0,
-                "discount_value": "100.00",
-                "increase_value": "0.00",
-                "total_base": "1100.00",
-                "tax_value": "0.00",
-                "plots": [plots[0]],
+                "count": 1, "value": 1100.0, "interest": False, "interest_value": 0.0,
+                "discount_value": 0.0, "base_value": 1200.0, "order_total": 1100.0,
             },
             {
-                "id": "C1",
-                "name": "Crédito",
-                "text": "Cartão de crédito",
-                "card": 1,
-                "discount_value": "0.00",
-                "increase_value": "50.00",
-                "total_base": "1200.00",
-                "tax_value": "50.00",
-                "plots": plots,
+                "count": 2, "value": 600.0, "interest": False, "interest_value": 0.0,
+                "discount_value": 0.0, "base_value": 1200.0, "order_total": 1200.0,
             },
-        ]
+            {
+                "count": 10, "value": 125.0, "interest": True, "interest_value": 4.5,
+                "discount_value": 0.0, "base_value": 1200.0, "order_total": 1250.0,
+            },
+            {
+                "count": 12, "value": 108.33, "interest": True, "interest_value": 4.5,
+                "discount_value": 0.0, "base_value": 1200.0, "order_total": 1299.96,
+            },
+        ],
+        "options": [
+            {"id": "P1", "name": "Pagamento instantâneo"},
+            {"id": "C1", "name": "Crédito", "card": 1},
+        ],
     }
-
-
-class PaymentAdapter:
-    async def get_payment_options(self, cart_session_id):
-        assert cart_session_id == "SESSION"
-        return _adapter_payload()
-
-
-@pytest.mark.asyncio
-async def test_real_payment_contract_recognizes_pix_card_and_all_plots():
-    result = await execute_tool(
-        "get_payment_options",
-        {"cart_session_id": "SESSION"},
-        PaymentAdapter(),
-    )
-    options = result["payment_options"]
-
-    assert options["pix"]["id"] == "P1"
-    assert options["card"]["id"] == "C1"
-    assert [plot["count"] for plot in options["installments"]] == [1, 2, 10, 12]
-    assert options["installments"][2] == {
-        "count": 10,
-        "value": 125.0,
-        "interest": True,
-        "interest_value": 4.5,
-        "discount_value": 0.0,
-        "base_value": 1200.0,
-        "order_total": 1250.0,
-    }
+}
 
 
 @pytest.mark.asyncio
 async def test_payment_service_uses_exact_ten_installment_plot():
-    normalized = await execute_tool(
-        "get_payment_options",
-        {"cart_session_id": "SESSION"},
-        PaymentAdapter(),
-    )
-
     async def execute(tool, arguments):
         if tool == "get_cart_complete":
             assert arguments == {"session_id": "SESSION"}
             return {"items": [], "total": "1250.00"}
         assert tool == "get_payment_options"
         assert arguments == {"cart_session_id": "SESSION"}
-        return normalized
+        return NORMALIZED_PAYMENT_OPTIONS
+
     result = await inspect_payment_options(
         state=CommerceConversationState(
             cart_session_id="SESSION",

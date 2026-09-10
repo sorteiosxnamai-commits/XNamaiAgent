@@ -241,7 +241,7 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
         for domain in getattr(
             settings,
             "agent_trusted_fact_domains",
-            "sorteionewstore.com.br,newstoresorteios.com.br",
+            "",
         ).split(",")
         if domain.strip()
     }
@@ -381,9 +381,9 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
         "final_pending_action": (response_metadata.get("commerce_state") or {}).get(
             "pending_action"
         ),
-        "tray_tools": [
+        "commerce_tools": [
             item.get("tool")
-            for item in (runtime.tray_calls if runtime else [])
+            for item in (runtime.commerce_calls if runtime else [])
         ],
         "openai_call_types": [
             item.get("call_type")
@@ -406,7 +406,7 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             "handoff_required": outbound_snapshot["handoff_required"],
             "reply_preview": outbound_snapshot["reply_preview"],
             "reply_chars": outbound_snapshot["reply_chars"],
-            "tray_tools": outbound_snapshot["tray_tools"],
+            "commerce_tools": outbound_snapshot["commerce_tools"],
             "openai_call_types": outbound_snapshot["openai_call_types"],
             "judge_triggered": bool(
                 (response_metadata.get("quality_judge") or {}).get("triggered")

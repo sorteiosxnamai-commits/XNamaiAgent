@@ -7,7 +7,7 @@ from app.openai_runtime import execute_openai_call, execute_openai_call_sync
 from app.runtime_context import (
     get_current_turn,
     register_database_call,
-    register_tray_call,
+    register_commerce_call,
     reset_current_turn,
     runtime_stage,
     set_current_turn,
@@ -37,7 +37,7 @@ def test_runtime_collects_safe_metrics_without_exposing_identity():
     try:
         with runtime_stage("load_context"):
             register_database_call()
-        register_tray_call()
+        register_commerce_call()
         result = execute_openai_call_sync(
             call_type="decision",
             operation=lambda: _response(),
@@ -48,7 +48,7 @@ def test_runtime_collects_safe_metrics_without_exposing_identity():
     assert result.usage.prompt_tokens == 3
     summary = context.safe_summary()
     assert summary["openai_call_count"] == 1
-    assert summary["tray_call_count"] == 1
+    assert summary["commerce_call_count"] == 1
     assert summary["database_call_count"] == 1
     assert summary["openai_input_tokens"] == 3
     assert summary["openai_output_tokens"] == 5
