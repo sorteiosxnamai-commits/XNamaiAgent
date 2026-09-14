@@ -2,10 +2,16 @@
 
 Nenhum dado real. Documentos, e-mails e telefones sao obviamente falsos
 (`00000000000000`, `@example.invalid`). Os NOMES DOS CAMPOS vem da documentacao
-oficial — produtos e clientes na API v1, pedidos na v2.
+oficial — produtos e clientes na API v1, pedidos na v2 — e foram CONFERIDOS
+contra o adaptador de producao (500 produtos, 500 clientes, 20 pedidos).
 
-Quando uma credencial de sandbox existir, uma linha real anonimizada deve ser
-comparada contra estas fixtures. Campo divergente => corrigir o mapeamento.
+Ajustes feitos apos essa conferencia:
+
+* `categoria_id` NAO existe no payload real (0/500) e saiu da fixture de produto;
+* `codigo` vem vazio em boa parte do catalogo -> ha helper para esse caso;
+* `saldo_estoque` vem `null` com frequencia -> ha helper para esse caso;
+* `status`/`status_faturamento` de pedido chegam como STRING numerica ("0"/"2"),
+  nao inteiro.
 """
 
 from __future__ import annotations
@@ -27,18 +33,35 @@ def product(**overrides: Any) -> dict[str, Any]:
         "ultima_alteracao": "2026-03-01T10:00:00",
         "excluido": False,
         "ativo": True,
-        "categoria_id": 55,
         "moeda": "BRL",
-        "codigo_ncm": "00000000",
         "multiplo": 1,
         "peso_bruto": 0.5,
         "largura": 10,
         "altura": 5,
         "comprimento": 15,
-        "exibir_no_b2b": True,
-        "produtos_grade": [],
+        "exibir_no_b2b": 1,
+        "precos_especificos": False,
+        "tipo_ipi": "",
     }
     return _apply(row, overrides)
+
+
+def product_without_reference(**overrides: Any) -> dict[str, Any]:
+    """Produto com `codigo` vazio — comum no catalogo real."""
+    return product(codigo="", **overrides)
+
+
+def product_without_stock(**overrides: Any) -> dict[str, Any]:
+    """Produto sem `saldo_estoque` — comum no catalogo real."""
+    return product(saldo_estoque=None, **overrides)
+
+
+def product_inactive(**overrides: Any) -> dict[str, Any]:
+    return product(ativo=False, excluido=False, **overrides)
+
+
+def product_excluded(**overrides: Any) -> dict[str, Any]:
+    return product(ativo=True, excluido=True, **overrides)
 
 
 def customer(**overrides: Any) -> dict[str, Any]:
@@ -93,8 +116,9 @@ def order(**overrides: Any) -> dict[str, Any]:
     row = {
         "id": 3003,
         "numero": "PED-3003",
-        "status": 2,
-        "status_faturamento": 0,
+        # STRING numerica, como a Mercos realmente devolve.
+        "status": "2",
+        "status_faturamento": "0",
         "status_custom_id": None,
         "valor_frete": 25.00,
         "total": 304.80,
@@ -109,6 +133,8 @@ def order(**overrides: Any) -> dict[str, Any]:
         "cliente_razao_social": "Empresa Sintetica LTDA",
         "cliente_nome_fantasia": "Empresa Sintetica",
         "cliente_cnpj": "00000000000000",
+        "data_criacao": None,
+        "valor_frete": None,
         "transportadora_id": 44,
         "transportadora_nome": "Transportadora Sintetica",
         "condicao_pagamento": "30/60",

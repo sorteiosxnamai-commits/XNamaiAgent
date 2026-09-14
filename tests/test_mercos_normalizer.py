@@ -36,7 +36,9 @@ def test_full_product_maps_every_documented_field():
     assert p.stock == 7
     assert p.active is True
     assert p.excluded is False
-    assert p.category_id == "55"
+    # `categoria_id` nao existe no payload real (0/500 conferidos): degrada
+    # para None em vez de quebrar.
+    assert p.category_id is None
     assert p.unit == "UN"
     assert p.changed_at == "2026-03-01T10:00:00"
 
@@ -130,7 +132,7 @@ def test_product_for_model_never_leaks_raw():
 
 def test_product_raw_is_preserved_for_the_local_index():
     p = normalize_product(fx.product())
-    assert p.raw["codigo_ncm"] == "00000000"
+    assert p.raw["moeda"] == "BRL"
 
 
 # ===========================================================================
@@ -197,7 +199,8 @@ def test_full_order_maps_every_documented_field():
     assert o.external_id == "3003"
     assert o.number == "PED-3003"
     assert o.total == 304.80
-    assert o.shipping_value == 25.00
+    # `valor_frete` chega nulo em 20/20 pedidos reais: None, nunca 0.
+    assert o.shipping_value is None
     assert o.customer_id == "2002"
     assert o.payment_condition == "30/60"
     assert o.issued_at == "2026-03-01T12:00:00"

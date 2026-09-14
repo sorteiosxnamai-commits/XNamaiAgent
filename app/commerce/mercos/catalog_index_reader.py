@@ -100,6 +100,19 @@ class CatalogIndexProductReader:
         )
         return _to_product(row) if row else None
 
+    def delete_products(self, tenant_id: str, product_ids: list[str]) -> int:
+        """Remove snapshots pontualmente.
+
+        A traducao `product_id -> catalog_item_key` mora aqui: o repositorio
+        compartilhado nao precisa saber nada de Mercos.
+        """
+        from ...catalog_index_repository import make_catalog_item_key
+
+        keys = [make_catalog_item_key(str(pid), None) for pid in product_ids if str(pid).strip()]
+        if not keys:
+            return 0
+        return self._repo().delete_items(tenant_id=tenant_id, catalog_item_keys=keys)
+
     def upsert_products(self, tenant_id: str, products: list[CommerceProduct]) -> int:
         """Upsert idempotente. A chave unica do indice evita duplicacao."""
         from ...catalog_index import CanonicalCatalogItem, upsert_canonical_items

@@ -20,11 +20,17 @@ from .normalizer import CommerceProduct
 
 #: Filtros que a busca local sabe aplicar hoje.
 SUPPORTED_FILTERS: frozenset[str] = frozenset(
-    {"query", "name", "reference", "limit", "category_id", "available"}
+    {"query", "name", "reference", "limit", "available"}
 )
 
 #: Anunciados pelo schema herdado, sem mapeamento nesta integracao.
-UNSUPPORTED_FILTERS: frozenset[str] = frozenset({"brand", "ean", "tokens", "page"})
+#: `category_id` entrou aqui apos a validacao contra a Mercos real: o campo
+#: `categoria_id` nao existe em nenhuma das 500 linhas inspecionadas. Anunciar
+#: um filtro que nunca casa produziria busca vazia sem erro — e busca vazia o
+#: agente le como "nao temos esse produto".
+UNSUPPORTED_FILTERS: frozenset[str] = frozenset(
+    {"brand", "ean", "tokens", "page", "category_id"}
+)
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 20
@@ -97,6 +103,16 @@ def _freshness_for(product: CommerceProduct) -> dict[str, Any]:
     }
 
 
+def is_commercially_unavailable(product: CommerceProduct) -> bool:
+    """Produto EXPLICITAMENTE inativo ou excluido.
+
+    Defesa em profundidade: mesmo com o indice limpo pelo sync, ainda pode
+    existir snapshot legado, corrida entre syncs ou linha gravada antes desta
+    correcao. Incerteza (`None`) NAO conta aqui — so estado negativo declarado.
+    """
+    return product.active is False or product.excluded is True
+
+
 def present_product(product: CommerceProduct) -> dict[str, Any]:
     """Produto + validade. O modelo recebe o valor E se ele pode ser afirmado.
 
@@ -122,15 +138,18 @@ def search_products(
         tenant_id=tenant_id,
         text=str(text).strip() if text else None,
         reference=str(args["reference"]).strip() if args.get("reference") else None,
-        category_id=str(args["category_id"]).strip() if args.get("category_id") else None,
+        category_id=None,
         available=args.get("available") if isinstance(args.get("available"), bool) else None,
         limit=resolve_limit(args.get("limit")),
     )
+    # Segunda barreira: o indice nao deveria conter inativo/excluido, mas um
+    # snapshot legado nao pode virar oferta.
+    vendaveis = [p for p in products if not is_commercially_unavailable(p)]
     return {
         "ok": True,
-        "count": len(products),
+        "count": len(vendaveis),
         "source": "local_index",
-        "products": [present_product(product) for product in products],
+        "products": [present_product(product) for product in vendaveis],
     }
 
 
@@ -140,6 +159,12 @@ def get_product(
     product = reader.get_product(tenant_id=tenant_id, product_id=str(product_id))
     if product is None:
         return {"ok": False, "error": "product_not_found", "product_id": str(product_id)}
+    if is_commercially_unavailable(product):
+        return {
+            "ok": False,
+            "error": "commerce_product_unavailable",
+            "product_id": str(product_id),
+        }
     return {"ok": True, "source": "local_index", "product": present_product(product)}
 
 
@@ -159,6 +184,16 @@ def check_inventory(
     product = reader.get_product(tenant_id=tenant_id, product_id=str(product_id))
     if product is None:
         return {"ok": False, "error": "product_not_found", "product_id": str(product_id)}
+    if is_commercially_unavailable(product):
+        # O motivo e INDISPONIBILIDADE DO PRODUTO, nunca "estoque zero": dizer
+        # "sem estoque" sugere que volta a ter, o que aqui e falso.
+        return {
+            "ok": False,
+            "error": "commerce_product_unavailable",
+            "product_id": str(product_id),
+            "active": product.active,
+            "excluded": product.excluded,
+        }
 
     freshness = _freshness_for(product)
     stock_state = freshness["stock"]["freshness"]

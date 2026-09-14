@@ -11,7 +11,9 @@ Ponto importante do schema: `price`, `stock` e `available` sao NULLABLE. A regra
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Protocol
 
 from .normalizer import CommerceProduct, normalize_product
@@ -28,6 +30,8 @@ class CatalogIndexWriter(Protocol):
     """Destino do produto normalizado. Deve ser idempotente (upsert por chave)."""
 
     def upsert_products(self, tenant_id: str, products: list[CommerceProduct]) -> int: ...
+
+    def delete_products(self, tenant_id: str, product_ids: list[str]) -> int: ...
 
 
 def sanitize_payload(raw: dict[str, Any]) -> dict[str, Any]:
@@ -74,27 +78,112 @@ def product_to_index_fields(
     }
 
 
-class ProductPageWriter:
-    """`PageWriter` do sync: normaliza a pagina e delega o upsert ao indice.
+class CatalogDecision(str, Enum):
+    """O que fazer com um produto nesta pagina do sync."""
 
-    Produtos sem `id` ja foram descartados pelo sync. Aqui, um produto que nao
-    normaliza (payload corrompido) e descartado tambem — gravar registro pela
-    metade poluiria a busca com um item sem identidade utilizavel.
+    #: Confirmadamente vendavel: entra ou continua no indice.
+    INDEX = "index"
+    #: Confirmadamente indisponivel: sai do indice, se estiver la.
+    REMOVE = "remove"
+    #: Estado incerto: nao cria snapshot novo e NAO destroi o anterior.
+    IGNORE_UNKNOWN = "ignore_unknown_state"
+
+
+def decide(product: CommerceProduct) -> CatalogDecision:
+    """Classifica um produto pelo estado comercial declarado pela Mercos.
+
+    Regra::
+
+        ativo is True  AND excluido is False  -> INDEX
+        ativo is False OR  excluido is True   -> REMOVE
+        qualquer campo ausente                -> IGNORE_UNKNOWN
+
+    `IGNORE_UNKNOWN` existe porque **ausencia nao e falso**. Um payload que
+    chegue sem `ativo` nao autoriza a concluir que o produto morreu: criar
+    snapshot seria afirmar disponibilidade sem evidencia, e apagar o snapshot
+    anterior seria destruir dado bom por causa de um campo faltando. Nesse caso
+    o snapshot existente permanece e a politica de freshness continua decidindo
+    o que ainda pode ser afirmado.
+
+    A ordem importa: um estado explicitamente negativo (`ativo=False` ou
+    `excluido=True`) vence a incerteza do outro campo, porque ai ha evidencia
+    de que o produto nao deve ser oferecido.
+    """
+    if product.active is False or product.excluded is True:
+        return CatalogDecision.REMOVE
+    if product.active is True and product.excluded is False:
+        return CatalogDecision.INDEX
+    return CatalogDecision.IGNORE_UNKNOWN
+
+
+@dataclass
+class PageOutcome:
+    """Contagem por decisao. Sem payload, sem PII."""
+
+    received: int = 0
+    upserted: int = 0
+    removed: int = 0
+    ignored_unknown_state: int = 0
+
+    def as_log(self) -> dict[str, int]:
+        return {
+            "received": self.received,
+            "upserted": self.upserted,
+            "removed": self.removed,
+            "ignored_unknown_state": self.ignored_unknown_state,
+        }
+
+
+class ProductPageWriter:
+    """`PageWriter` do sync: decide, remove e grava — nessa ordem.
+
+    Por que nao basta "pular o excluido": um produto indexado no sync N que
+    chega excluido no sync N+1 permaneceria no indice para sempre se apenas
+    fosse ignorado, e o agente seguiria oferecendo item que nao existe mais. A
+    transicao de estado precisa ser tratada, nao omitida.
+
+    Remocao antes da gravacao: um produto nunca esta nas duas listas (a decisao
+    e exclusiva), mas remover primeiro garante que, se a gravacao falhar no
+    meio, o indice nunca fique com item que ja deveria ter saido.
+
+    Qualquer falha propaga para o motor de sync, que entao NAO avanca o cursor —
+    a pagina inteira sera refeita.
     """
 
     def __init__(self, writer: CatalogIndexWriter, *, tenant_id: str) -> None:
+        if not str(tenant_id or "").strip():
+            raise ValueError("tenant_id do dominio comercial e obrigatorio")
         self._writer = writer
-        self._tenant_id = tenant_id
+        self._tenant_id = str(tenant_id).strip()
+        self.last_outcome = PageOutcome()
 
     async def write_page(self, resource: str, records: list[Any]) -> int:
-        products: list[CommerceProduct] = []
+        outcome = PageOutcome()
+        to_index: list[CommerceProduct] = []
+        to_remove: list[str] = []
+
         for record in records:
             raw = getattr(record, "raw", None)
             if not isinstance(raw, dict):
                 continue
             product = normalize_product(raw)
-            if product is not None:
-                products.append(product)
-        if not products:
-            return 0
-        return self._writer.upsert_products(self._tenant_id, products)
+            if product is None:
+                continue
+            outcome.received += 1
+            decision = decide(product)
+            if decision is CatalogDecision.INDEX:
+                to_index.append(product)
+            elif decision is CatalogDecision.REMOVE:
+                to_remove.append(product.external_id)
+            else:
+                outcome.ignored_unknown_state += 1
+
+        # Remocao pontual: SOMENTE os ids desta pagina. Nunca GC de catalogo.
+        if to_remove:
+            outcome.removed = self._writer.delete_products(self._tenant_id, to_remove)
+        if to_index:
+            outcome.upserted = self._writer.upsert_products(self._tenant_id, to_index)
+
+        self.last_outcome = outcome
+        print("[commerce.sync.page]", outcome.as_log())
+        return outcome.upserted

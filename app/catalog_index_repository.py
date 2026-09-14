@@ -225,6 +225,47 @@ class CatalogIndexRepository:
             print("[catalog.index.mark_stale.error]", {"error_type": type(exc).__name__})
             return 0
 
+    def delete_items(
+        self,
+        *,
+        tenant_id: str,
+        catalog_item_keys: list[str],
+    ) -> int:
+        """Remove EXATAMENTE as chaves recebidas, dentro do tenant.
+
+        Diferente de ``delete_missing_items``, que e GC de catalogo COMPLETO e
+        apagaria tudo que nao estivesse na pagina atual — inseguro para um sync
+        incremental, onde cada pagina ve so uma fatia.
+
+        Ao contrario dos demais metodos deste repositorio, este **levanta** em
+        caso de falha em vez de devolver 0. O chamador (sync incremental) usa o
+        resultado para decidir se o cursor pode avancar: um delete que falhou em
+        silencio faria a posicao avancar deixando no indice um produto que
+        deveria ter saido — e o agente seguiria oferecendo item indisponivel.
+        """
+        tenant = str(tenant_id or "").strip()
+        if not tenant:
+            raise ValueError("tenant_id required")
+        keys = [str(key) for key in (catalog_item_keys or []) if str(key).strip()]
+        if not keys:
+            return 0
+
+        from .db import get_conn
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM public.ai_catalog_index
+                    WHERE tenant_id = %(tenant_id)s
+                      AND catalog_item_key = ANY(%(keys)s)
+                    """,
+                    {"tenant_id": tenant, "keys": keys},
+                )
+                count = cur.rowcount or 0
+            conn.commit()
+        return int(count)
+
     def delete_missing_items(
         self,
         *,
