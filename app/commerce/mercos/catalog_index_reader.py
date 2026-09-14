@@ -79,6 +79,11 @@ class CatalogIndexProductReader:
             rows = repo.search_exact(tenant_id=tenant_id, reference=reference) or []
         if not rows and text:
             rows = repo.search_lexical(tenant_id=tenant_id, query=text) or []
+        if not rows and not reference and not text:
+            # Pergunta generica de catalogo. Sem este ramo a busca voltaria
+            # vazia e o agente concluiria "nao temos produtos" — quando na
+            # verdade ninguem perguntou por nada especifico.
+            rows = repo.list_catalog_items(tenant_id=tenant_id, limit=limit) or []
 
         products = []
         for row in rows:

@@ -27,6 +27,44 @@ def _ttl_cutoff() -> datetime | None:
 class CatalogIndexRepository:
     """All queries require explicit tenant_id."""
 
+    def list_catalog_items(
+        self,
+        *,
+        tenant_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Amostra do catalogo do tenant, sem filtro de busca.
+
+        Serve a pergunta generica ("o que voces vendem?"), que antes voltava
+        vazia porque a busca exigia texto ou referencia — e vazio o agente le
+        como "nao temos nada".
+
+        Ordena por `freshness_at DESC` para mostrar primeiro o que foi
+        confirmado mais recentemente. A mesma janela de TTL das demais leituras
+        se aplica. A defesa comercial (inativo/excluido) fica no read path, que
+        e onde ela vale para TODAS as formas de leitura.
+        """
+        tenant = str(tenant_id or "").strip()
+        if not tenant:
+            raise ValueError("tenant_id required")
+        params: dict[str, Any] = {
+            "tenant_id": tenant,
+            "limit": max(1, min(int(limit), 100)),
+        }
+        clauses = ["tenant_id = %(tenant_id)s"]
+        cutoff = _ttl_cutoff()
+        if cutoff is not None:
+            clauses.append("coalesce(freshness_at, updated_at) >= %(cutoff)s")
+            params["cutoff"] = cutoff
+        sql = f"""
+            SELECT *
+            FROM public.ai_catalog_index
+            WHERE {" AND ".join(clauses)}
+            ORDER BY freshness_at DESC NULLS LAST
+            LIMIT %(limit)s
+        """
+        return self._fetch(sql, params)
+
     def search_exact(
         self,
         *,
