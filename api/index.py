@@ -1089,20 +1089,47 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
 
 
 @app.post(
-    "/api/cron/commerce/sync/products",
-    dependencies=[Depends(verify_remarketing_cron)],
+    "/api/admin/commerce/sync/products",
+    dependencies=[Depends(verify_admin_token)],
 )
-async def commerce_product_sync_cron():
-    """Executa um ciclo de sync do catalogo comercial.
+async def commerce_product_sync_admin():
+    """Sync manual do catalogo comercial. Caminho OPERACIONAL da integracao.
 
-    Protegida pelo mesmo mecanismo de cron ja usado pelo remarketing — nenhum
-    sistema de autenticacao novo. A resposta traz contadores e codigos; nunca
-    cursor, payload ou segredo.
+    Protegida por ``ADMIN_API_TOKEN``, a mesma autenticacao das demais rotas
+    administrativas. Nao depende do segredo de remarketing: amarrar a operacao
+    do catalogo a um secret de outra feature faz com que desligar o remarketing
+    derrube o sync junto, e confunde quem for auditar permissoes depois.
+
+    `verify_admin_token` falha fechada — sem token configurado, a rota recusa
+    todo mundo com 500 em vez de ficar aberta.
+
+    Chama o MESMO runner da rota de cron: nenhuma logica de sync duplicada.
     """
     from app.commerce.health import run_configured_product_sync
 
     result = await run_configured_product_sync()
-    log_event("commerce.sync.products", result)
+    log_event("commerce.sync.products", {**result, "trigger": "admin"})
+    return result
+
+
+@app.post(
+    "/api/cron/commerce/sync/products",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def commerce_product_sync_cron():
+    """Sync agendado do catalogo comercial.
+
+    Existe para o agendador da plataforma, que so sabe mandar o header de cron
+    ja configurado no projeto. Para operacao manual use a rota administrativa
+    acima — esta depende do segredo de cron e nao deve ser o caminho padrao da
+    integracao comercial.
+
+    Mesmo runner da rota administrativa: nenhuma logica duplicada.
+    """
+    from app.commerce.health import run_configured_product_sync
+
+    result = await run_configured_product_sync()
+    log_event("commerce.sync.products", {**result, "trigger": "cron"})
     return result
 
 
