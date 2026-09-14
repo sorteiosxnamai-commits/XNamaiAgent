@@ -15,7 +15,7 @@ from .turn_runtime import LLMCallBudgetExceeded
 
 
 IMAGE_IDENTIFY_INSTRUCTIONS = """\
-Você identifica relógios em fotos enviadas por clientes da NewStore (loja de relógios).
+Você identifica produtos em fotos enviadas por clientes da XNamai.
 
 Extraia o máximo de identidade comercial visível — NÃO fique só em marca + cor:
 

@@ -26,8 +26,11 @@ def test_trade_in_triggers_handoff_with_policy_message():
     result = build_human_handoff_result(reason="trade_in_or_appraisal")
     assert result.handoff_required is True
     assert "avalia" in result.reply_text.lower()
+    assert "XNamai" in result.reply_text
     assert "troca" in result.reply_text.lower()
-    assert TRADE_IN_HANDOFF_MESSAGE.split(".")[0] in result.reply_text
+    # A copy legada de `site_knowledge` nao e mais reaproveitada: ela nomeia a
+    # marca anterior. O arquivo segue intocado no repositorio.
+    assert "New Store" not in result.reply_text
 
 
 def test_fast_critique_rewrites_trade_in_denial():

@@ -74,19 +74,11 @@ def render_prompt_surface() -> dict[str, str]:
 
     _grab(out, greeting_policy, "greeting_policy", ("_GREETING_VARIANTS",))
 
-    # --- conhecimento institucional injetado no prompt ---------------------
-    from app import site_knowledge
-
-    out["site_knowledge.build_site_knowledge_text"] = site_knowledge.build_site_knowledge_text()
-    _grab(out, site_knowledge, "site_knowledge", (
-        "HUMAN_SUPPORT_MESSAGE", "TRADE_IN_HANDOFF_MESSAGE", "REGISTER_PHONE_MESSAGE",
-        "THIRD_PARTY_REFUSAL", "SITE_URL", "STORE_URL", "NS_SALES_WHATSAPP",
-        "CARD_USAGE_TABLE",
-    ))
-    out["site_knowledge.build_rules_reply()"] = site_knowledge.build_rules_reply()
-    out["site_knowledge.format_card_usage_table_text()"] = (
-        site_knowledge.format_card_usage_table_text()
-    )
+    # --- conhecimento institucional ---------------------------------------
+    # `site_knowledge` NAO entra mais aqui: e conteudo da marca legada e deixou
+    # de ser injetado no caminho XNamai. O arquivo segue intocado no repositorio
+    # (legado protegido), mas o que nao chega ao modelo nao pertence a esta
+    # superficie. `tests/test_xnamai_identity.py` guarda a nao-injecao.
 
     # --- catalogo de capacidades (texto injetado no prompt) ----------------
     from app.capability_catalog import (

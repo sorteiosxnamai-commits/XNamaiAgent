@@ -193,7 +193,7 @@ def admin_prompt_preview(
         tenant_id=tenant_id,
         persona_key=persona_key,
         fallback_instructions=(
-            "Você é o assistente comercial oficial da NewStore."
+            "Você é o assistente virtual da XNamai."
         ),
         audit=False,
     )

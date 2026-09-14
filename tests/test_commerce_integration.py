@@ -156,7 +156,9 @@ async def test_out_of_scope_is_refused_without_openai_answer_or_tray(monkeypatch
     monkeypatch.setattr("app.commerce_router.execute_tool", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("out of scope must not call Tray")))
     result = await openai_agent.generate_agent_reply_async(IncomingMessage(text="quem ganhou o jogo ontem?"), {})
     assert result.intent == "out_of_scope"
-    assert "NewStore" in result.reply_text
+    # Identidade migrada: a recusa de escopo fala pela XNamai.
+    assert "XNamai" in result.reply_text
+    assert "NewStore" not in result.reply_text
 
 
 @pytest.mark.asyncio

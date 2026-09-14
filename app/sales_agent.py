@@ -99,7 +99,7 @@ from .commerce.tools import execute_tool
 
 
 SALES_PLANNER_INSTRUCTIONS = """
-Você planeja consultas comerciais para a New Store. Retorne somente JSON válido.
+Você planeja consultas comerciais para a XNamai. Retorne somente JSON válido.
 Use este formato: domain, goal, subject, constraints, information_needed,
 enough_information_to_search, ready_for_retrieval, stop_clarification,
 needs_clarification e clarification_question.
@@ -111,8 +111,8 @@ Não produza fatos comerciais nem diga que um produto existe.
 """.strip()
 
 SALES_RESPONDER_INSTRUCTIONS = """
-Você é um vendedor objetivo e prestativo da New Store.
-Use exclusivamente os fatos comerciais retornados pelo TrayAdapter no bloco FACTS.
+Você é um vendedor objetivo e prestativo da XNamai.
+Use exclusivamente os fatos comerciais retornados pela fonte oficial no bloco FACTS.
 Não invente produto, preço, estoque, promoção, disponibilidade, Pix, parcelamento ou cupom.
 Se um fato não estiver em FACTS, diga que não foi informado.
 Responda em português do Brasil, de forma curta para WhatsApp.
@@ -149,22 +149,22 @@ lista o que o agente pode fazer; não afirme incapacidade se a capacidade existi
 """.strip()
 
 SALES_CLARIFICATION_INSTRUCTIONS = """
-Você é um vendedor da NewStore no WhatsApp.
+Você é um vendedor da XNamai no WhatsApp.
 Faça uma resposta curta para obter no máximo DUAS informações relacionadas que
 realmente mudariam a busca. Considere o histórico, a interpretação e DISCOVERY_STATE.
 Não transforme a conversa em questionário. Não pergunte novamente informação já
 fornecida, presente em known_preferences ou em recent_questions. Não pergunte por uma
 preferência listada em explicit_no_preferences; isso significa que o cliente disse que
 não possui preferência naquele critério.
-Não afirme produto, preço, estoque, promoção ou condição comercial, pois a Tray ainda
+Não afirme produto, preço, estoque, promoção ou condição comercial, pois a fonte oficial ainda
 não foi consultada. Responda apenas com uma frase curta ou até duas perguntas simples
 e relacionadas.
 """.strip()
 
-OUT_OF_SCOPE_REPLY = "Posso ajudar com produtos, compras, pedidos e informações da NewStore, além dos sorteios da loja."
+OUT_OF_SCOPE_REPLY = "Posso ajudar por aqui com o atendimento da XNamai."
 GREETING_REPLY = "Olá! Como posso ajudar?"
 SALES_INTERPRETER_INSTRUCTIONS = """
-Você interpreta mensagens do atendimento da NewStore.
+Você interpreta mensagens do atendimento da XNamai.
 
 NÃO responda ao cliente. Analise a mensagem atual considerando o histórico
 imediatamente anterior e o bloco COMMERCE_STATE/WORKING_MEMORY. Mensagens curtas
@@ -174,9 +174,9 @@ ou pagamento, mantenha domain=commerce com continuidade. Em saudação pura, use
 domain=greeting mesmo com pedido em memória.
 
 Use domain=commerce para produtos, compras e continuações de uma descoberta de
-produto; raffle para sorteios da NewStore; store_general para assuntos da loja sem
+produto; store_general para assuntos da empresa sem
 produto específico; greeting para saudação; out_of_scope somente quando a mensagem,
-considerada junto ao histórico, não tiver relação com a NewStore.
+considerada junto ao histórico, não tiver relação com a XNamai.
 
 Exemplo 1:
 Histórico: cliente quer comprar um relógio; atendente pergunta se prefere esportivo,
@@ -365,7 +365,7 @@ FLUXO DE PEDIDO PELO WHATSAPP:
   nova confirmacao. Nunca reutilize confirmacao antiga.
 - Nunca diga que criou pedido antes de FACTS confirmar order_id.
 - No PIX direto, use somente copy_paste_code / pix em FACTS. Nunca invente QR Code,
-  Pix copia-e-cola, boleto ou cobranca. Pedido Tray so nasce apos PIX approved.
+  Pix copia-e-cola, boleto ou cobranca. O pedido so nasce apos PIX approved.
 - Depois da criacao com link hospedado, use somente payment_url retornada em FACTS.
   Preserve a URL exata. Nunca construa link, QR Code, Pix, boleto ou cobranca.
 - Use payment_action=order_payment quando o cliente disser que pagou ou pedir confirmacao
@@ -1896,7 +1896,7 @@ async def _execute_compiled_product_retrieval(
             interpretation,
         )
         enrich_names: list[str] = []
-        # Shortest probes first — Tray name search often misses long titles.
+        # Shortest probes first — provider name search often misses long titles.
         for code in family_codes:
             enrich_names.append(f"{code} {color_hue}".strip())
             if core:
@@ -2668,7 +2668,7 @@ async def _fulfill_confirmed_order(
     *,
     message: IncomingMessage | None = None,
 ) -> AgentResult:
-    """After explicit order confirmation: direct PIX (if enabled) or Tray order+link."""
+    """After explicit order confirmation: creates the order via the provider."""
     return await _create_order_with_payment_lookup(state)
 
 
@@ -3937,7 +3937,7 @@ async def _handle_sales_message_inner(
             reply_text=(
                 f"Link oficial consultado.\n{product_url}"
                 if isinstance(product_url, str)
-                else "A Tray não informou um link oficial para este produto."
+                else "A fonte oficial não informou um link para este produto."
             ),
             intent="commerce",
             handoff_required=False,

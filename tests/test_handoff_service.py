@@ -16,7 +16,10 @@ def test_customer_request_triggers_handoff():
     assert should_request_human_handoff(incoming) == "customer_requested_human"
     result = build_human_handoff_result(reason="customer_requested_human")
     assert result.handoff_required is True
-    assert NS_SALES_WHATSAPP in result.reply_text
+    # O contato da marca legada saiu da copy: encaminhar para la mandaria o
+    # cliente da XNamai para outra empresa.
+    assert "XNamai" in result.reply_text
+    assert NS_SALES_WHATSAPP not in result.reply_text
     assert handoff_provider_payload(result)["provider_action"] == "mark_for_human"
 
 

@@ -294,7 +294,7 @@ _EXCLUSIVE_MARKERS = (
 
 
 TURN_UNDERSTANDING_INSTRUCTIONS = """
-Você interpreta o turno atual do atendimento da NewStore.
+Você interpreta o turno atual do atendimento da XNamai.
 NÃO responda ao cliente. Preencha TurnUnderstanding.
 
 Regras:
@@ -312,7 +312,7 @@ Regras:
 7. clarification_required=true SOMENTE se a ambiguidade impedir resposta segura.
    "quero relógios Casio até R$ 500" → search_catalog, clarification_required=false.
    "quero esse" sem referência recuperável → clarify.
-8. Sorteios: primary_intent=raffle_info (somente informativo; nunca participar/apostar).
+8. Assuntos fora do escopo comercial: responda de forma breve e honesta, sem inventar.
 9. hypotheses = palpites não confirmados; missing_data = dados ausentes úteis.
 10. required_tools lista ferramentas necessárias (search_products, get_stock, …) ou [none].
 11. confidence entre 0 e 1. language use pt-BR salvo evidência clara.

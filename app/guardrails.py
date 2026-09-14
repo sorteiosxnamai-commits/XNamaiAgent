@@ -143,10 +143,13 @@ def detect_blocked_request(text: str) -> str | None:
 
 
 def default_safe_handoff() -> str:
-    from .site_knowledge import HUMAN_SUPPORT_MESSAGE, SITE_URL
+    """Recusa segura de topico bloqueado.
 
+    Nao usa `site_knowledge`: aquele modulo carrega o contato e a URL da marca
+    legada, e encaminhar o cliente da XNamai para la seria mandar gente para a
+    empresa errada. O arquivo continua intocado no repositorio.
+    """
     return (
-        "Para sua segurança, vou encaminhar esse atendimento para a equipe da New Store. "
-        f"{HUMAN_SUPPORT_MESSAGE} "
-        f"Você também pode acessar sua conta em {SITE_URL}."
+        "Para sua segurança, não posso seguir com esse assunto por aqui. "
+        "Vou encaminhar seu atendimento para a equipe da XNamai."
     )

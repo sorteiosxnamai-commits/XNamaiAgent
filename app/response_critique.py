@@ -29,7 +29,12 @@ from .quality_judge import (
     is_low_risk_judge_skip,
 )
 from .runtime_context import get_current_turn
-from .site_knowledge import TRADE_IN_HANDOFF_MESSAGE
+#: Dica de resposta para pedido de avaliacao/troca. Texto proprio: reaproveitar
+#: `site_knowledge` traria o contato da marca legada para a boca do agente.
+TRADE_IN_HANDOFF_MESSAGE = (
+    "Para avaliação, troca ou compra de usados, vou encaminhar seu atendimento "
+    "para a equipe da XNamai."
+)
 from .commerce.tools import execute_tool
 from .turn_runtime import LLMCallBudgetExceeded
 
@@ -37,7 +42,7 @@ from .turn_runtime import LLMCallBudgetExceeded
 ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 
 CRITIQUE_JUDGE_SYSTEM_PROMPT = (
-    "Você é o JUÍZ redundante do agente NewStore. "
+    "Você é o JUÍZ redundante do agente XNamai. "
     "Valide se a resposta cumpre o pedido do cliente com o "
     "histórico completo e as capacidades/APIs disponíveis. "
     "pass_check=false se a resposta negar pedido/link/pagamento "
@@ -588,7 +593,7 @@ async def _regenerate_reply(
             {
                 "role": "system",
                 "content": (
-                    "Você é o agente de RESPOSTA da NewStore. "
+                    "Você é o agente de RESPOSTA da XNamai. "
                     "Regenera a resposta ao cliente usando o histórico, os fatos "
                     "já conhecidos e os novos resultados de API. "
                     "Não invente dados. Se houver payment_url nos fatos, envie o link. "

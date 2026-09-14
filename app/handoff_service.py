@@ -4,7 +4,9 @@ from typing import Any
 
 from .guardrails import default_safe_handoff, detect_human_support_request
 from .models import AgentResult, IncomingMessage
-from .site_knowledge import HUMAN_SUPPORT_MESSAGE, NS_SALES_WHATSAPP, TRADE_IN_HANDOFF_MESSAGE
+#: Canal humano da XNamai. Vazio ate ser configurado: publicar o contato da
+#: marca legada rotearia o cliente da XNamai para outra empresa.
+SALES_CONTACT_WHATSAPP = ""
 
 
 def should_request_human_handoff(
@@ -30,13 +32,16 @@ def build_human_handoff_result(
 ) -> AgentResult:
     text = (reply_text or "").strip()
     if not text:
+        # Copy neutra: `site_knowledge` guarda contato e politica da marca
+        # legada. Encaminhar para la mandaria o cliente da XNamai para outra
+        # empresa. O arquivo legado segue intocado.
         if reason == "trade_in_or_appraisal":
-            text = TRADE_IN_HANDOFF_MESSAGE
-        else:
             text = (
-                "Vou encaminhar seu atendimento para a equipe da New Store. "
-                f"{HUMAN_SUPPORT_MESSAGE}"
+                "Para avaliação, troca ou compra de usados, vou encaminhar seu "
+                "atendimento para a equipe da XNamai."
             )
+        else:
+            text = "Vou encaminhar seu atendimento para a equipe da XNamai."
     if reason.startswith("blocked_topic:"):
         text = default_safe_handoff()
     return AgentResult(
@@ -50,7 +55,7 @@ def build_human_handoff_result(
             "handoff": {
                 "required": True,
                 "reason": reason,
-                "contact_whatsapp": NS_SALES_WHATSAPP,
+                "contact_whatsapp": SALES_CONTACT_WHATSAPP or None,
                 "provider_action": "mark_for_human",
             },
         },
@@ -76,7 +81,7 @@ def enrich_handoff_metadata(
             "channel": incoming.channel,
             "conversation_id_present": bool(incoming.conversation_id),
             "visitor_id_present": bool(incoming.visitor_id),
-            "contact_whatsapp": NS_SALES_WHATSAPP,
+            "contact_whatsapp": SALES_CONTACT_WHATSAPP or None,
             "provider_action": "mark_for_human",
         }
     )
