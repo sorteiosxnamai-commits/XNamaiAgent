@@ -77,8 +77,16 @@ class DatabaseSyncStateStore:
     explicito, nunca efeito colateral de um webhook.
     """
 
-    def __init__(self, *, tenant_id: str = "newstore") -> None:
-        self._tenant_id = tenant_id
+    def __init__(self, *, tenant_id: str) -> None:
+        """`tenant_id` e OBRIGATORIO de proposito.
+
+        Um default aqui viraria o tenant silencioso de toda gravacao futura —
+        foi assim que o catalogo anterior acabou preso ao tenant da marca
+        legada. Quem constroi o store diz de qual dominio comercial fala.
+        """
+        if not (tenant_id or "").strip():
+            raise ValueError("tenant_id do dominio comercial e obrigatorio")
+        self._tenant_id = tenant_id.strip()
 
     # --- protocolo do motor de sync ---------------------------------------
 
@@ -216,8 +224,16 @@ class DatabaseSyncStateStore:
             return False
 
 
-def product_sync_ready(store: Any | None = None, *, tenant_id: str = "newstore") -> bool:
-    """O catalogo Mercos esta pronto para responder ao modelo?"""
+def product_sync_ready(store: Any | None = None, *, tenant_id: str | None = None) -> bool:
+    """O catalogo Mercos esta pronto para responder ao modelo?
+
+    Sem `tenant_id` explicito, usa o tenant COMERCIAL da configuracao — nunca o
+    da persona.
+    """
+    if store is None and not (tenant_id or "").strip():
+        from ...config import get_settings
+
+        tenant_id = get_settings().commerce_tenant_id
     resolved = store or DatabaseSyncStateStore(tenant_id=tenant_id)
     try:
         return resolved.read(PROVIDER_NAME, PRODUCTS_RESOURCE).ready

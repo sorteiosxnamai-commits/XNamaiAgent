@@ -50,10 +50,15 @@ class _StateStore:
         self.failures.append({"error_code": error_code})
 
 
+#: Tenant de teste explicito: o provider exige um e nao inventa.
+TENANT = "tenant-de-teste"
+
+
 def _provider(*, index=None, sync_state=None):
     return MercosCommerceProvider(
         MercosAdaptorClient(base_url="https://a.example.com", api_key="k", timeout_seconds=5),
         index=index,
+        tenant_id=TENANT,
         sync_state=sync_state,
     )
 
@@ -169,7 +174,10 @@ async def test_runner_refuses_when_the_state_table_is_missing():
         mercos_adaptor_api_key = "k"
         mercos_adaptor_timeout_seconds = 5
         database_url = "postgresql://x/y"
+        # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
+        # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
         agent_persona_tenant_id = "newstore"
+        commerce_tenant_id = TENANT
 
     store = _StateStore(SyncState("mercos", "products", missing_table=True))
     result = await run_product_sync(settings=_Settings(), store=store, client=object(), writer=object())
@@ -194,7 +202,10 @@ async def test_runner_refuses_without_configuration(configured, database, expect
         mercos_adaptor_url = "https://a.example.com"
         mercos_adaptor_api_key = "k"
         database_url = database
+        # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
+        # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
         agent_persona_tenant_id = "newstore"
+        commerce_tenant_id = TENANT
 
     result = await run_product_sync(settings=_Settings())
     assert result["ok"] is False
@@ -211,7 +222,10 @@ async def test_successful_run_records_the_success_that_opens_the_tools():
         mercos_adaptor_api_key = "k"
         mercos_adaptor_timeout_seconds = 5
         database_url = "postgresql://x/y"
+        # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
+        # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
         agent_persona_tenant_id = "newstore"
+        commerce_tenant_id = TENANT
 
     def handler(_):
         return httpx.Response(200, json={
@@ -247,7 +261,10 @@ async def test_failed_run_records_failure_without_erasing_the_previous_success()
         mercos_adaptor_api_key = "k"
         mercos_adaptor_timeout_seconds = 5
         database_url = "postgresql://x/y"
+        # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
+        # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
         agent_persona_tenant_id = "newstore"
+        commerce_tenant_id = TENANT
 
     def handler(_):
         return httpx.Response(500, json={"error": "boom"})

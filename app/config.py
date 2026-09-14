@@ -565,6 +565,13 @@ class Settings(BaseSettings):
         alias="AGENT_HTTP_OBS_LOGS",
     )
 
+    #: Tenant do DOMINIO COMERCIAL (sync state, indice de catalogo).
+    #: Deliberadamente separado de `agent_persona_tenant_id`: a persona e o
+    #: comercio sao dominios independentes, e amarrar o catalogo novo a chave de
+    #: lookup da persona legada reintroduziria NewStore por uma porta lateral.
+    #: A chave da persona (AGENT_PERSONA_TENANT_ID) fica intocada.
+    commerce_tenant_id: str = Field(default="xnamai", alias="COMMERCE_TENANT_ID")
+
     # --- Fronteira comercial: MercosAdaptor -------------------------------
     # SOMENTE estas duas. Os tokens da Mercos (ApplicationToken/CompanyToken) e
     # a MERCOS_BASE_URL pertencem ao MercosAdaptor e NAO podem existir aqui: o

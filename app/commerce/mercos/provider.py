@@ -198,12 +198,20 @@ class MercosCommerceProvider:
         client: MercosAdaptorClient,
         *,
         index: Any | None = None,
-        tenant_id: str = "newstore",
+        tenant_id: str,
         sync_state: Any | None = None,
     ) -> None:
+        """`tenant_id` e obrigatorio: fonte unica de verdade e o Settings.
+
+        Qualquer default aqui seria uma segunda fonte de verdade — e no dia em
+        que as duas divergissem, o catalogo seria gravado numa particao e lido
+        de outra, devolvendo busca vazia sem erro nenhum.
+        """
+        if not str(tenant_id or "").strip():
+            raise ValueError("tenant_id do dominio comercial e obrigatorio")
         self._client = client
         self._index = index
-        self._tenant_id = tenant_id
+        self._tenant_id = str(tenant_id).strip()
         self._sync_state = sync_state
 
     @property
@@ -357,7 +365,9 @@ def build_mercos_provider(settings: Any, *, index: Any | None = None) -> MercosC
         api_key=settings.mercos_adaptor_api_key,
         timeout_seconds=getattr(settings, "mercos_adaptor_timeout_seconds", 90.0),
     )
-    tenant_id = getattr(settings, "agent_persona_tenant_id", "newstore") or "newstore"
+    # Tenant COMERCIAL, nunca o da persona. Fonte unica: Settings — sem
+    # fallback literal aqui, para nao existir uma segunda verdade.
+    tenant_id = settings.commerce_tenant_id
     resolved_index = index
     sync_state = None
     if getattr(settings, "database_url", ""):

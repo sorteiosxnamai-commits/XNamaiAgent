@@ -18,7 +18,10 @@
 -- deixa o cursor onde estava e a pagina inteira e reprocessada.
 
 CREATE TABLE IF NOT EXISTS public.ai_commerce_sync_state (
-    tenant_id             text        NOT NULL DEFAULT 'newstore',
+    -- SEM DEFAULT de proposito: uma insercao que esqueca o tenant deve FALHAR,
+    -- nunca cair silenciosamente no tenant de outra marca. O runtime sempre
+    -- envia COMMERCE_TENANT_ID explicitamente.
+    tenant_id             text        NOT NULL,
     provider              text        NOT NULL,
     resource              text        NOT NULL,
 

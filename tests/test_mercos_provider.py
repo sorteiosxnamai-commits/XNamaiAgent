@@ -20,6 +20,11 @@ from app.commerce.mercos.provider import (
 from app.commerce.tools import TOOL_REGISTRY
 
 
+#: Tenant de teste. Explicito de proposito: o provider nao inventa tenant, e o
+#: teste tambem nao deve esconder qual particao esta usando.
+TENANT = "tenant-de-teste"
+
+
 def _provider(handler) -> MercosCommerceProvider:
     return MercosCommerceProvider(
         MercosAdaptorClient(
@@ -27,7 +32,8 @@ def _provider(handler) -> MercosCommerceProvider:
             api_key="internal-key",
             timeout_seconds=5,
             transport=httpx.MockTransport(handler),
-        )
+        ),
+        tenant_id=TENANT,
     )
 
 

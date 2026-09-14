@@ -39,7 +39,8 @@ async def run_product_sync(
     if not getattr(resolved_settings, "database_url", ""):
         return {"ok": False, "error": "database_not_configured"}
 
-    tenant_id = getattr(resolved_settings, "agent_persona_tenant_id", "newstore") or "newstore"
+    # Tenant COMERCIAL, nunca o da persona. Fonte unica: Settings.
+    tenant_id = resolved_settings.commerce_tenant_id
 
     if client is None:
         from .client import MercosAdaptorClient
