@@ -87,9 +87,27 @@ def commerce_tools_available() -> bool:
     return bool(getattr(get_commerce_provider(), "available", False))
 
 
+def _schema_name(item: dict[str, Any]) -> str:
+    return str((item.get("function") or {}).get("name") or "")
+
+
 def tool_schemas_for_model() -> list[dict[str, Any]] | None:
-    """Schemas a enviar ao modelo, ou ``None`` quando nao ha provider."""
-    return TOOL_SCHEMAS if commerce_tools_available() else None
+    """Schemas a enviar ao modelo, ou ``None`` quando nao ha provider.
+
+    Capability discovery: um provider disponivel NAO significa que ele implementa
+    as capacidades herdadas. Quando o provider declara ``llm_capabilities``, so
+    os schemas correspondentes sao expostos — oferecer ao modelo uma tool que o
+    provider nao sabe executar produz tool-call inutil e, pior, passa a impressao
+    de que o fato esta disponivel.
+    """
+    if not commerce_tools_available():
+        return None
+    provider = get_commerce_provider()
+    allowed = getattr(provider, "llm_capabilities", None)
+    if allowed is None:
+        return TOOL_SCHEMAS
+    schemas = [item for item in TOOL_SCHEMAS if _schema_name(item) in allowed]
+    return schemas or None
 
 
 async def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -111,8 +129,10 @@ async def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> di
     args = dict(arguments or {})
     started = time.perf_counter()
     register_commerce_call()
+    provider_name = "unknown"
     try:
         provider = get_commerce_provider()
+        provider_name = getattr(provider, "name", "unknown")
         result = await provider.execute(name, args)
     except CommerceUnavailableError as exc:
         result = {
@@ -135,11 +155,15 @@ async def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> di
         elapsed_ms=elapsed_ms,
     )
     ok = isinstance(result, dict) and "error" not in result
+    # Metadata segura: nome do provider e da capacidade, nunca argumento nem
+    # payload — argumentos comerciais carregam documento, telefone e e-mail.
     print("[commerce.tool] executed", {
+        "provider": provider_name,
         "tool": name,
         "ok": ok,
         "elapsed_ms": round(elapsed_ms),
         "error": result.get("error") if isinstance(result, dict) else None,
+        "code": result.get("code") if isinstance(result, dict) else None,
     })
     print("[sales.tool]", {"tool": name, "success": ok})
     return result

@@ -61,6 +61,13 @@ app = FastAPI(title="XNamaiAgent Webhook", version="1.0.0")
 app.include_router(persona_admin_router)
 
 
+def _commerce_health() -> dict:
+    """Prontidao comercial via fachada neutra: sem conhecimento de fornecedor."""
+    from app.commerce.health import commerce_sync_health
+
+    return commerce_sync_health()
+
+
 def _request_trace_id(request: Request) -> str:
     supplied = (request.headers.get("x-request-id") or "").strip()
     if supplied and len(supplied) <= 64 and all(
@@ -401,6 +408,11 @@ async def health():
         "supabase_storage_configured": bool(settings.supabase_url and settings.supabase_service_key),
         "dry_run": settings.dry_run,
         "commerce_provider": get_commerce_provider().name,
+        # Booleanos e um timestamp. Nunca URL, chave, cursor ou payload. As
+        # chaves de prontidao vem do proprio provider: esta camada nao conhece
+        # fornecedor.
+        "commerce_tools_exposed": bool(get_commerce_provider().available),
+        **_commerce_health(),
         "remarketing_enabled": getattr(settings, "remarketing_enabled", False),
         "remarketing_cron_configured": bool(
             getattr(settings, "remarketing_cron_secret", "")
@@ -1074,6 +1086,24 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
             "skipped_reply": not bool(send_result),
         }
     )
+
+
+@app.post(
+    "/api/cron/commerce/sync/products",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def commerce_product_sync_cron():
+    """Executa um ciclo de sync do catalogo comercial.
+
+    Protegida pelo mesmo mecanismo de cron ja usado pelo remarketing — nenhum
+    sistema de autenticacao novo. A resposta traz contadores e codigos; nunca
+    cursor, payload ou segredo.
+    """
+    from app.commerce.health import run_configured_product_sync
+
+    result = await run_configured_product_sync()
+    log_event("commerce.sync.products", result)
+    return result
 
 
 @app.get(

@@ -50,6 +50,27 @@ _API_HINTS: dict[str, str] = {
 }
 
 
+def _capabilities_the_active_provider_can_serve() -> frozenset[str] | None:
+    """Capacidades reais do provider ativo, ou ``None`` para nao filtrar.
+
+    O catalogo descreve o contrato; quando existe um provider EM USO que declara
+    o que sabe servir, anunciar mais do que ele entrega convida o modelo a citar
+    capacidade inexistente. Enquanto nenhum provider estiver disponivel (Null, ou
+    provider sem capacidade exposta), o catalogo segue descrevendo o contrato —
+    e o prompt permanece identico ao baseline.
+    """
+    try:
+        from .commerce.provider import get_commerce_provider
+
+        provider = get_commerce_provider()
+    except Exception:  # noqa: BLE001 - catalogo nunca pode derrubar o turno
+        return None
+    if not getattr(provider, "available", False):
+        return None
+    declared = getattr(provider, "llm_capabilities", None)
+    return frozenset(declared) if declared is not None else None
+
+
 def build_capability_catalog() -> dict[str, Any]:
     """Catalog of what the agent can do — for interpreter, responder and judge."""
     schema_names = {
@@ -58,6 +79,10 @@ def build_capability_catalog() -> dict[str, Any]:
         if isinstance(item, dict)
     }
     commerce = list(TOOL_REGISTRY.get("commerce") or ())
+    servable = _capabilities_the_active_provider_can_serve()
+    if servable is not None:
+        commerce = [name for name in commerce if name in servable]
+        schema_names &= servable
     apis = []
     for name in commerce:
         apis.append(

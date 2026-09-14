@@ -14,6 +14,14 @@ class NullCommerceProvider:
     """
 
     name = "null"
+
+    def sync_health(self) -> dict[str, Any]:
+        """Sem fonte configurada: nada pronto, e isso e dito explicitamente."""
+        return {
+            "commerce_adaptor_configured": False,
+            "mercos_product_sync_ready": False,
+            "mercos_product_sync_last_success_at": None,
+        }
     #: Nao ha fonte comercial: o modelo NAO pode receber tools comerciais.
     #: Gating generico por provider, nunca por env de fornecedor.
     available = False
@@ -25,10 +33,26 @@ class NullCommerceProvider:
 _provider: CommerceProvider | None = None
 
 
+def _build_configured_provider() -> CommerceProvider:
+    """Provider a partir da configuracao. Sem fallback para fornecedor legado.
+
+    So existem dois desfechos: adaptador comercial configurado -> provider real;
+    nada configurado -> Null. Nunca Tray, nunca NewStore, nunca Mercos direto.
+    """
+    from ..config import get_settings
+
+    settings = get_settings()
+    if getattr(settings, "mercos_adaptor_configured", False):
+        from .mercos.provider import build_mercos_provider
+
+        return build_mercos_provider(settings)
+    return NullCommerceProvider()
+
+
 def get_commerce_provider() -> CommerceProvider:
     global _provider
     if _provider is None:
-        _provider = NullCommerceProvider()
+        _provider = _build_configured_provider()
     return _provider
 
 

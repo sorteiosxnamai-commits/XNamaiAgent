@@ -565,6 +565,16 @@ class Settings(BaseSettings):
         alias="AGENT_HTTP_OBS_LOGS",
     )
 
+    # --- Fronteira comercial: MercosAdaptor -------------------------------
+    # SOMENTE estas duas. Os tokens da Mercos (ApplicationToken/CompanyToken) e
+    # a MERCOS_BASE_URL pertencem ao MercosAdaptor e NAO podem existir aqui: o
+    # XNamai fala com o adaptador por chave interna e nunca com a Mercos.
+    mercos_adaptor_url: str = Field(default="", alias="MERCOS_ADAPTOR_URL")
+    mercos_adaptor_api_key: str = Field(default="", alias="MERCOS_ADAPTOR_API_KEY")
+    mercos_adaptor_timeout_seconds: float = Field(
+        default=90.0, alias="MERCOS_ADAPTOR_TIMEOUT_SECONDS", gt=0
+    )
+
     audio_inbound_enabled: bool = Field(default=True, alias="AUDIO_INBOUND_ENABLED")
     audio_outbound_enabled: bool = Field(default=True, alias="AUDIO_OUTBOUND_ENABLED")
     brevo_send_audio_as_attachment: bool = Field(default=True, alias="BREVO_SEND_AUDIO_AS_ATTACHMENT")
@@ -850,9 +860,17 @@ class Settings(BaseSettings):
 
     max_reply_chars: int = Field(default=900, alias="MAX_REPLY_CHARS")
 
+    @property
+    def mercos_adaptor_configured(self) -> bool:
+        """Ha adaptador comercial configurado? Sem isto o provider e o Null."""
+        return bool(
+            (self.mercos_adaptor_url or "").strip()
+            and (self.mercos_adaptor_api_key or "").strip()
+        )
+
     @field_validator(
         "openai_api_key", "admin_api_token", "brevo_webhook_secret", "brevo_api_key",
-        "remarketing_cron_secret",
+        "remarketing_cron_secret", "mercos_adaptor_api_key",
         "meta_app_secret", "meta_ig_app_secret", "meta_verify_token",
         "meta_page_access_token",
         "ycloud_api_key", "ycloud_webhook_secret",
