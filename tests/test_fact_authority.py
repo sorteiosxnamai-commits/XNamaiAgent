@@ -22,10 +22,10 @@ from app.models import AgentResult, IncomingMessage
 
 
 def test_commerce_rank_tray_live_beats_local_db_and_persona():
-    assert FACT_SOURCE_RANK[FactSource.TRAY_LIVE] > FACT_SOURCE_RANK[FactSource.TRAY_ADAPTER]
-    assert FACT_SOURCE_RANK[FactSource.TRAY_ADAPTER] > FACT_SOURCE_RANK[FactSource.LOCAL_DATABASE]
+    assert FACT_SOURCE_RANK[FactSource.COMMERCE_LIVE] > FACT_SOURCE_RANK[FactSource.COMMERCE_PROVIDER]
+    assert FACT_SOURCE_RANK[FactSource.COMMERCE_PROVIDER] > FACT_SOURCE_RANK[FactSource.LOCAL_DATABASE]
     assert FACT_SOURCE_RANK[FactSource.LOCAL_DATABASE] > FACT_SOURCE_RANK[FactSource.COMMERCE_STATE]
-    assert FACT_SOURCE_RANK[FactSource.SECURITY_RULE] > FACT_SOURCE_RANK[FactSource.TRAY_LIVE]
+    assert FACT_SOURCE_RANK[FactSource.SECURITY_RULE] > FACT_SOURCE_RANK[FactSource.COMMERCE_LIVE]
     assert PolicyAuthority.allows_persona_to_state_commercial_facts() is False
     assert PersonaAuthority.may_assert_commercial_fact() is False
 
@@ -45,7 +45,7 @@ def test_preferred_fact_ignores_persona_price():
             entity_type="price",
         ),
         StructuredFact(
-            source=FactSource.TRAY_LIVE,
+            source=FactSource.COMMERCE_LIVE,
             key="price",
             value="199.90",
             entity_type="price",
@@ -56,15 +56,15 @@ def test_preferred_fact_ignores_persona_price():
     ]
     chosen = preferred_fact(facts, key="price", entity_type="price")
     assert chosen is not None
-    assert chosen.source == FactSource.TRAY_LIVE
+    assert chosen.source == FactSource.COMMERCE_LIVE
     assert chosen.value == "199.90"
     assert filter_commerce_safe_evidence(facts) == [facts[2]]
 
 
 def test_infer_source_tray_live_from_revalidated_flag():
     assert (
-        infer_source_for_payload_key("current_price", used_tray=True, revalidated=True)
-        == FactSource.TRAY_LIVE
+        infer_source_for_payload_key("current_price", used_commerce_provider=True, revalidated=True)
+        == FactSource.COMMERCE_LIVE
     )
     assert (
         infer_source_for_payload_key(
@@ -88,7 +88,7 @@ def test_claim_from_product_field_marks_revalidated():
         value=199.9,
         tenant_id="newstore",
     )
-    assert claim.source == FactSource.TRAY_LIVE
+    assert claim.source == FactSource.COMMERCE_LIVE
     assert claim.product_id == "42"
     assert claim.revalidation_status.value == "revalidated"
     assert claim.is_commerce_safe() is True
@@ -108,12 +108,12 @@ def test_build_fact_pack_tags_revalidated_products():
                 }
             ]
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
     pack = build_fact_pack(result)
     price_facts = [e for e in pack.evidence if e.entity_type == "price"]
     assert price_facts
-    assert price_facts[0].source == FactSource.TRAY_LIVE
+    assert price_facts[0].source == FactSource.COMMERCE_LIVE
     assert price_facts[0].revalidation_status == "revalidated"
     assert price_facts[0].entity_id == "1"
 
@@ -121,14 +121,14 @@ def test_build_fact_pack_tags_revalidated_products():
 def test_commerce_authority_prefers_revalidated():
     facts = [
         StructuredFact(
-            source=FactSource.TRAY_ADAPTER,
+            source=FactSource.COMMERCE_PROVIDER,
             key="price",
             value="199.90",
             entity_type="price",
             entity_id="1",
         ),
         StructuredFact(
-            source=FactSource.TRAY_LIVE,
+            source=FactSource.COMMERCE_LIVE,
             key="price",
             value="189.90",
             entity_type="price",
@@ -139,7 +139,7 @@ def test_commerce_authority_prefers_revalidated():
     best = CommerceDataAuthority.prefer(facts, entity_type="price")
     assert best is not None
     assert best.value == "189.90"
-    assert best.source == FactSource.TRAY_LIVE
+    assert best.source == FactSource.COMMERCE_LIVE
 
 
 def test_stock_violation_is_high_risk_for_enforce():
@@ -149,7 +149,7 @@ def test_stock_violation_is_high_risk_for_enforce():
         commercial_data={
             "products": [{"id": "1", "stock": 0, "available": False}],
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
     decision = build_agent_decision(
         IncomingMessage(channel="whatsapp", sender_key="wa:1", text="estoque"),

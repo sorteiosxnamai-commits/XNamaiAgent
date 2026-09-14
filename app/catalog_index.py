@@ -17,7 +17,13 @@ from pydantic import BaseModel, Field
 from .config import get_settings
 from .models import SalesInterpretation
 
+#: Procedencia do fato. Os dois primeiros sao os nomes neutros; os dois
+#: seguintes sao os LEGADOS, mantidos porque estao gravados em
+#: ``ai_catalog_index`` desde antes da Parte 1 (nenhum SQL de migracao e
+#: executado aqui). Escrita nova usa sempre os neutros.
 FactualSource = Literal[
+    "commerce_live",
+    "commerce_search",
     "tray_live",
     "tray_search",
     "catalog_cache",
@@ -56,7 +62,7 @@ class CanonicalCatalogItem(BaseModel):
     url: str | None = None
     image_url: str | None = None
     freshness_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    factual_source: FactualSource = "tray_search"
+    factual_source: FactualSource = "commerce_search"
     raw: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
 
@@ -68,7 +74,7 @@ class ProductCandidate(BaseModel):
     soft_matches: list[str] = Field(default_factory=list)
     mismatches: list[str] = Field(default_factory=list)
     exclusion_reason: str | None = None
-    factual_source: str = "tray_search"
+    factual_source: str = "commerce_search"
     freshness_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     score_explanation: str = ""
     product: dict[str, Any] = Field(default_factory=dict, exclude=True)
@@ -138,7 +144,7 @@ def to_canonical_item(
     product: dict[str, Any],
     *,
     tenant_id: str | None = None,
-    factual_source: FactualSource = "tray_search",
+    factual_source: FactualSource = "commerce_search",
     freshness_at: datetime | None = None,
 ) -> CanonicalCatalogItem | None:
     if not isinstance(product, dict) or product.get("id") is None:
@@ -534,7 +540,7 @@ def hybrid_rank_candidates(
     interpretation: SalesInterpretation,
     *,
     mode: Literal["exact", "recommendation"] = "recommendation",
-    factual_source: FactualSource = "tray_search",
+    factual_source: FactualSource = "commerce_search",
     limit: int | None = None,
 ) -> list[ProductCandidate]:
     """
@@ -655,7 +661,7 @@ def hybrid_rank_products(
     interpretation: SalesInterpretation,
     *,
     mode: Literal["exact", "recommendation"] = "recommendation",
-    factual_source: FactualSource = "tray_search",
+    factual_source: FactualSource = "commerce_search",
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return Tray product dicts in hybrid order, with retrieval metadata attached."""
@@ -858,7 +864,7 @@ def upsert_canonical_items(items: list[CanonicalCatalogItem]) -> int:
 def index_products_best_effort(
     products: list[dict[str, Any]],
     *,
-    factual_source: FactualSource = "tray_search",
+    factual_source: FactualSource = "commerce_search",
 ) -> int:
     items = [
         item

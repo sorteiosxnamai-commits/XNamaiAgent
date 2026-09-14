@@ -1460,9 +1460,9 @@ async def test_order_failure_propagates_adapter_validation_error_field():
             return {
                 "error": "validation_error",
                 "status_code": 422,
-                "tray_error_field": "body.customer.phone",
-                "tray_error_fields": ["body.customer.phone"],
-                "tray_error_message": "Value error, must contain 10 or 11 digits",
+                "provider_error_field": "body.customer.phone",
+                "provider_error_fields": ["body.customer.phone"],
+                "provider_error_message": "Value error, must contain 10 or 11 digits",
             }
         raise AssertionError(tool)
 
@@ -1488,8 +1488,8 @@ async def test_order_failure_preserves_adapter_error_causes():
                 "success": False,
                 "error": "tray_api_error",
                 "status_code": 400,
-                "tray_error_code": "INVALID_PAYMENT",
-                "tray_error_causes": [
+                "provider_error_code": "INVALID_PAYMENT",
+                "provider_error_causes": [
                     {"field": "payment_form", "message": "nao encontrado"},
                 ],
             }

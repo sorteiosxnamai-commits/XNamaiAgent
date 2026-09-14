@@ -18,13 +18,13 @@ ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 def _payment_failure_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     mapping = {
         "payment_failure_status": "status_code",
-        "payment_failure_code": "tray_error_code",
-        "payment_failure_name": "tray_error_name",
-        "payment_failure_type": "tray_error_type",
-        "payment_failure_field": "tray_error_field",
-        "payment_failure_fields": "tray_error_fields",
-        "payment_failure_causes": "tray_error_causes",
-        "payment_failure_message": "tray_error_message",
+        "payment_failure_code": "provider_error_code",
+        "payment_failure_name": "provider_error_name",
+        "payment_failure_type": "provider_error_type",
+        "payment_failure_field": "provider_error_field",
+        "payment_failure_fields": "provider_error_fields",
+        "payment_failure_causes": "provider_error_causes",
+        "payment_failure_message": "provider_error_message",
     }
     return {
         target: payload[source]
@@ -59,7 +59,7 @@ async def inspect_current_cart(
             intent="commerce",
             handoff_required=False,
             safety_reason="cart_technical_failure",
-            response_metadata={"used_tray": True},
+            response_metadata={"used_commerce_provider": True},
         )
     print("[sales.cart.verify]", {
         "item_count": len(cart.get("items") or []),
@@ -79,7 +79,7 @@ async def inspect_current_cart(
         response_metadata={
             "domain": "commerce",
             "purchase_stage": "cart_created",
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -147,7 +147,7 @@ def _blocked_payment_advance(
             "purchase_stage": purchase_stage,
             "pending_action": pending_action,
             "pending_action_product_ids": [],
-            "used_tray": False,
+            "used_commerce_provider": False,
         },
     )
 
@@ -252,7 +252,7 @@ async def inspect_payment_options(
             intent="commerce",
             handoff_required=False,
             safety_reason="cart_technical_failure",
-            response_metadata={"used_tray": True},
+            response_metadata={"used_commerce_provider": True},
         )
     print("[sales.cart.reconcile]", {
         "attempted": True,
@@ -276,7 +276,7 @@ async def inspect_payment_options(
             handoff_required=False,
             safety_reason="payment_options_technical_failure",
             commercial_data={"cart": _safe_cart_facts(cart, state)},
-            response_metadata={"used_tray": True},
+            response_metadata={"used_commerce_provider": True},
         )
     options = result.get("payment_options")
     options = options if isinstance(options, dict) else {}
@@ -394,7 +394,7 @@ async def inspect_payment_options(
             "payment_option_total_base": (
                 selected_option.get("total_base") if selected_option else None
             ),
-            # Tray's option fields do not prove a payable total including freight.
+            # The provider's option fields do not prove a payable total including freight.
             "payment_payable_total": None,
         },
         "hosted_payment": {
@@ -411,7 +411,7 @@ async def inspect_payment_options(
     if payment_method_preference is not None and method_available is False:
         reply = "A forma escolhida não aparece nas opções factuais deste carrinho."
     elif installment_count is not None and selected is None:
-        reply = "A Tray não informou essa quantidade de parcelas para este carrinho."
+        reply = "A fonte comercial não informou essa quantidade de parcelas para este carrinho."
     else:
         reply = "Consultei as formas de pagamento reais deste carrinho."
     cart_items = cart.get("items") if isinstance(cart.get("items"), list) else []
@@ -543,7 +543,7 @@ async def inspect_payment_options(
                 and checkout_missing_fields(state.checkout_draft)
                 else {"clear_pending_action": True}
             ),
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -570,7 +570,7 @@ async def inspect_order_payment(
                 "stage": "order_payment",
                 "payment": {"status": "not_available"},
             },
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
 
     if not any(token.isdigit() for token in targets):
@@ -644,7 +644,7 @@ async def inspect_order_payment(
                 },
                 "purchase_stage": "order_created",
                 "clear_pending_action": True,
-                "used_tray": True,
+                "used_commerce_provider": True,
                 **_payment_failure_metadata(result),
             },
         )
@@ -700,7 +700,7 @@ async def inspect_order_payment(
         "status": status,
     })
     order_label = str(result.get("order_id") or target)
-    # Prefer hosted URL from Tray; fall back to state URL recovered from transcript.
+    # Prefer hosted URL from the provider; fall back to state URL recovered from transcript.
     effective_url = payment_url or state.order_payment_url
     if status == "confirmed":
         reply_text = f"O pagamento do pedido {order_label} já está confirmado."
@@ -759,6 +759,6 @@ async def inspect_order_payment(
                 if status == "pending"
                 else {"clear_pending_action": True}
             ),
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )

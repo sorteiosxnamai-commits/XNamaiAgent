@@ -279,7 +279,7 @@ async def test_budget_exceeded_on_clarification_uses_deterministic_fallback(monk
             message=IncomingMessage(text="relógio", conversation_id="c1"),
             interpretation=interpretation,
             recent_turns=[],
-            used_tray=False,
+            used_commerce_provider=False,
         )
     finally:
         reset_current_turn(token)

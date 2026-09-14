@@ -238,6 +238,13 @@ PERSONA_PROTECTED_FILES = frozenset(
         "app/prompt_compiler.py",
         "app/response_critique.py",
         "scripts/seed_newstore_persona.py",
+        # Conteudo institucional que ALIMENTA o system prompt: esvazia-lo mudou
+        # 59% do prompt na primeira tentativa da Parte 1. Restaurado ao baseline
+        # e protegido aqui. O rebranding e tarefa separada, nao neutralizacao.
+        "app/site_knowledge.py",
+        # Alcancavel apenas por site_knowledge.build_simulation_reply(), que nao
+        # tem chamador de runtime: residuo dormente da persona, nao feature.
+        "app/simulation.py",
     }
 )
 

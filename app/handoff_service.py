@@ -32,15 +32,11 @@ def build_human_handoff_result(
     if not text:
         if reason == "trade_in_or_appraisal":
             text = TRADE_IN_HANDOFF_MESSAGE
-        elif NS_SALES_WHATSAPP:
-            text = (
-                f"Vou encaminhar seu atendimento para a equipe humana no WhatsApp "
-                f"{NS_SALES_WHATSAPP}."
-            )
         else:
-            # Sem canal humano configurado não há para onde encaminhar: declarar
-            # a ausência em vez de prometer um encaminhamento inexistente.
-            text = HUMAN_SUPPORT_MESSAGE
+            text = (
+                "Vou encaminhar seu atendimento para a equipe da New Store. "
+                f"{HUMAN_SUPPORT_MESSAGE}"
+            )
     if reason.startswith("blocked_topic:"):
         text = default_safe_handoff()
     return AgentResult(
@@ -54,9 +50,7 @@ def build_human_handoff_result(
             "handoff": {
                 "required": True,
                 "reason": reason,
-                # Canal nao configurado: publicar None (ausente) em vez de "",
-                # que o consumidor leria como "existe um contato" vazio.
-                "contact_whatsapp": NS_SALES_WHATSAPP or None,
+                "contact_whatsapp": NS_SALES_WHATSAPP,
                 "provider_action": "mark_for_human",
             },
         },
@@ -82,7 +76,7 @@ def enrich_handoff_metadata(
             "channel": incoming.channel,
             "conversation_id_present": bool(incoming.conversation_id),
             "visitor_id_present": bool(incoming.visitor_id),
-            "contact_whatsapp": NS_SALES_WHATSAPP or None,
+            "contact_whatsapp": NS_SALES_WHATSAPP,
             "provider_action": "mark_for_human",
         }
     )

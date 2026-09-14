@@ -3,6 +3,7 @@ import pytest
 from app.commerce.contracts import COMMERCE_CAPABILITIES
 from app.commerce.errors import COMMERCE_UNAVAILABLE_CODE
 from app.commerce.tools import (
+    READ_ONLY_TOOL_NAMES,
     MUTATION_TOOL_NAMES,
     RETRYABLE_TOOL_NAMES,
     TOOL_REGISTRY,
@@ -30,9 +31,32 @@ def test_neutral_tool_names_are_preserved():
     assert NEUTRAL_NAMES.issubset(set(TOOL_REGISTRY["commerce"]))
 
 
-def test_no_tray_or_newstore_specific_tools():
-    forbidden = {"get_cart", "get_cart_complete", "create_cart", "list_coupons", "get_coupon"}
-    assert forbidden.isdisjoint(set(TOOL_REGISTRY["commerce"]))
+def test_no_vendor_specific_tools():
+    """Nenhum nome de tool pode carregar marca de fornecedor.
+
+    A versao anterior deste teste proibia ``get_cart``/``list_coupons``, tratando
+    carrinho e cupom como se fossem invencao da Tray. Nao sao: sao substantivos
+    genericos de e-commerce, presentes no contrato desde o baseline. O que de
+    fato nao pode aparecer e nome de FORNECEDOR — e tambem nao pode aparecer
+    capacidade modelada para um fornecedor que ainda nao existe no runtime.
+    """
+    names = set(TOOL_REGISTRY["commerce"])
+    for name in names:
+        lowered = name.casefold()
+        for vendor in ("tray", "newstore", "sorteio", "raffle", "mercadopago", "mercos"):
+            assert vendor not in lowered, f"tool com marca de fornecedor: {name}"
+
+    # Antecipacao do fornecedor seguinte: fora da superficie da Parte 1.
+    anticipated = {
+        "get_payment_conditions",
+        "get_price_tables",
+        "create_customer",
+        "update_customer",
+        "update_order",
+    }
+    assert anticipated.isdisjoint(names), (
+        f"capacidades antecipadas sem provider concreto: {sorted(anticipated & names)}"
+    )
 
 
 def test_schemas_are_openai_function_shaped():
@@ -52,9 +76,11 @@ def test_read_only_and_mutation_are_disjoint_and_complete():
     e nenhuma pode estar nos dois.
     """
     assert RETRYABLE_TOOL_NAMES.isdisjoint(MUTATION_TOOL_NAMES)
+    assert READ_ONLY_TOOL_NAMES.isdisjoint(MUTATION_TOOL_NAMES)
+    assert READ_ONLY_TOOL_NAMES.isdisjoint(RETRYABLE_TOOL_NAMES)
 
     declared = set(COMMERCE_CAPABILITIES)
-    classified = RETRYABLE_TOOL_NAMES | MUTATION_TOOL_NAMES
+    classified = RETRYABLE_TOOL_NAMES | MUTATION_TOOL_NAMES | READ_ONLY_TOOL_NAMES
 
     assert not (declared - classified), (
         f"capacidades do contrato sem classificação: {sorted(declared - classified)}"
@@ -69,7 +95,7 @@ def test_mutations_are_never_auto_retryable():
     assert MUTATION_TOOL_NAMES
     assert MUTATION_TOOL_NAMES.isdisjoint(RETRYABLE_TOOL_NAMES)
     for name in MUTATION_TOOL_NAMES:
-        assert name.startswith(("create_", "update_", "delete_"))
+        assert name.startswith(("create_", "update_", "delete_", "set_"))
 
 
 def test_registry_is_exactly_the_declared_contract():

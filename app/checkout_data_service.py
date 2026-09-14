@@ -95,7 +95,7 @@ def _normalize_cpf(value: Any) -> str | None:
 
 
 def _normalize_phone(value: Any) -> str | None:
-    """Canoniza para o contrato do TrayAdapter: 10 ou 11 dígitos, sem DDI."""
+    """Canoniza para o contrato do provider comercial: 10 ou 11 dígitos, sem DDI."""
     digits = re.sub(r"\D", "", str(value or ""))
     if len(digits) in (12, 13) and digits.startswith("55"):
         digits = digits[2:]
@@ -423,6 +423,6 @@ def update_checkout_data(
                 if missing and not shipping_zipcode_changed
                 else {"clear_pending_action": True}
             ),
-            "used_tray": False,
+            "used_commerce_provider": False,
         },
     )

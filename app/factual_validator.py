@@ -209,7 +209,7 @@ def _collect_facts(
     *,
     key: str = "",
     pack: FactPack,
-    used_tray: bool = False,
+    used_commerce_provider: bool = False,
     from_commerce_state: bool = False,
     entity_id: str | None = None,
     factual_source: str | None = None,
@@ -236,7 +236,7 @@ def _collect_facts(
                 child_value,
                 key=str(child_key).lower(),
                 pack=pack,
-                used_tray=used_tray,
+                used_commerce_provider=used_commerce_provider,
                 from_commerce_state=from_commerce_state,
                 entity_id=local_entity_id,
                 factual_source=local_factual,
@@ -255,7 +255,7 @@ def _collect_facts(
                 child,
                 key=key,
                 pack=pack,
-                used_tray=used_tray,
+                used_commerce_provider=used_commerce_provider,
                 from_commerce_state=from_commerce_state,
                 entity_id=entity_id,
                 factual_source=factual_source,
@@ -269,20 +269,20 @@ def _collect_facts(
     text = str(value).strip()
     source = infer_source_for_payload_key(
         key,
-        used_tray=used_tray,
+        used_commerce_provider=used_commerce_provider,
         from_commerce_state=from_commerce_state,
         factual_source=factual_source,
         revalidated=revalidated,
     )
     revalidation_status = (
         "revalidated"
-        if revalidated or source == FactSource.TRAY_LIVE
-        else ("pending" if source == FactSource.TRAY_ADAPTER else "not_applicable")
+        if revalidated or source == FactSource.COMMERCE_LIVE
+        else ("pending" if source == FactSource.COMMERCE_PROVIDER else "not_applicable")
     )
     confidence = (
         0.95
-        if source == FactSource.TRAY_LIVE
-        else (0.75 if source == FactSource.TRAY_ADAPTER else 0.5)
+        if source == FactSource.COMMERCE_LIVE
+        else (0.75 if source == FactSource.COMMERCE_PROVIDER else 0.5)
     )
     entity_type = "other"
     handled = False
@@ -398,14 +398,14 @@ def build_fact_pack(
     commerce_state: dict[str, Any] | None = None,
 ) -> FactPack:
     metadata = result.response_metadata or {}
-    used_tray = bool(metadata.get("used_tray"))
+    used_commerce_provider = bool(metadata.get("used_commerce_provider"))
     source_payload = {
         "commercial_data": result.commercial_data or {},
         "verified_facts": metadata.get("verified_facts", {}),
         "outbound_image_url": metadata.get("outbound_image_url"),
     }
     pack = FactPack(source_payload=source_payload)
-    _collect_facts(source_payload, pack=pack, used_tray=used_tray)
+    _collect_facts(source_payload, pack=pack, used_commerce_provider=used_commerce_provider)
 
     payment = (result.commercial_data or {}).get("payment")
     if isinstance(payment, dict):
@@ -415,7 +415,7 @@ def build_fact_pack(
             pack.payment_confirmed = confirmed
             _append_evidence(
                 pack,
-                source=FactSource.TRAY_ADAPTER if used_tray else FactSource.COMMERCE_STATE,
+                source=FactSource.COMMERCE_PROVIDER if used_commerce_provider else FactSource.COMMERCE_STATE,
                 entity_type="payment",
                 key="payment.status",
                 value=status,
@@ -443,7 +443,7 @@ def build_fact_pack(
         _collect_facts(
             state_slice,
             pack=pack,
-            used_tray=False,
+            used_commerce_provider=False,
             from_commerce_state=True,
         )
         state_payment = _payment_confirmed(commerce_state.get("order_payment_status"))
@@ -607,7 +607,7 @@ def validate_factual_response(
                         reason=(
                             "money_supported_revalidated"
                             if best.revalidation_status == "revalidated"
-                            or best.source == FactSource.TRAY_LIVE
+                            or best.source == FactSource.COMMERCE_LIVE
                             else "money_supported"
                         ),
                     )

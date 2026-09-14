@@ -16,6 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from .fact_sources import (
+    LIVE_PROVIDER_SOURCE_VALUES,
     FACT_SOURCE_RANK,
     FactSource,
     StructuredFact,
@@ -121,8 +122,8 @@ class CommerceDataAuthority:
     layer = AuthorityLayer.COMMERCE
 
     SOURCE_PRIORITY: tuple[FactSource, ...] = (
-        FactSource.TRAY_LIVE,
-        FactSource.TRAY_ADAPTER,
+        FactSource.COMMERCE_LIVE,
+        FactSource.COMMERCE_PROVIDER,
         FactSource.LOCAL_DATABASE,
         FactSource.CATALOG_SNAPSHOT,
         FactSource.COMMERCE_STATE,
@@ -210,8 +211,8 @@ def claim_from_product_field(
 ) -> CommercialClaim:
     factual = str(product.get("_factual_source") or "").strip().lower()
     revalidated = bool(product.get("_revalidated"))
-    if factual == "tray_live" or revalidated:
-        source = FactSource.TRAY_LIVE
+    if factual in LIVE_PROVIDER_SOURCE_VALUES or revalidated:
+        source = FactSource.COMMERCE_LIVE
         status = RevalidationStatus.REVALIDATED
         confidence = 0.95
     elif factual in {"catalog_cache", "catalog_index"}:
@@ -223,7 +224,7 @@ def claim_from_product_field(
         status = RevalidationStatus.NOT_APPLICABLE
         confidence = 0.4
     else:
-        source = FactSource.TRAY_ADAPTER
+        source = FactSource.COMMERCE_PROVIDER
         status = (
             RevalidationStatus.REVALIDATED
             if revalidated

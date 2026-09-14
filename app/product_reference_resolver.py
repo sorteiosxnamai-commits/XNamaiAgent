@@ -149,7 +149,7 @@ async def resolve_product_reference(
                     tenant_id=tid,
                     product_id=str(products[0].get("id")) if len(products) == 1 else None,
                     confidence=0.75 if len(products) == 1 else 0.6,
-                    source="tray_search",
+                    source="commerce_search",
                     candidates=list(products)[:5],
                     clarification_hint=(
                         None

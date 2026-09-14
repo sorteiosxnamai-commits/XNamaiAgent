@@ -6,43 +6,91 @@ from typing import Any
 from .errors import COMMERCE_UNAVAILABLE_CODE, CommerceUnavailableError
 from .provider import get_commerce_provider
 
+#: Definicoes de tool expostas ao modelo. Conteudo identico ao baseline
+#: 201bd16: a Parte 1 troca o EXECUTOR, nunca a superficie que o modelo ve.
+#: Nenhuma capability nova pode ser adicionada aqui antes de existir um provider
+#: concreto que a implemente (ver docs da Parte 2).
 TOOL_SCHEMAS: list[dict[str, Any]] = [
-    {"type": "function", "function": {"name": "search_products", "description": "Pesquisar produtos reais no catálogo oficial.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "name": {"type": "string"}, "reference": {"type": "string"}, "ean": {"type": "string"}, "brand": {"type": "string"}, "tokens": {"type": "array", "items": {"type": "string"}}, "available": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "page": {"type": "integer", "minimum": 1}}, "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "search_products", "description": "Pesquisar produtos reais na loja.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "name": {"type": "string"}, "reference": {"type": "string"}, "ean": {"type": "string"}, "brand": {"type": "string"}, "tokens": {"type": "array", "items": {"type": "string"}, "description": "AND search tokens (ILIKE %token% each)"}, "category_id": {"type": "string"}, "available": {"type": "boolean"}, "available_in_store": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "page": {"type": "integer", "minimum": 1}}, "additionalProperties": False}}},
     {"type": "function", "function": {"name": "get_product", "description": "Consultar detalhes atuais de um produto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"], "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "check_inventory", "description": "Confirmar estoque e disponibilidade de um produto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"], "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "search_customer", "description": "Pesquisar um cliente com filtro específico.", "parameters": {"type": "object", "properties": {"email": {"type": "string"}, "cpf": {"type": "string"}, "cnpj": {"type": "string"}, "name": {"type": "string"}, "limit": {"type": "integer", "maximum": 5}}, "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "get_product_link", "description": "Obter o link oficial de um produto real já identificado.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "check_inventory", "description": "Confirmar estoque e regras de disponibilidade de um produto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "get_cart", "description": "Consultar um carrinho já identificado por sua sessão.", "parameters": {"type": "object", "properties": {"session_id": {"type": "string"}}, "required": ["session_id"], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "get_cart_complete", "description": "Consultar itens e totais atuais de um carrinho já identificado.", "parameters": {"type": "object", "properties": {"session_id": {"type": "string"}}, "required": ["session_id"], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "get_payment_options", "description": "Consultar opções reais de pagamento de um carrinho ou pedido existente. Informe exatamente um escopo.", "parameters": {"type": "object", "properties": {"cart_session_id": {"type": "string"}, "order_id": {"type": "string"}}, "oneOf": [{"required": ["cart_session_id"]}, {"required": ["order_id"]}], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "search_customer", "description": "Pesquisar um cliente com filtro específico, quando necessário.", "parameters": {"type": "object", "properties": {"email": {"type": "string"}, "cpf": {"type": "string"}, "cnpj": {"type": "string"}, "name": {"type": "string"}, "limit": {"type": "integer", "maximum": 5}}, "additionalProperties": False}}},
     {"type": "function", "function": {"name": "get_customer", "description": "Consultar um cliente identificado.", "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}}, "required": ["customer_id"], "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "list_orders", "description": "Listar pedidos do cliente.", "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}, "limit": {"type": "integer", "maximum": 20}}, "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "get_order", "description": "Consultar um pedido.", "parameters": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"], "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "get_payment_conditions", "description": "Consultar condições de pagamento disponíveis.", "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}, "order_id": {"type": "string"}}, "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "get_price_tables", "description": "Consultar tabelas de preço aplicáveis.", "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}}, "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "create_customer", "description": "Cadastrar um cliente.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "cpf": {"type": "string"}, "cnpj": {"type": "string"}}, "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "update_customer", "description": "Atualizar dados de um cliente.", "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}, "name": {"type": "string"}, "email": {"type": "string"}}, "required": ["customer_id"], "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "create_order", "description": "Criar um pedido.", "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}, "additionalProperties": False}}},
-    {"type": "function", "function": {"name": "update_order", "description": "Atualizar um pedido.", "parameters": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "list_coupons", "description": "Consultar cupons quando a conversa precisar disso.", "parameters": {"type": "object", "properties": {"code": {"type": "string"}, "limit": {"type": "integer", "maximum": 5}}, "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "get_coupon", "description": "Consultar detalhes de um cupom.", "parameters": {"type": "object", "properties": {"coupon_id": {"type": "string"}}, "required": ["coupon_id"], "additionalProperties": False}}},
 ]
+#: Capacidades comerciais reconhecidas pelo executor. Identico ao baseline,
+#: menos a chave "raffle": o dominio de sorteio saiu do runtime na Parte 1.
+TOOL_REGISTRY: dict[str, tuple[str, ...]] = {
+    "commerce": ("search_products", "get_product", "get_product_link", "check_inventory", "list_categories", "get_category", "get_category_tree", "list_product_variants", "get_product_variant", "search_customer", "get_customer", "list_coupons", "get_coupon", "create_cart", "get_cart", "get_cart_complete", "set_cart_item_quantity", "delete_cart", "get_payment_options", "quote_shipping", "list_shipping_methods", "create_order", "list_orders", "get_order", "get_order_complete", "get_order_payment"),
+}
 
+#: Mutacoes: nunca auto-retentaveis pelo loop de critique.
+MUTATION_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "create_cart",
+        "set_cart_item_quantity",
+        "delete_cart",
+        "create_order",
+    }
+)
+
+#: Leitura sem auto-retry: consultas de catalogo/variacao que o loop de
+#: critique nao reexecuta sozinho. Read-only, mas deliberadamente fora de
+#: RETRYABLE — classificacao do baseline 201bd16.
+READ_ONLY_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "list_categories",
+        "get_category",
+        "get_category_tree",
+        "list_product_variants",
+        "get_product_variant",
+    }
+)
+
+#: Leitura segura -> o loop de critique pode reexecutar. Espelha
+#: ``capability_catalog.RETRYABLE_API_NAMES`` (baseline).
 RETRYABLE_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "search_products",
         "get_product",
+        "get_product_link",
         "check_inventory",
+        "get_cart",
+        "get_cart_complete",
+        "get_payment_options",
         "search_customer",
         "get_customer",
+        "list_coupons",
+        "get_coupon",
         "list_orders",
         "get_order",
-        "get_payment_conditions",
-        "get_price_tables",
+        "get_order_complete",
+        "get_order_payment",
+        "quote_shipping",
+        "list_shipping_methods",
     }
 )
 
-MUTATION_TOOL_NAMES: frozenset[str] = frozenset(
-    {"create_customer", "update_customer", "create_order", "update_order"}
-)
 
-TOOL_REGISTRY: dict[str, tuple[str, ...]] = {
-    "commerce": tuple(sorted(RETRYABLE_TOOL_NAMES | MUTATION_TOOL_NAMES)),
-}
+def commerce_tools_available() -> bool:
+    """Ha um provider comercial capaz de executar as tools?
+
+    Gating generico por provider — nunca por env de fornecedor. Com o
+    ``NullCommerceProvider`` isto e False e nenhuma tool comercial chega ao
+    modelo, exatamente como no baseline sem Tray configurado.
+    """
+    return bool(getattr(get_commerce_provider(), "available", False))
+
+
+def tool_schemas_for_model() -> list[dict[str, Any]] | None:
+    """Schemas a enviar ao modelo, ou ``None`` quando nao ha provider."""
+    return TOOL_SCHEMAS if commerce_tools_available() else None
+
 
 async def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
     """Executa uma capacidade comercial pelo provider configurado.

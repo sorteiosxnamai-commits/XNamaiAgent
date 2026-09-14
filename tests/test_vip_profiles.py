@@ -1,3 +1,8 @@
+# NOTA (correcao da Parte 1): os testes que afirmavam "nao configurado" para
+# URLs, contatos, tabela de credito e registro VIP foram removidos. Aquele
+# comportamento era uma alteracao NAO AUTORIZADA de persona, revertida para o
+# baseline 201bd16. O rebranding e tarefa separada.
+
 """Regras genéricas de perfil VIP — sem registro de marca configurado.
 
 Os perfis legados (pessoas da marca anterior) foram removidos do runtime na
@@ -21,13 +26,6 @@ _PROFILE = VipProfile(
     title="Diretor",
     nicknames=("Chefe", "Doutor"),
 )
-
-
-def test_no_vip_profile_is_configured_by_default():
-    """Fronteira nova: sem registro oficial, nenhum telefone é VIP."""
-    assert VIP_PROFILES == ()
-    assert get_vip_profile("21969544700") is None
-    assert get_vip_profile("+55 21 96954-4700") is None
 
 
 def test_get_vip_profile_handles_missing_phone_without_registry():

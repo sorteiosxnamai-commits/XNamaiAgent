@@ -6,8 +6,16 @@ import inspect
 import pathlib
 
 
+#: Raiz resolvida a partir do proprio arquivo de teste — nunca do cwd. Com o
+#: caminho relativo ao cwd, rodar pytest de outro diretorio fazia a guarda
+#: quebrar (ou, em variantes com .exists(), passar a VACUO).
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
 def _source(relative: str) -> str:
-    return pathlib.Path(relative).read_text(encoding="utf-8")
+    path = REPO_ROOT / relative
+    assert path.is_file(), f"arquivo de runtime nao encontrado: {path}"
+    return path.read_text(encoding="utf-8")
 
 
 def test_openai_agent_does_not_read_tray_settings():

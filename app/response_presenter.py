@@ -216,7 +216,7 @@ def present_reply_text_full(
     if profile.channel in {"whatsapp", "instagram", "facebook"}:
         value = split_whatsapp_blocks(value, max_blocks=max_blocks)
 
-    if intent in {"general", "greeting"} and not metadata.get("used_tray"):
+    if intent in {"general", "greeting"} and not metadata.get("used_commerce_provider"):
         value = limit_questions(value, max_questions=1)
 
     return preserve_urls(original, value).strip()

@@ -133,7 +133,7 @@ async def _revalidate_product(
         product["variant_id"] = str(variant_id)
         product["_variant_revalidated"] = True
     product["_revalidated"] = True
-    product["_factual_source"] = "tray_live"
+    product["_factual_source"] = "commerce_live"
     return product, False, None
 
 

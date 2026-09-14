@@ -14,6 +14,9 @@ class NullCommerceProvider:
     """
 
     name = "null"
+    #: Nao ha fonte comercial: o modelo NAO pode receber tools comerciais.
+    #: Gating generico por provider, nunca por env de fornecedor.
+    available = False
 
     async def execute(self, capability: str, arguments: dict[str, Any]) -> dict[str, Any]:
         raise CommerceUnavailableError(capability)

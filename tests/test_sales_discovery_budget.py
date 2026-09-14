@@ -120,7 +120,7 @@ async def test_interpreter_can_mark_context_with_budget_as_enough_to_search(monk
     result, calls = await _run_sales(monkeypatch, interpretation, [])
 
     assert [call for call in calls if call[0] == "search_products"] == [("search_products", {"name": "acessório", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
-    assert result.response_metadata["used_tray"] is True
+    assert result.response_metadata["used_commerce_provider"] is True
 
 
 @pytest.mark.asyncio

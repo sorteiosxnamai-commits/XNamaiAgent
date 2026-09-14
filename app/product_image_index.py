@@ -397,7 +397,7 @@ async def run_product_image_index_batch(
         if "error" in result:
             return {
                 "ok": False,
-                "reason": "tray_adapter_unavailable",
+                "reason": "commerce_provider_unavailable",
                 "indexed": indexed,
                 "skipped": skipped,
                 "errors": errors,

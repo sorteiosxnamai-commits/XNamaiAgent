@@ -37,3 +37,17 @@ def test_extract_audio_attachment():
     audio = extract_audio_attachment(payload)
     assert audio is not None
     assert audio["link"] == "https://x/voice.opus"
+
+
+# Migrados de tests/test_available_numbers.py, que testava a grade de
+# numeros do sorteio: estes dois sao de audio e nao pertencem aquela feature.
+from app.audio_service import is_placeholder_audio_text, should_transcribe_incoming
+
+
+def test_should_transcribe_when_text_is_filename():
+    assert should_transcribe_incoming("audio.ogg", "https://x/audio.ogg", "audio.ogg") is True
+
+
+def test_is_placeholder_audio_text():
+    assert is_placeholder_audio_text("audio.ogg", "audio.ogg") is True
+    assert is_placeholder_audio_text("qual meu saldo", None) is False

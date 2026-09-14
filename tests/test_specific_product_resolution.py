@@ -936,7 +936,7 @@ async def test_persistent_catalog_failure_is_technical_not_product_not_found(mon
         _interpretation(brand="Doxa", model="SUB 300")
     )
 
-    assert result.safety_reason == "tray_adapter_unavailable"
+    assert result.safety_reason == "commerce_provider_unavailable"
     assert result.safety_reason != "product_not_found"
 
 

@@ -37,7 +37,7 @@ def test_verified_product_url_and_price_are_accepted():
         response_metadata={
             "domain": "commerce",
             "response_source": "openai",
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -82,7 +82,7 @@ def test_price_not_present_in_tool_facts_is_rejected():
         response_metadata={
             "domain": "commerce",
             "response_source": "openai",
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -105,7 +105,7 @@ def test_order_identifier_must_match_verified_order():
         response_metadata={
             "domain": "commerce",
             "response_source": "tool",
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -180,7 +180,7 @@ def test_promo_without_promotional_price_is_unsupported():
         commercial_data={
             "products": [{"id": "1", "current_price": "199.90"}],
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
     report = validate_factual_response(
         result,
@@ -199,7 +199,7 @@ def test_stock_conflict_and_payment_missing_evidence():
         commercial_data={
             "products": [{"id": "1", "stock": 0, "current_price": "10.00"}],
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
     stock_report = validate_factual_response(
         stock_result,
@@ -217,7 +217,7 @@ def test_stock_conflict_and_payment_missing_evidence():
             "order_id": "ABC123",
             "payment": {"status": "awaiting_payment"},
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
     paid_report = validate_factual_response(
         paid_result,
@@ -237,7 +237,7 @@ def test_fact_evidence_is_attached_for_observability():
         commercial_data={
             "products": [{"id": "1", "current_price": "10.00"}],
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
     validated = apply_factual_validation(
         result,
@@ -246,6 +246,6 @@ def test_fact_evidence_is_attached_for_observability():
     )
     assert validated.response_metadata["fact_evidence"]
     assert validated.response_metadata["factual_validation"]["evidence_count"] >= 1
-    assert "tray_adapter" in validated.response_metadata["factual_validation"][
+    assert "commerce_provider" in validated.response_metadata["factual_validation"][
         "evidence_sources"
     ]

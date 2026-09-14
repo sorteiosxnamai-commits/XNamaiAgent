@@ -183,7 +183,7 @@ async def test_structured_multi_positions_resolve_to_real_ids(monkeypatch):
             commercial_data={"cart": {"status": "cart_created"}},
             response_metadata={
                 "purchase_stage": "cart_created",
-                "used_tray": True,
+                "used_commerce_provider": True,
             },
         )
 
@@ -319,7 +319,7 @@ async def test_inbound_photo_with_image_request_identifies_product(monkeypatch):
                     {"id": "cw-1", "name": "Christopher Ward C63 Sealander"}
                 ]
             },
-            response_metadata={"image_search": True, "used_tray": True},
+            response_metadata={"image_search": True, "used_commerce_provider": True},
         )
 
     monkeypatch.setattr(
@@ -468,7 +468,7 @@ async def test_inbound_image_ignores_stale_kingfisher_context(monkeypatch):
                 "products": [{"id": "rosa-1", "name": "Sealander Rosa"}],
             },
             response_metadata={
-                "used_tray": True,
+                "used_commerce_provider": True,
                 "response_source": "image_vision",
             },
         )

@@ -178,7 +178,7 @@ async def test_pipeline_direct_product_resolution_reaches_same_cart_path(
                     "model": "Modelo",
                 }]
             },
-            response_metadata={"used_tray": True},
+            response_metadata={"used_commerce_provider": True},
         )
 
     execute, calls = _cart_executor()

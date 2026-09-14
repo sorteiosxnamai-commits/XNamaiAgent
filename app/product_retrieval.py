@@ -347,7 +347,7 @@ def identity_core_tokens(
     *,
     color_tokens: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
-    """Model tokens for Tray probes — never mix hue words into the core query."""
+    """Model tokens for provider probes — never mix hue words into the core query."""
     required = required_model_tokens(model)
     drop = set(color_tokens) | _OPTIONAL_MODEL_TOKENS | _DESCRIPTOR_MODEL_TOKENS
     core = tuple(token for token in required if token not in drop)
@@ -506,7 +506,7 @@ def effective_product_reference(value: str | None) -> str | None:
 
 
 def normalize_pt_catalog_query(text: str | None) -> str:
-    """Map common English vision terms to Tray catalog Portuguese."""
+    """Map common English vision terms to catalog Portuguese."""
     value = str(text or "").strip()
     if not value:
         return ""
@@ -527,7 +527,7 @@ def normalize_pt_catalog_query(text: str | None) -> str:
 
 
 def expand_color_aliases(token: str | None) -> frozenset[str]:
-    """Expand a color word to PT/EN synonyms used in Tray titles."""
+    """Expand a color word to PT/EN synonyms used in catalog titles."""
     folded = _fold(token)
     if not folded:
         return frozenset()
@@ -565,7 +565,7 @@ def preference_color_tokens(interpretation: SalesInterpretation) -> tuple[str, .
 
 
 def preference_color_search_labels(interpretation: SalesInterpretation) -> tuple[str, ...]:
-    """All alias spellings to probe Tray name filters (azul → azul, blue, …)."""
+    """All alias spellings to probe provider name filters (azul → azul, blue, …)."""
     tokens = preference_color_tokens(interpretation)
     if not tokens:
         return ()
@@ -576,7 +576,7 @@ def preference_color_search_labels(interpretation: SalesInterpretation) -> tuple
     return tuple(dict.fromkeys(labels))
 
 def catalog_match_tokens(interpretation: SalesInterpretation) -> tuple[str, ...]:
-    """Significant AND-search tokens for Tray token/ILIKE lookup."""
+    """Significant AND-search tokens for provider token/ILIKE lookup."""
     subject = interpretation.subject
     tokens: list[str] = []
     for part in (subject.brand or "").split():
@@ -1002,7 +1002,7 @@ class ProductRetrievalCompiler:
                         name=f"{core_label} {auto_bit} {color_hue}".strip(),
                         brand=subject.brand,
                     )
-            # Short family+color beats long titles on Tray's name filter.
+            # Short family+color beats long titles on the provider's name filter.
             if color_hue and model_codes:
                 _add_probe(
                     "exact_color_family_code",
@@ -1055,7 +1055,7 @@ class ProductRetrievalCompiler:
             if subject.product_type:
                 gender_tokens = preference_gender_tokens(interpretation)
                 gender_label = gender_tokens[0] if gender_tokens else None
-                # Prefer gendered catalog query ("relógio feminino") so Tray
+                # Prefer gendered catalog query ("relógio feminino") so the provider
                 # surfaces the right segment before soft ranking.
                 primary_name = (
                     f"{subject.product_type} {gender_label}".strip()
@@ -1085,7 +1085,7 @@ class ProductRetrievalCompiler:
                     available_in_store=available_in_store,
                 ))
 
-            # Color probes (PT/EN aliases) so Tray returns blue when user said azul.
+            # Color probes (PT/EN aliases) so the provider returns blue when user said azul.
             color_labels = preference_color_search_labels(interpretation)
             if subject.brand and color_labels:
                 for label in color_labels[:4]:
@@ -1503,7 +1503,7 @@ def infer_family_codes_from_candidates(
             continue
         name = str(product.get("name") or "")
         # Prefer short family prefixes (C63). Ignore reference fragments like
-        # 39AGM3 that pollute Tray name probes and burn the enrich budget.
+        # 39AGM3 that pollute provider name probes and burn the enrich budget.
         for match in re.findall(r"\b[Cc]\d{2}\b", name):
             codes.append(match.upper())
         for code in extract_model_codes(name):
@@ -1604,7 +1604,7 @@ def exact_specific_product_matches(
             }:
                 matches.append(product)
                 continue
-            # Tray often stores short model ("Sealander") while the customer
+            # The provider often stores short model ("Sealander") while the customer
             # asks with style/color words ("C63 Sealander Automático Rosa").
             # Color/material tokens are optional when identity tokens suffice.
             required = required_model_tokens(subject.model)
@@ -1996,13 +1996,13 @@ async def revalidate_products(
             failed = True
             partial = True
             continue
-        # Revalidation is factual authority: overlay live Tray fields but never
+        # Revalidation is factual authority: overlay live provider fields but never
         # invent price/stock when the live payload omits them.
         current = {**product, **result}
         # Drop retrieval-only metadata from customer-facing payload later.
         current["commercial_availability"] = commercial_availability_facts(current)
         current["_revalidated"] = True
-        current["_factual_source"] = "tray_live"
+        current["_factual_source"] = "commerce_live"
         print("[sales.availability.fact]", {
             "has_stock": current["commercial_availability"]["has_stock"],
             "has_lead_time": current["commercial_availability"]["has_lead_time"],
@@ -2025,7 +2025,7 @@ async def revalidate_products(
     if refreshed:
         refreshed = await enrich_product_variants(refreshed, interpretation, execute_tool)
     # Never present non-revalidated siblings when revalidation partially failed —
-    # only confirmed Tray rows may assert live price/stock.
+    # only confirmed provider rows may assert live price/stock.
     return refreshed, failed
 
 

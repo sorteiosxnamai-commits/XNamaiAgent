@@ -458,7 +458,7 @@ async def test_existing_cart_link_is_reused_without_new_post(monkeypatch):
 
     assert result is not None
     assert "https://loja.example/checkout/S1" in result.reply_text
-    assert result.response_metadata["used_tray"] is False
+    assert result.response_metadata["used_commerce_provider"] is False
 
 
 @pytest.mark.asyncio
@@ -502,7 +502,7 @@ async def test_repeated_cart_creation_reconciles_without_post(monkeypatch):
     assert [name for name, _ in calls] == ["get_cart_complete"]
     assert result.commercial_data["cart"]["already_satisfied"] is True
     assert "cart_url" not in result.commercial_data["cart"]
-    assert result.response_metadata["used_tray"] is True
+    assert result.response_metadata["used_commerce_provider"] is True
 
 @pytest.mark.asyncio
 async def test_persistent_cart_state_is_loaded_by_evolution():
@@ -588,11 +588,11 @@ async def test_product_803_cart_http_400_keeps_diagnostics_and_selected_product(
                 "error": "commerce_upstream_error",
                 "status_code": 400,
                 "error_type": "TrayAdapterError",
-                "tray_error_code": "invalid_cart",
-                "tray_error_type": "validation_error",
-                "tray_error_field": "Cart.variant_id",
-                "tray_error_fields": ["Cart.variant_id"],
-                "tray_error_message": "Campo invÃ¡lido",
+                "provider_error_code": "invalid_cart",
+                "provider_error_type": "validation_error",
+                "provider_error_field": "Cart.variant_id",
+                "provider_error_fields": ["Cart.variant_id"],
+                "provider_error_message": "Campo invÃ¡lido",
             }
         raise AssertionError(tool)
 
@@ -623,7 +623,7 @@ async def test_product_803_cart_http_400_keeps_diagnostics_and_selected_product(
     assert persisted.active_product.product_id == "803"
     assert persisted.active_product.product_url == "https://loja.example/produto/803"
     output = capsys.readouterr().out
-    assert "tray_error_code" in output
+    assert "provider_error_code" in output
     assert "Campo invÃ¡lido" in output
     assert "Bearer" not in output
 
@@ -802,7 +802,7 @@ async def test_cart_success_uses_openai_sales_responder(monkeypatch):
                 "cart_url": "https://loja.example/checkout/S1",
             }
         },
-        response_metadata={"purchase_stage": "cart_created", "used_tray": True},
+        response_metadata={"purchase_stage": "cart_created", "used_commerce_provider": True},
     )
     interpretation = _interpretation()
 
@@ -867,7 +867,7 @@ async def test_cart_failure_gives_openai_only_safe_semantic_facts(monkeypatch):
                 "retryable": False,
             },
         },
-        response_metadata={"used_tray": True},
+        response_metadata={"used_commerce_provider": True},
     )
 
     result = await sales_agent._sales_response_with_openai(
@@ -880,7 +880,7 @@ async def test_cart_failure_gives_openai_only_safe_semantic_facts(monkeypatch):
     assert result is not None
     facts_message = captured["messages"][1]["content"]
     assert '"category": "integration_failure"' in facts_message
-    assert "tray_error_message" not in facts_message
+    assert "provider_error_message" not in facts_message
 
 
 @pytest.mark.asyncio

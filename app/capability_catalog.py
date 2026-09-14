@@ -2,26 +2,51 @@ from __future__ import annotations
 
 from typing import Any
 
-from .commerce.tools import RETRYABLE_TOOL_NAMES, TOOL_REGISTRY, TOOL_SCHEMAS
+from .commerce.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
 
 # Read-only / safe-to-auto-retry commerce APIs the critique loop may call.
-RETRYABLE_API_NAMES: frozenset[str] = frozenset(RETRYABLE_TOOL_NAMES)
+RETRYABLE_API_NAMES: frozenset[str] = frozenset(
+    {
+        "search_products",
+        "get_product",
+        "get_product_link",
+        "check_inventory",
+        "get_cart",
+        "get_cart_complete",
+        "get_payment_options",
+        "search_customer",
+        "get_customer",
+        "list_coupons",
+        "get_coupon",
+        "list_orders",
+        "get_order",
+        "get_order_complete",
+        "get_order_payment",
+        "quote_shipping",
+        "list_shipping_methods",
+    }
+)
 
 _API_HINTS: dict[str, str] = {
-    "search_products": "Buscar produtos reais no catálogo oficial",
+    "search_products": "Buscar produtos reais na loja",
     "get_product": "Detalhes de um produto por id",
+    "get_product_link": "Link oficial do produto",
     "check_inventory": "Estoque/disponibilidade",
-    "search_customer": "Localizar cliente por CPF/CNPJ/e-mail",
+    "get_cart": "Consultar carrinho por session_id",
+    "get_cart_complete": "Itens e totais do carrinho",
+    "get_payment_options": "Opções de pagamento de carrinho/pedido",
+    "search_customer": "Localizar cliente por CPF/e-mail",
     "get_customer": "Detalhes do cliente",
-    "list_orders": "Listar pedidos do cliente",
+    "list_orders": "Listar pedidos do cliente/sessão",
     "get_order": "Consultar pedido",
-    "get_payment_conditions": "Condições de pagamento disponíveis",
-    "get_price_tables": "Tabelas de preço aplicáveis",
-    "create_customer": "Cadastrar cliente (mutação)",
-    "update_customer": "Atualizar cliente (mutação)",
+    "get_order_complete": "Status completo do pedido",
+    "get_order_payment": "Status/link de pagamento do pedido",
+    "quote_shipping": "Cotação de frete",
+    "list_shipping_methods": "Métodos de frete",
+    "create_cart": "Criar carrinho (mutação)",
     "create_order": "Criar pedido (mutação)",
-    "update_order": "Atualizar pedido (mutação)",
+    "set_cart_item_quantity": "Alterar item do carrinho (mutação)",
 }
 
 

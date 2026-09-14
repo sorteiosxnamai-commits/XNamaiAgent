@@ -179,15 +179,7 @@ def simulate_purchase(credit_cents: int, product_cents: int) -> dict[str, Any]:
 
     eligible = True
     reason = None
-    if not CARD_USAGE_TABLE:
-        # Sem tabela oficial configurada não há simulação possível: falhar de
-        # forma explícita em vez de indexar uma tabela vazia ou inventar faixa.
-        eligible = False
-        reason = (
-            "Tabela oficial de utilização de crédito não configurada. "
-            "Não consigo simular esse abatimento agora."
-        )
-    elif credit_cents < CARD_USAGE_TABLE[0][0]:
+    if credit_cents < CARD_USAGE_TABLE[0][0]:
         eligible = False
         reason = (
             f"O simulador oficial considera saldos a partir de {format_cents_to_brl(CARD_USAGE_TABLE[0][0])}. "
@@ -240,13 +232,9 @@ def build_purchase_simulation_reply(
     if product_cents is None:
         min_purchase = min_purchase_for_credit_cents(credit_cents)
         if min_purchase is None:
-            # Sem tabela oficial configurada não há faixa para consultar e não
-            # existe site institucional carregado: declarar a ausência em vez de
-            # apontar o cliente para uma fonte que não é mais oficial.
             return (
-                f"{greeting} Seu saldo é {credit_label}. "
-                "Tabela oficial de utilização de crédito não configurada. "
-                "Não consigo simular o abatimento agora."
+                f"{greeting} Com crédito de {credit_label}, consulte a tabela completa em "
+                "https://www.sorteionewstore.com.br/ ou informe o valor do relógio para eu simular o desconto."
             )
         return (
             f"{greeting} Com {credit_label} de Cartão Presente, a compra deve ser superior a "
@@ -305,7 +293,7 @@ def build_purchase_simulation_reply(
             "A tabela limita quanto do cartão pode ser usado conforme o valor do produto; "
             "o saldo disponível pode ser maior que o permitido na compra.",
             "O desconto segue a forma de pagamento escolhida (Pix ou crédito). Compras via Pix podem precisar de aplicação manual pela equipe.",
-            "Válido em compra única; dá para usar só parte do saldo.",
+            "Válido em compra única; dá para usar só parte do saldo. Simule também em https://www.newstorerj.com.br/",
         ]
     )
     return "\n".join(lines)

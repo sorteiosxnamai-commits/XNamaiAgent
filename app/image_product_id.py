@@ -965,7 +965,7 @@ async def handle_image_product_search(
         "image_search": True,
         "image_identify": identified.model_dump(mode="json"),
         "domain": "commerce",
-        "used_tray": True,
+        "used_commerce_provider": True,
         "presented_products": True,
         "clear_active_product": True,
         "product_resolution_state": "plausible_matches",
@@ -977,6 +977,6 @@ async def handle_image_product_search(
         goal="find",
         response_source="image_vision",
         used_openai_responder=False,
-        used_tray=True,
+        used_commerce_provider=True,
         fallback_reason=tray_result.safety_reason,
     )

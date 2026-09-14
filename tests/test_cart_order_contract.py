@@ -301,9 +301,9 @@ async def test_shipping_422_preserves_structured_validation_diagnostics():
         return {
             "error": "commerce_upstream_error",
             "status_code": 422,
-            "tray_error_field": "products.0.variant_id",
-            "tray_error_fields": ["products.0.variant_id"],
-            "tray_error_message": "invalid shipping product",
+            "provider_error_field": "products.0.variant_id",
+            "provider_error_fields": ["products.0.variant_id"],
+            "provider_error_message": "invalid shipping product",
         }
 
     result = await quote_shipping(

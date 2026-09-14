@@ -204,7 +204,7 @@ async def test_pipeline_recovers_order_from_transcript_for_status(monkeypatch):
         return AgentResult(
             reply_text="Pedido 0CC131B51070AEF aguardando pagamento.",
             intent="commerce",
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
 
     monkeypatch.setattr(openai_agent, "get_order_facts", fake_facts)
@@ -268,7 +268,7 @@ async def test_pipeline_pix_request_reuses_payment_link_from_transcript(monkeypa
             reply_text="Consulta sem URL.",
             intent="commerce",
             commercial_data={"order_id": order_id, "payment": {"status": "pending"}},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
 
     monkeypatch.setattr(openai_agent, "inspect_order_payment", fake_payment)

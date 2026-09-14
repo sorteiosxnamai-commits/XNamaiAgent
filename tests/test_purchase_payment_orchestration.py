@@ -219,7 +219,7 @@ async def test_explicit_subject_is_resolved_before_cart_and_payment(monkeypatch)
                     {"id": "T2", "name": "Produto explícito", "available": True},
                 ]
             },
-            response_metadata={"used_tray": True},
+            response_metadata={"used_commerce_provider": True},
         )
 
     monkeypatch.setattr(sales_agent, "_execute_compiled_product_retrieval", retrieve)

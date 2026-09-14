@@ -930,7 +930,7 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
             "used_openai_responder": bool(
                 (agent_result.response_metadata or {}).get("used_openai_responder")
             ),
-            "used_tray": bool((agent_result.response_metadata or {}).get("used_tray")),
+            "used_commerce_provider": bool((agent_result.response_metadata or {}).get("used_commerce_provider")),
         },
     )
 

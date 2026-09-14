@@ -23,8 +23,14 @@ from app.observability import log_event, log_exception
 
 
 async def _customer_context_for(incoming: IncomingMessage) -> dict[str, Any]:
-    # Parte 1: o perfil de cliente vinha do banco de sorteio/NewStore, que saiu do
-    # runtime. Sem provider comercial, o contexto de cliente e sempre "nao encontrado".
+    # Contrato de retorno preservado do baseline 201bd16 (Task L). A funcao
+    # chamada e um stub fail-closed: nao abre conexao, nao consulta fonte
+    # externa e devolve sempre {"found": False}. Remover a chamada mudava o
+    # FORMATO do contexto sem nenhum ganho de neutralizacao.
+    if incoming.sender_phone:
+        from app.repository import find_customer_profile_by_phone
+
+        return find_customer_profile_by_phone(incoming.sender_phone)
     return {
         "found": False,
         "channel": incoming.channel,

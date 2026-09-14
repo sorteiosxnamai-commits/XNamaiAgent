@@ -367,7 +367,7 @@ async def match_story_to_catalog(
                                 lexical=max(0.0, lexical - rank_penalty),
                                 quality_penalty=quality_penalty,
                                 reasons=[f"tray_query_overlap:{query[:40]}"],
-                                source="tray_search",
+                                source="commerce_search",
                             ),
                         )
             except Exception as exc:  # noqa: BLE001

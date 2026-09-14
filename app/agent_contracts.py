@@ -121,7 +121,7 @@ def _risk_assessment(result: AgentResult) -> RiskAssessment:
     ):
         score = max(score, 75)
         reasons.append("transactional_facts")
-    if metadata.get("used_tray"):
+    if metadata.get("used_commerce_provider"):
         score = max(score, 40)
         reasons.append("external_commerce_facts")
     if _URL_RE.search(text):
@@ -206,7 +206,7 @@ def build_agent_decision(
         metadata={
             "channel": incoming.channel,
             "response_source": metadata.get("response_source"),
-            "used_tray": bool(metadata.get("used_tray")),
+            "used_commerce_provider": bool(metadata.get("used_commerce_provider")),
             "safety_reason": result.safety_reason,
         },
     )

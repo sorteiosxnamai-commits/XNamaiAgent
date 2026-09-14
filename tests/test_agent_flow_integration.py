@@ -252,11 +252,11 @@ async def test_valid_commerce_interpretation_reaches_openai_sales_responder(monk
     assert ("get_product", {"product_id": "1"}) in tool_calls
     assert result.response_metadata["used_openai_interpreter"] is True
     assert result.response_metadata["used_openai_responder"] is True
-    assert result.response_metadata["used_tray"] is True
+    assert result.response_metadata["used_commerce_provider"] is True
 
 
 @pytest.mark.asyncio
-async def test_valid_commerce_domain_is_not_overridden_by_local_raffle_classifier(monkeypatch):
+async def test_valid_commerce_domain_is_not_overridden_by_a_local_classifier(monkeypatch):
     import app.openai_agent as openai_agent
 
     interpretation = SalesInterpretation(
@@ -283,11 +283,10 @@ async def test_valid_commerce_domain_is_not_overridden_by_local_raffle_classifie
     monkeypatch.setattr(openai_agent, "interpret_message", fake_interpret)
     monkeypatch.setattr(openai_agent, "gather_customer_facts", lambda *args, **kwargs: {"primary_intent": "rules", "intents": ["rules"]})
     monkeypatch.setattr(openai_agent, "handle_sales_message", fake_sales_handler)
-    monkeypatch.setattr(
-        openai_agent,
-        "_local_raffle_reply",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("raffle handler must respect the interpreted domain")),
-    )
+    # O classificador local de sorteio nao existe mais (Parte 1, Task H): nao ha
+    # handler para espionar. A propriedade que este teste guarda — dominio
+    # comercial interpretado nao e sequestrado por classificador local — passou a
+    # ser estrutural, e as asserts abaixo continuam provando o resultado.
 
     result = await openai_agent.generate_agent_reply_async(
         IncomingMessage(text="Como funciona esse relógio?"),

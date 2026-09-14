@@ -153,8 +153,8 @@ async def test_lookup_error_preserves_order_and_marks_payment_unknown():
         return {
             "error": "commerce_upstream_error",
             "status_code": 500,
-            "tray_error_code": "payment_lookup_failed",
-            "tray_error_message": "temporary failure",
+            "provider_error_code": "payment_lookup_failed",
+            "provider_error_message": "temporary failure",
         }
 
     result = await inspect_order_payment(state=_state(), execute=execute)

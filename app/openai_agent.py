@@ -5,13 +5,6 @@ import json
 
 from openai import APIError
 from .agent_replies import (
-    build_available_numbers_reply,
-    build_balance_reply,
-    build_coupon_code_reply,
-    build_current_raffle_reply,
-    build_raffle_history_reply,
-    build_rules_reply_result,
-    build_simulation_reply,
     build_preferred_name_reply,
     _third_party_reply,
 )
@@ -26,7 +19,6 @@ from .context_builder import (
     gather_customer_facts,
 )
 from .guardrails import (
-    detect_available_numbers_inquiry,
     detect_blocked_request,
     default_safe_handoff,
 )
@@ -56,11 +48,12 @@ from .order_service import (
     is_order_lookup_request,
 )
 from .payment_service import inspect_order_payment
-from .repository import detect_third_party_account_inquiry, find_coupon_balance_by_phone
+from .privacy_scope import is_personal_account_scope
+from .repository import detect_third_party_account_inquiry
 from .site_knowledge import HUMAN_SUPPORT_MESSAGE, build_site_knowledge_text, NS_SALES_WHATSAPP
 from .vip_profiles import build_vip_openai_context, get_vip_profile, pick_vip_nickname
 from .user_preferences import detect_preferred_name_update
-from .commerce.tools import TOOL_SCHEMAS, execute_tool
+from .commerce.tools import TOOL_SCHEMAS, execute_tool, commerce_tools_available
 from .sales_agent import (
     GREETING_REPLY,
     OUT_OF_SCOPE_REPLY,
@@ -136,9 +129,9 @@ def _annotate_agent_result(result: AgentResult, **metadata: object) -> AgentResu
 def _preferred_name_reply_if_requested(message: IncomingMessage, facts: dict) -> AgentResult | None:
     if not detect_preferred_name_update(message.text):
         return None
+    # Parte 1: a conta vinha do banco de sorteio, fora do runtime. Usa-se apenas
+    # o que ja esta em facts — sem consulta a fonte alguma.
     account = facts.get("account") or {}
-    if not account.get("found"):
-        account = find_coupon_balance_by_phone(message.sender_phone, message.text)
     return build_preferred_name_reply(message, account)
 
 
@@ -167,29 +160,29 @@ def _non_handoff_fallback(message: IncomingMessage, facts: dict) -> str:
     return "N\u00e3o consegui concluir a consulta neste momento. Tente novamente em instantes."
 
 
-def _is_personal_intent(intent: str) -> bool:
-    return intent in {"balance", "coupon_code", "raffle_history", "simulation"}
-
-
 def _third_party_guardrail(message: IncomingMessage, primary_intent: str) -> AgentResult | None:
-    if _is_personal_intent(primary_intent) and detect_third_party_account_inquiry(message.text, message.sender_phone):
+    """Recusa consulta a dados de conta de OUTRA pessoa.
+
+    Paridade com o baseline ``201bd16``, que exigia DUAS condicoes: a mensagem
+    estar no escopo pessoal E ser consulta a terceiro. O escopo pessoal vinha do
+    intent primario (``balance``/``coupon_code``/``raffle_history``/
+    ``simulation``); esses intents sairam do runtime com as features, entao o
+    sinal vive agora em ``app/privacy_scope.py`` — texto puro, sem handler,
+    sem rota, sem fonte de dados.
+
+    Manter as duas condicoes importa nos dois sentidos: so o detector de
+    terceiro recusaria "voces tem Tissot para o 4899...?" (mais estrito que o
+    baseline); so o escopo pessoal recusaria "qual o meu saldo" (a propria
+    conta do cliente).
+
+    ``primary_intent`` continua na assinatura por compatibilidade com os dois
+    call sites; a classificacao de escopo hoje vem do texto.
+    """
+    if not is_personal_account_scope(message.text):
+        return None
+    if detect_third_party_account_inquiry(message.text, message.sender_phone):
         return _third_party_reply()
     return None
-
-
-def _local_raffle_reply(message: IncomingMessage, facts: dict) -> AgentResult | None:
-    handlers = {
-        "balance": build_balance_reply,
-        "coupon_code": build_coupon_code_reply,
-        "simulation": build_simulation_reply,
-        "raffle_history": build_raffle_history_reply,
-        "current_raffle": build_current_raffle_reply,
-        "rules": build_rules_reply_result,
-    }
-    handler = handlers.get(str(facts.get("primary_intent")))
-    if handler:
-        print("[raffle.route]", {"intent": facts.get("primary_intent")})
-    return handler(message) if handler else None
 
 
 def build_agent_input(message: IncomingMessage, customer_context: dict, facts: dict) -> str:
@@ -308,6 +301,12 @@ def generate_agent_reply(message: IncomingMessage, customer_context: dict) -> Ag
             safety_reason=blocked_reason,
         )
 
+    # Privacidade antes de escopo: "saldo do Joao" nao pode virar recusa generica
+    # de escopo — precisa ser recusa EXPLICITA de consulta a terceiro.
+    third_party_reply = _third_party_guardrail(message, "")
+    if third_party_reply:
+        return third_party_reply
+
     scope = deterministic_scope(message.text)
     print("[agent.scope]", {"domain": scope.get("domain")})
     if scope.get("domain") == "out_of_scope":
@@ -320,9 +319,6 @@ def generate_agent_reply(message: IncomingMessage, customer_context: dict) -> Ag
         )
     primary_intent = detect_primary_intent(message.text)
     print("[agent.route]", {"inbound_id": (message.raw or {}).get("inbound_id"), "primary_intent": primary_intent})
-    third_party_reply = _third_party_guardrail(message, primary_intent)
-    if third_party_reply:
-        return third_party_reply
 
     if message.input_modality == "audio" and message.transcription_failed:
         return AgentResult(
@@ -349,11 +345,6 @@ def generate_agent_reply(message: IncomingMessage, customer_context: dict) -> Ag
     preferred_reply = _preferred_name_reply_if_requested(message, facts)
     if preferred_reply:
         return preferred_reply
-    local_reply = _local_raffle_reply(message, facts)
-    if local_reply:
-        return local_reply
-    if detect_available_numbers_inquiry(message.text):
-        return build_available_numbers_reply(message)
     print("[openai.agent] routing", {
         "mode": "openai_with_db_context",
         "primary_intent": facts.get("primary_intent"),
@@ -384,7 +375,14 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
         {"role": "system", "content": system_instructions},
         {"role": "user", "content": build_agent_input(message, customer_context, facts)},
     ]
-    tools = TOOL_SCHEMAS if facts.get("primary_intent") == "commerce" else None
+    # Gating por PROVIDER, nunca por env de fornecedor: sem provider capaz de
+    # executar, o modelo nao recebe tool alguma — mesmo comportamento do
+    # baseline sem fonte comercial configurada.
+    tools = (
+        TOOL_SCHEMAS
+        if facts.get("primary_intent") == "commerce" and commerce_tools_available()
+        else None
+    )
     try:
         from .openai_errors import OpenAIGatewayError
         from .openai_gateway import generate_text_output, run_tool_loop_output
@@ -425,7 +423,7 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
                     reply_text=_non_handoff_fallback(message, facts),
                     intent=str(facts.get("primary_intent") or "store_lookup"),
                     handoff_required=False,
-                    safety_reason="tray_adapter_unavailable",
+                    safety_reason="commerce_provider_unavailable",
                 )
         if loop_result.limit_reached and not loop_result.text:
             return AgentResult(
@@ -462,7 +460,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="guardrail",
             used_openai_interpreter=False,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
         )
     human_reason = should_request_human_handoff(message)
     if human_reason:
@@ -472,7 +470,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="handoff",
             used_openai_interpreter=False,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
         )
 
     raw_inbound_id = (message.raw or {}).get("inbound_id")
@@ -562,7 +560,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 response_source="deterministic_fallback",
                 used_openai_interpreter=False,
                 used_openai_responder=False,
-                used_tray=bool(result.response_metadata.get("used_tray")),
+                used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
             )
         if contains_tax_document_candidate(message.text):
             result = invalid_tax_document_result()
@@ -572,7 +570,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 response_source="deterministic_fallback",
                 used_openai_interpreter=False,
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
             )
     order_reference = extract_order_reference(message.text)
     soft_greeting = _is_greeting(message.text) or is_soft_greeting(message.text)
@@ -601,7 +599,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             ),
             used_openai_interpreter=False,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
         )
     # Fast path: customer asks for the link and we already recovered it from transcript.
     if is_payment_link_request(message.text) and commerce_state.order_payment_url:
@@ -641,14 +639,14 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                             commerce_state.order_payment_status or "awaiting_payment"
                         ),
                     },
-                    "used_tray": False,
+                    "used_commerce_provider": False,
                 },
             ),
             domain="commerce",
             response_source="context_resume_payment_url",
             used_openai_interpreter=False,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
         )
     wants_order_context = (
         is_order_lookup_request(message.text)
@@ -803,7 +801,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="deterministic_fallback",
             used_openai_interpreter=False,
             used_openai_responder=False,
-            used_tray=bool(result.response_metadata.get("used_tray")),
+            used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
         )
     # Instagram Story reply → associated product (feature-flagged / rollout).
     try:
@@ -831,7 +829,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                         response_source="instagram_story",
                         used_openai_interpreter=False,
                         used_openai_responder=False,
-                        used_tray=bool(story_resolution.product_payload),
+                        used_commerce_provider=bool(story_resolution.product_payload),
                         fallback_reason=story_resolution.failure_reason,
                     )
     except Exception as exc:  # noqa: BLE001
@@ -849,7 +847,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                     if image_result.safety_reason
                     in {
                         "image_identify_failed",
-                        "tray_adapter_unavailable",
+                        "commerce_provider_unavailable",
                         "product_match_failed",
                     }
                     else image_result.response_metadata.get(
@@ -861,7 +859,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 used_openai_responder=bool(
                     image_result.response_metadata.get("used_openai_responder")
                 ),
-                used_tray=bool(image_result.response_metadata.get("used_tray")),
+                used_commerce_provider=bool(image_result.response_metadata.get("used_commerce_provider")),
                 fallback_reason=image_result.safety_reason,
             )
 
@@ -887,7 +885,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 response_source="deterministic_fallback",
                 used_openai_interpreter=False,
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason="brevo_instagram_media_unviewable",
             )
         if (
@@ -906,7 +904,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 response_source="deterministic_fallback",
                 used_openai_interpreter=False,
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason="instagram_price_without_media",
             )
     except Exception as exc:  # noqa: BLE001
@@ -934,13 +932,24 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         "context_override": domain_context_applied,
     })
     primary_intent = detect_primary_intent(message.text)
-    raffle_intents = {"balance", "coupon_code", "simulation", "raffle_history", "current_raffle", "rules"}
-    scope_domain = (
-        "raffle"
-        if not used_openai_interpreter and primary_intent in raffle_intents
-        else interpretation.domain
-    )
+    # Parte 1: o dominio de sorteio saiu do runtime. Nao ha mais rota
+    # deterministica que force scope_domain="raffle" — o dominio vem apenas do
+    # interpretador e, sem handler local, segue o caminho generico.
+    scope_domain = interpretation.domain
     print("[agent.scope]", {"domain": scope_domain})
+    # Privacidade antes de escopo: recusa de consulta a terceiro e mais
+    # especifica — e mais informativa para o cliente — que a recusa de escopo.
+    third_party_reply = _third_party_guardrail(message, primary_intent)
+    if third_party_reply:
+        return _annotate_agent_result(
+            third_party_reply,
+            domain=scope_domain,
+            goal=interpretation.goal,
+            response_source="guardrail",
+            used_openai_interpreter=used_openai_interpreter,
+            used_openai_responder=False,
+            used_commerce_provider=False,
+        )
     if scope_domain == "out_of_scope":
         return _annotate_agent_result(
             AgentResult(reply_text=OUT_OF_SCOPE_REPLY, intent="out_of_scope", handoff_required=False, safety_reason="scope_refusal"),
@@ -949,7 +958,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="guardrail" if used_openai_interpreter else "deterministic_fallback",
             used_openai_interpreter=used_openai_interpreter,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
             fallback_reason=interpretation._fallback_reason,
         )
     if scope_domain == "greeting" or (
@@ -968,7 +977,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 ),
                 used_openai_interpreter=False,
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason=interpretation._fallback_reason,
             )
         return _annotate_agent_result(
@@ -981,21 +990,10 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="local_greeting",
             used_openai_interpreter=False,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
             fallback_reason=interpretation._fallback_reason,
         )
     print("[agent.route]", {"inbound_id": (message.raw or {}).get("inbound_id"), "primary_intent": primary_intent})
-    third_party_reply = _third_party_guardrail(message, primary_intent)
-    if third_party_reply:
-        return _annotate_agent_result(
-            third_party_reply,
-            domain=scope_domain,
-            goal=interpretation.goal,
-            response_source="guardrail",
-            used_openai_interpreter=used_openai_interpreter,
-            used_openai_responder=False,
-            used_tray=False,
-        )
     if message.input_modality == "audio" and (message.transcription_failed or not (message.text or "").strip()):
         return _annotate_agent_result(
             generate_agent_reply(message, customer_context),
@@ -1004,7 +1002,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="technical_fallback",
             used_openai_interpreter=used_openai_interpreter,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
             fallback_reason="audio_transcription_failed",
         )
     facts = gather_customer_facts(message, customer_context)
@@ -1020,30 +1018,8 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             response_source="deterministic_fallback",
             used_openai_interpreter=used_openai_interpreter,
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
         )
-    if scope_domain == "raffle":
-        local_reply = _local_raffle_reply(message, facts)
-        if local_reply:
-            return _annotate_agent_result(
-                local_reply,
-                domain="raffle",
-                goal=interpretation.goal,
-                response_source="local_raffle",
-                used_openai_interpreter=used_openai_interpreter,
-                used_openai_responder=False,
-                used_tray=False,
-            )
-        if detect_available_numbers_inquiry(message.text):
-            return _annotate_agent_result(
-                build_available_numbers_reply(message),
-                domain="raffle",
-                goal=interpretation.goal,
-                response_source="local_raffle",
-                used_openai_interpreter=used_openai_interpreter,
-                used_openai_responder=False,
-                used_tray=False,
-            )
     if scope_domain == "commerce":
         commerce_result = await handle_sales_message(
             message,
@@ -1062,7 +1038,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 fallback_reason=interpretation._fallback_reason,
                 interpretation_confidence=interpretation.confidence,
             )
-    print("[openai.agent] routing", {"mode": "openai_with_db_context_and_tools", "primary_intent": facts.get("primary_intent"), "has_openai_key": bool(get_settings().openai_api_key), "commerce_tools_enabled": bool(TOOL_SCHEMAS)})
+    print("[openai.agent] routing", {"mode": "openai_with_db_context_and_tools", "primary_intent": facts.get("primary_intent"), "has_openai_key": bool(get_settings().openai_api_key), "commerce_tools_enabled": commerce_tools_available()})
     result = await generate_openai_reply_async(message, customer_context, facts)
     return _annotate_agent_result(
         result,
@@ -1071,7 +1047,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         response_source="technical_fallback" if result.safety_reason else "openai",
         used_openai_interpreter=used_openai_interpreter,
         used_openai_responder=not bool(result.safety_reason),
-        used_tray=False,
+        used_commerce_provider=False,
         fallback_reason=result.safety_reason or interpretation._fallback_reason,
         interpretation_confidence=interpretation.confidence,
     )

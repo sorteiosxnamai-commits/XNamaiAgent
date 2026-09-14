@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from .models import AgentResult, PurchaseItem, SalesInterpretation
 
 def normalize_variant_identity(value: Any) -> str | None:
-    """Return the canonical NSAgent identity for an optional Tray variant."""
+    """Return the canonical NSAgent identity for an optional provider variant."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -198,12 +198,12 @@ class CommerceConversationState(BaseModel):
     order_payment_revalidation_status: Literal[
         "not_checked", "confirmed", "unavailable", "ambiguous"
     ] = "not_checked"
-    # Direct Mercado Pago PIX in chat (before Tray order exists).
-    pix_payment_id: str | None = None
-    pix_payment_status: str | None = None
-    pix_copy_paste_code: str | None = None
-    pix_amount_label: str | None = None
-    pix_order_review_version: str | None = None
+    # Parte 1: os campos de pagamento nativo no chat (pix_payment_id,
+    # pix_payment_status, pix_copy_paste_code, pix_amount_label,
+    # pix_order_review_version) foram REMOVIDOS junto com o gateway. Nao tinham
+    # produtor desde a remocao do servico; so restavam a declaracao, dois resets
+    # e a releitura abaixo. Nenhum SQL foi executado: linhas antigas que ainda
+    # tragam "pix_state" no metadata sao simplesmente ignoradas na leitura.
     pending_action: Literal[
         "send_product_link",
         "create_cart",
@@ -635,11 +635,6 @@ def evolve_commerce_state(
         state.order_payment_date = None
         state.order_payment_checked_at = None
         state.order_payment_revalidation_status = "not_checked"
-        state.pix_payment_id = None
-        state.pix_payment_status = None
-        state.pix_copy_paste_code = None
-        state.pix_amount_label = None
-        state.pix_order_review_version = None
 
     material_checkout_change = any(
         key in metadata
@@ -666,11 +661,6 @@ def evolve_commerce_state(
         state.selected_payment_method = None
         state.selected_payment_option_id = None
         state.selected_payment_option = None
-        state.pix_payment_id = None
-        state.pix_payment_status = None
-        state.pix_copy_paste_code = None
-        state.pix_amount_label = None
-        state.pix_order_review_version = None
 
     if metadata.get("active_topic"):
         state.active_topic = str(metadata["active_topic"])
@@ -804,17 +794,6 @@ def evolve_commerce_state(
         ):
             if field in payment_state:
                 setattr(state, field, payment_state[field])
-    pix_state = metadata.get("pix_state")
-    if isinstance(pix_state, dict):
-        for field in (
-            "pix_payment_id",
-            "pix_payment_status",
-            "pix_copy_paste_code",
-            "pix_amount_label",
-            "pix_order_review_version",
-        ):
-            if field in pix_state:
-                setattr(state, field, pix_state[field])
     active_preferences = _compact_preferences(metadata.get("active_preferences"))
     if active_preferences:
         state.active_preferences = active_preferences

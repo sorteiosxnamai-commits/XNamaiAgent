@@ -17,14 +17,25 @@ from pydantic import BaseModel, Field
 
 class FactSource(str, Enum):
     LOCAL_DATABASE = "local_database"
-    TRAY_ADAPTER = "tray_adapter"
-    TRAY_LIVE = "tray_live"
+    COMMERCE_PROVIDER = "commerce_provider"
+    COMMERCE_LIVE = "commerce_live"
     CATALOG_SNAPSHOT = "catalog_snapshot"
     COMMERCE_STATE = "commerce_state"
     APPROVED_PERSONA = "approved_persona"
     CUSTOMER_MEMORY = "customer_memory"
     DETERMINISTIC_RULE = "deterministic_rule"
     SECURITY_RULE = "security_rule"
+
+
+#: Valores de ``_factual_source`` que significam "consultado ao vivo no provider".
+#: Inclui os nomes LEGADOS porque estao GRAVADOS em ``ai_catalog_index`` desde
+#: antes da Parte 1. Renomear so o codigo faria o comparador deixar de casar com
+#: linhas ja persistidas e rebaixaria silenciosamente a autoridade do fato.
+#: Nenhum SQL e executado para migrar: le-se os dois nomes.
+LIVE_PROVIDER_SOURCE_VALUES: frozenset[str] = frozenset({"commerce_live", "tray_live"})
+
+#: Idem para a busca no provider.
+SEARCH_PROVIDER_SOURCE_VALUES: frozenset[str] = frozenset({"commerce_search", "tray_search"})
 
 
 # Higher = stronger when sources conflict (Etapa 5 commerce ordering).
@@ -34,8 +45,8 @@ FACT_SOURCE_RANK: dict[FactSource, int] = {
     FactSource.COMMERCE_STATE: 40,
     FactSource.CATALOG_SNAPSHOT: 55,
     FactSource.LOCAL_DATABASE: 65,
-    FactSource.TRAY_ADAPTER: 75,
-    FactSource.TRAY_LIVE: 85,
+    FactSource.COMMERCE_PROVIDER: 75,
+    FactSource.COMMERCE_LIVE: 85,
     FactSource.DETERMINISTIC_RULE: 90,
     FactSource.SECURITY_RULE: 100,
 }
@@ -117,7 +128,7 @@ def preferred_fact(
 def infer_source_for_payload_key(
     key: str,
     *,
-    used_tray: bool = False,
+    used_commerce_provider: bool = False,
     from_commerce_state: bool = False,
     from_local_db: bool = False,
     factual_source: str | None = None,
@@ -125,8 +136,8 @@ def infer_source_for_payload_key(
 ) -> FactSource:
     lowered = (key or "").lower()
     factual = (factual_source or "").strip().lower()
-    if revalidated or factual == "tray_live":
-        return FactSource.TRAY_LIVE
+    if revalidated or factual in LIVE_PROVIDER_SOURCE_VALUES:
+        return FactSource.COMMERCE_LIVE
     if factual in {"catalog_cache", "catalog_index"}:
         return FactSource.CATALOG_SNAPSHOT
     if from_local_db or any(
@@ -145,7 +156,7 @@ def infer_source_for_payload_key(
         )
     ):
         return FactSource.COMMERCE_STATE
-    if used_tray or any(
+    if used_commerce_provider or any(
         token in lowered
         for token in (
             "price",
@@ -159,5 +170,5 @@ def infer_source_for_payload_key(
             "cart",
         )
     ):
-        return FactSource.TRAY_ADAPTER
+        return FactSource.COMMERCE_PROVIDER
     return FactSource.DETERMINISTIC_RULE

@@ -20,13 +20,13 @@ ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 def _failure_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     mapping = {
         "shipping_failure_status": "status_code",
-        "shipping_failure_code": "tray_error_code",
-        "shipping_failure_name": "tray_error_name",
-        "shipping_failure_type": "tray_error_type",
-        "shipping_failure_field": "tray_error_field",
-        "shipping_failure_fields": "tray_error_fields",
-        "shipping_failure_causes": "tray_error_causes",
-        "shipping_failure_message": "tray_error_message",
+        "shipping_failure_code": "provider_error_code",
+        "shipping_failure_name": "provider_error_name",
+        "shipping_failure_type": "provider_error_type",
+        "shipping_failure_field": "provider_error_field",
+        "shipping_failure_fields": "provider_error_fields",
+        "shipping_failure_causes": "provider_error_causes",
+        "shipping_failure_message": "provider_error_message",
     }
     return {
         target: payload[source]
@@ -120,7 +120,7 @@ async def quote_shipping(
             intent="commerce",
             safety_reason="whatsapp_order_channel_required",
             commercial_data={"success": False, "stage": "shipping_quote"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     normalized_zipcode = normalize_zipcode(zipcode)
     if normalized_zipcode is None:
@@ -129,7 +129,7 @@ async def quote_shipping(
             intent="commerce",
             safety_reason="shipping_zipcode_invalid",
             commercial_data={"success": False, "stage": "shipping_quote"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     if not state.cart_session_id:
         return AgentResult(
@@ -137,7 +137,7 @@ async def quote_shipping(
             intent="commerce",
             safety_reason="cart_validation_error",
             commercial_data={"success": False, "stage": "shipping_quote"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
 
     session_tag = _session_tag(state.cart_session_id)
@@ -166,7 +166,7 @@ async def quote_shipping(
                 "recoverable": cart.get("status_code") in {502, 503, 504},
             },
             response_metadata={
-                "domain": "commerce", "used_tray": True,
+                "domain": "commerce", "used_commerce_provider": True,
                 **_failure_metadata(cart),
             },
         )
@@ -177,7 +177,7 @@ async def quote_shipping(
             intent="commerce",
             safety_reason="shipping_cart_validation_error",
             commercial_data={"success": False, "stage": "shipping_quote"},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
     try:
         result = await execute(
@@ -204,7 +204,7 @@ async def quote_shipping(
                 "recoverable": result.get("status_code") in {502, 503, 504},
             },
             response_metadata={
-                "domain": "commerce", "used_tray": True,
+                "domain": "commerce", "used_commerce_provider": True,
                 **_failure_metadata(result),
             },
         )
@@ -291,7 +291,7 @@ async def quote_shipping(
                 }
                 if quotes else {"clear_pending_action": True}
             ),
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -309,7 +309,7 @@ async def list_shipping_methods(*, execute: ToolExecutor) -> AgentResult:
             commercial_data={"success": False, "stage": "shipping_methods"},
             response_metadata={
                 "domain": "commerce",
-                "used_tray": True,
+                "used_commerce_provider": True,
                 **_failure_metadata(result),
             },
         )
@@ -320,7 +320,7 @@ async def list_shipping_methods(*, execute: ToolExecutor) -> AgentResult:
             "success": True,
             "methods": result.get("options") or result.get("methods") or [],
         },
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
 
 
@@ -335,7 +335,7 @@ def select_shipping(
             intent="commerce",
             safety_reason="whatsapp_order_channel_required",
             commercial_data={"success": False, "stage": "shipping_selection"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     requested = str(selection_id or "").strip()
     if selection_position is not None and 1 <= selection_position <= len(state.shipping_quotes):
@@ -360,7 +360,7 @@ def select_shipping(
                 "stage": "shipping_selection",
                 "options": [quote.model_dump(mode="json") for quote in state.shipping_quotes],
             },
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     selected = matches[0]
     print("[sales.shipping.select]", {
@@ -377,6 +377,6 @@ def select_shipping(
             "purchase_stage": "checkout_data",
             "pending_action": "awaiting_checkout_data",
             "pending_action_product_ids": [],
-            "used_tray": False,
+            "used_commerce_provider": False,
         },
     )

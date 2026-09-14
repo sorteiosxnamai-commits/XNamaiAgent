@@ -21,7 +21,7 @@ def test_security_and_deterministic_outrank_persona_and_memory():
             entity_type="price",
         ),
         StructuredFact(
-            source=FactSource.TRAY_ADAPTER,
+            source=FactSource.COMMERCE_PROVIDER,
             key="price",
             value="199.90",
             entity_type="price",
@@ -30,7 +30,7 @@ def test_security_and_deterministic_outrank_persona_and_memory():
     ]
     chosen = preferred_fact(facts, key="price")
     assert chosen is not None
-    assert chosen.source == FactSource.TRAY_ADAPTER
+    assert chosen.source == FactSource.COMMERCE_PROVIDER
     assert chosen.value == "199.90"
 
 
@@ -43,13 +43,13 @@ def test_tray_live_outranks_tray_adapter_and_local_db():
             entity_type="price",
         ),
         StructuredFact(
-            source=FactSource.TRAY_ADAPTER,
+            source=FactSource.COMMERCE_PROVIDER,
             key="price",
             value="180.00",
             entity_type="price",
         ),
         StructuredFact(
-            source=FactSource.TRAY_LIVE,
+            source=FactSource.COMMERCE_LIVE,
             key="price",
             value="199.90",
             entity_type="price",
@@ -57,14 +57,14 @@ def test_tray_live_outranks_tray_adapter_and_local_db():
     ]
     chosen = preferred_fact(facts, key="price", entity_type="price")
     assert chosen is not None
-    assert chosen.source == FactSource.TRAY_LIVE
+    assert chosen.source == FactSource.COMMERCE_LIVE
 
 
 
 def test_infer_source_maps_catalog_and_state_keys():
     assert (
-        infer_source_for_payload_key("current_price", used_tray=True)
-        == FactSource.TRAY_ADAPTER
+        infer_source_for_payload_key("current_price", used_commerce_provider=True)
+        == FactSource.COMMERCE_PROVIDER
     )
     assert (
         infer_source_for_payload_key("pending_action", from_commerce_state=True)

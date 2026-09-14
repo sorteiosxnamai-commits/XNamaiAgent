@@ -47,7 +47,7 @@ def _catalog_result(*product_ids: str) -> AgentResult:
                 for product_id in product_ids
             ]
         },
-        response_metadata={"presented_products": True, "used_tray": True},
+        response_metadata={"presented_products": True, "used_commerce_provider": True},
     )
 
 

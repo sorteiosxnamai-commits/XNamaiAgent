@@ -160,7 +160,7 @@ async def test_pending_document_is_handled_before_openai_interpretation(monkeypa
             reply_text="Pedido confirmado.",
             intent="commerce",
             commercial_data={"order_id": "195", "success": True},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
 
     monkeypatch.setattr(openai_agent, "find_order_by_customer_document", find_order)
@@ -206,7 +206,7 @@ async def test_explicit_order_status_bypasses_openai_and_calls_tray(monkeypatch)
             intent="commerce",
             safety_reason="order_not_found",
             commercial_data={"success": False},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
 
     monkeypatch.setattr(openai_agent, "get_order_facts", get_order)

@@ -166,5 +166,5 @@ async def test_not_found_is_not_technical_error_and_tray_error_is_neutral(monkey
     monkeypatch.setattr("app.commerce_router.execute_tool", tray_error)
     failed = await handle_commerce_message(IncomingMessage(text="Tem Tissot?"), {"primary_intent": "commerce"}, {})
     assert failed.handoff_required is False
-    assert failed.safety_reason == "tray_adapter_unavailable"
+    assert failed.safety_reason == "commerce_provider_unavailable"
     assert "Tray" not in failed.reply_text

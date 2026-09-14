@@ -249,7 +249,7 @@ async def handle_commerce_message(
         _log_route(action, "list_coupons", bool(query))
         result = await execute_tool("list_coupons", {"limit": 3})
         if "error" in result:
-            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="tray_adapter_unavailable")
+            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
         coupons = result.get("coupons") if isinstance(result.get("coupons"), list) else []
         if not coupons:
             return AgentResult(reply_text="N\u00e3o encontrei cupons comerciais dispon\u00edveis agora.", intent="commerce", handoff_required=False, safety_reason="coupon_not_found")
@@ -270,25 +270,25 @@ async def handle_commerce_message(
             _log_route(action, "check_inventory", False)
             inventory = await execute_tool("check_inventory", {"product_id": product_id})
             if "error" in inventory:
-                return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="tray_adapter_unavailable")
+                return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
             return AgentResult(reply_text="Consulta de estoque:\n" + "\n".join(_product_lines([remembered], inventory)), intent="commerce", handoff_required=False, commercial_data={"products": [remembered], "inventory": inventory})
         _log_route(action, "get_product", False)
         current = await execute_tool("get_product", {"product_id": product_id})
         if "error" in current:
-            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="tray_adapter_unavailable")
+            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
         identity = {key: remembered.get(key) for key in ("id", "name", "reference", "ean", "brand") if remembered.get(key) is not None}
         return _product_result(action, [{**identity, **current}])
 
     _log_route(action, "search_products", True)
     search = await execute_tool("search_products", {"query": query, "limit": 3})
     if "error" in search:
-        return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="tray_adapter_unavailable")
+        return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
     products = _products(search)
     if action == "product_price" and len(products) == 1 and products[0].get("id"):
         _log_route(action, "get_product", True)
         current = await execute_tool("get_product", {"product_id": str(products[0]["id"])})
         if "error" in current:
-            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="tray_adapter_unavailable")
+            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
         identity = {key: products[0].get(key) for key in ("id", "name", "reference", "ean", "brand") if products[0].get(key) is not None}
         detail = {**identity, **current}
         _remember_product(message, detail)
@@ -309,5 +309,5 @@ async def handle_commerce_message(
     _log_route(action, "check_inventory", True)
     inventory = await execute_tool("check_inventory", {"product_id": str(product_id)})
     if "error" in inventory:
-        return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="tray_adapter_unavailable")
+        return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
     return AgentResult(reply_text="Consulta de estoque:\n" + "\n".join(_product_lines(products, inventory)), intent="commerce", handoff_required=False, commercial_data={"products": products, "inventory": inventory})

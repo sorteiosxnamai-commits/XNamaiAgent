@@ -187,6 +187,6 @@ def select_checkout_channel(
                 if whatsapp_needs_zipcode
                 else {}
             ),
-            "used_tray": False,
+            "used_commerce_provider": False,
         },
     )

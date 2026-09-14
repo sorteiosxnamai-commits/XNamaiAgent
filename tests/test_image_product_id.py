@@ -366,7 +366,7 @@ async def test_chrono_feature_mismatch_falls_back_to_visual(monkeypatch):
                 }
             ]
         },
-        response_metadata={"used_tray": True},
+        response_metadata={"used_commerce_provider": True},
     )
     visual_result = AgentResult(
         reply_text="visual hit",
@@ -543,7 +543,7 @@ async def test_handle_image_disambiguates_siblings_visually(monkeypatch):
             ],
             "match_status": "ambiguous",
         },
-        response_metadata={"used_tray": True},
+        response_metadata={"used_commerce_provider": True},
     )
 
     async def fake_identify(msg):
@@ -673,7 +673,7 @@ async def test_handle_image_product_search_retrieves_catalog(monkeypatch):
                 }
             ]
         },
-        response_metadata={"used_tray": True},
+        response_metadata={"used_commerce_provider": True},
     )
 
     async def fake_identify(msg):
@@ -747,7 +747,7 @@ async def test_handle_image_ambiguous_siblings_does_not_activate(monkeypatch):
             "match_status": "ambiguous",
         },
         response_metadata={
-            "used_tray": True,
+            "used_commerce_provider": True,
             "presented_products": True,
             "product_resolution_state": "plausible_matches",
             "clear_active_product": True,
@@ -810,7 +810,7 @@ async def test_handle_image_product_search_does_not_ask_for_sku(monkeypatch):
         reply_text="Não encontrei esse produto no catálogo agora.",
         intent="commerce",
         safety_reason="product_not_found",
-        response_metadata={"used_tray": True},
+        response_metadata={"used_commerce_provider": True},
     )
 
     async def fake_identify(msg):

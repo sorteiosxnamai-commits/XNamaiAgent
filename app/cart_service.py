@@ -71,11 +71,11 @@ def _technical_failure(
     diagnostic_log = {
         key: diagnostics.get(key)
         for key in (
-            "tray_error_code",
-            "tray_error_type",
-            "tray_error_field",
-            "tray_error_fields",
-            "tray_error_message",
+            "provider_error_code",
+            "provider_error_type",
+            "provider_error_field",
+            "provider_error_fields",
+            "provider_error_message",
         )
         if diagnostics.get(key) not in (None, "", [])
     }
@@ -95,16 +95,16 @@ def _technical_failure(
         "status_code": status_code,
     })
     response_metadata = {
-        "used_tray": True,
+        "used_commerce_provider": True,
         "cart_failure_stage": stage,
     }
     if status_code is not None:
         response_metadata["cart_failure_status"] = status_code
     for metadata_key, diagnostic_key in (
-        ("cart_failure_code", "tray_error_code"),
-        ("cart_failure_type", "tray_error_type"),
-        ("cart_failure_field", "tray_error_field"),
-        ("cart_failure_fields", "tray_error_fields"),
+        ("cart_failure_code", "provider_error_code"),
+        ("cart_failure_type", "provider_error_type"),
+        ("cart_failure_field", "provider_error_field"),
+        ("cart_failure_fields", "provider_error_fields"),
     ):
         if diagnostics.get(diagnostic_key) not in (None, "", []):
             response_metadata[metadata_key] = diagnostics[diagnostic_key]
@@ -152,7 +152,7 @@ def _cart_session_state(
 
 
 def _cart_item_state(item: CommerceCartItem) -> dict[str, Any]:
-    """Keep a factual item name when Tray supplied one without changing old payloads."""
+    """Keep a factual item name when the provider supplied one without changing old payloads."""
     payload = item.model_dump(mode="json")
     if payload.get("name") is None:
         payload.pop("name", None)
@@ -512,7 +512,7 @@ async def _resolve_variant(
             ],
             "products": [product],
         },
-        response_metadata={"used_tray": True},
+        response_metadata={"used_commerce_provider": True},
     )
 
 
@@ -593,7 +593,7 @@ def current_cart_reply(
             response_metadata={
                 "domain": "commerce",
                 "purchase_stage": state.purchase_stage or "cart_created",
-                "used_tray": False,
+                "used_commerce_provider": False,
             },
         )
     checkout = checkout_capabilities(state)
@@ -623,7 +623,7 @@ def current_cart_reply(
                 if checkout_question
                 else {}
             ),
-            "used_tray": False,
+            "used_commerce_provider": False,
         },
     )
 
@@ -1023,7 +1023,7 @@ def _reconciled_cart_result(
                 items=items,
             ),
             **next_metadata,
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -1567,7 +1567,7 @@ async def _create_cart_items_checkout_impl(
                 if not partial
                 else {}
             ),
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 

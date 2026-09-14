@@ -7,6 +7,10 @@ from typing import Any
 
 from .runtime_context import get_current_turn
 
+# Telemetria comercial: nomes neutros, sem citar fornecedor.
+# A renomeacao e QUEBRA EXTERNA — ver docs/observability_breaking_rename.md.
+
+
 
 _CPF_RE = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
 _CNPJ_RE = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")

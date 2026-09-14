@@ -172,7 +172,7 @@ async def test_order_status_uses_recovered_state_order_id(monkeypatch):
         return AgentResult(
             reply_text="Pedido 0CC131B51070AEF aguardando pagamento.",
             intent="commerce",
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
 
     monkeypatch.setattr(openai_agent, "get_order_facts", fake_facts)

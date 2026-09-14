@@ -41,7 +41,7 @@ def test_multiple_llm_calls_classify_complex_turn():
         response_metadata={
             "domain": "commerce",
             "response_source": "openai",
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -67,7 +67,7 @@ def test_transactional_facts_force_critical_execution_path():
         response_metadata={
             "domain": "commerce",
             "response_source": "tool",
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 

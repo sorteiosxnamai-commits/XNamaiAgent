@@ -102,7 +102,7 @@ async def resolve_product_image(
                 "image_url_found": False,
                 "media_send_supported": False,
                 "media_send_failed": False,
-                "used_tray": True,
+                "used_commerce_provider": True,
             },
         )
 
@@ -139,7 +139,7 @@ async def resolve_product_image(
                 "image_url_found": False,
                 "media_send_supported": False,
                 "media_send_failed": False,
-                "used_tray": True,
+                "used_commerce_provider": True,
             },
         )
     name = str(product.get("name") or product_reference.name or "produto")
@@ -159,6 +159,6 @@ async def resolve_product_image(
             "media_send_supported": False,
             "media_send_failed": False,
             "media_supported": False,
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )

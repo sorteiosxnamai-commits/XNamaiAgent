@@ -21,7 +21,7 @@ def test_catalog_item_key_variant_vs_product():
 def test_persona_cannot_supply_price_via_authority():
     assert PersonaAuthority.may_assert_commercial_fact() is False
     assert CommerceDataAuthority.may_supply("price", FactSource.APPROVED_PERSONA) is False
-    assert CommerceDataAuthority.may_supply("price", FactSource.TRAY_LIVE) is True
+    assert CommerceDataAuthority.may_supply("price", FactSource.COMMERCE_LIVE) is True
 
 
 def test_cross_tenant_product_rejected():

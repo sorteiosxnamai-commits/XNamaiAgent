@@ -757,9 +757,11 @@ def test_adapter_imports_only_transport_level_modules():
         "app.webhook_parser",
     }
 
-    tree = ast.parse(
-        Path("app/channels/ycloud_whatsapp.py").read_text(encoding="utf-8")
-    )
+    # Raiz a partir de __file__: com caminho relativo ao cwd esta guarda
+    # quebrava ao rodar pytest de fora da raiz do repositorio.
+    adapter_path = Path(__file__).resolve().parents[1] / "app" / "channels" / "ycloud_whatsapp.py"
+    assert adapter_path.is_file(), f"adaptador YCloud nao encontrado: {adapter_path}"
+    tree = ast.parse(adapter_path.read_text(encoding="utf-8"))
     imported: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

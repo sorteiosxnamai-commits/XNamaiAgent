@@ -475,7 +475,7 @@ def ensure_tables() -> None:
                     url text NULL,
                     image_url text NULL,
                     freshness_at timestamptz NOT NULL DEFAULT now(),
-                    factual_source text NOT NULL DEFAULT 'tray_search',
+                    factual_source text NOT NULL DEFAULT 'commerce_search',
                     payload jsonb NOT NULL DEFAULT '{}'::jsonb,
                     updated_at timestamptz NOT NULL DEFAULT now(),
                     UNIQUE (tenant_id, catalog_item_key)

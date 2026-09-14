@@ -71,7 +71,7 @@ def test_commercial_signals_trigger_judge():
         reply_text="O modelo custa R$ 199,90.",
         intent="commerce",
         commercial_data={"products": [{"id": "1", "current_price": "199.90"}]},
-        response_metadata={"response_source": "openai", "used_tray": True},
+        response_metadata={"response_source": "openai", "used_commerce_provider": True},
     )
     signals = collect_judge_risk_signals(
         result=priced,
@@ -98,7 +98,7 @@ async def test_shadow_judge_does_not_rewrite_reply(monkeypatch):
         intent="order",
         handoff_required=False,
         commercial_data={"payment_url": "https://checkout.example/1"},
-        response_metadata={"response_source": "openai", "used_tray": True},
+        response_metadata={"response_source": "openai", "used_commerce_provider": True},
     )
     context = TurnRuntimeContext(trace_id="judge-shadow")
     token = set_current_turn(context)

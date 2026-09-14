@@ -22,17 +22,19 @@ def _allow_critique_llm_without_risk(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_capability_catalog_exposes_neutral_order_apis():
-    """O catálogo continua publicando a consulta de pedido — agora neutra.
+def test_capability_catalog_exposes_the_order_apis_the_critique_loop_needs():
+    """O catalogo continua anunciando as capacidades de pedido do baseline.
 
-    ``get_order_payment`` era capability específica do provider legado e saiu do
-    registry; ``get_order`` é a capacidade genérica equivalente e permanece
-    retryable, que é a propriedade que o loop de crítica depende.
+    A versao anterior deste teste exigia a AUSENCIA de ``get_order_payment``,
+    tratando-a como capability do provider legado. Nao era: estava no contrato
+    desde o baseline 201bd16 e some-la encolhia o prompt. O que importa para o
+    loop de critica e que as consultas de pedido estejam presentes e sejam
+    retryable.
     """
     catalog = build_capability_catalog()
-    assert "get_order" in catalog["commerce_apis"]
-    assert "get_order" in RETRYABLE_API_NAMES
-    assert "get_order_payment" not in catalog["commerce_apis"]
+    for name in ("get_order", "get_order_complete", "get_order_payment", "list_orders"):
+        assert name in catalog["commerce_apis"], f"{name} sumiu do catalogo"
+        assert name in RETRYABLE_API_NAMES, f"{name} deixou de ser retryable"
     assert catalog["policy"]
 
 

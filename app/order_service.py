@@ -23,13 +23,13 @@ ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 def _failure_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     mapping = {
         "order_failure_status": "status_code",
-        "order_failure_code": "tray_error_code",
-        "order_failure_name": "tray_error_name",
-        "order_failure_type": "tray_error_type",
-        "order_failure_field": "tray_error_field",
-        "order_failure_fields": "tray_error_fields",
-        "order_failure_causes": "tray_error_causes",
-        "order_failure_message": "tray_error_message",
+        "order_failure_code": "provider_error_code",
+        "order_failure_name": "provider_error_name",
+        "order_failure_type": "provider_error_type",
+        "order_failure_field": "provider_error_field",
+        "order_failure_fields": "provider_error_fields",
+        "order_failure_causes": "provider_error_causes",
+        "order_failure_message": "provider_error_message",
     }
     return {
         target: payload[source]
@@ -101,7 +101,7 @@ def _fold_text(value: str | None) -> str:
 def order_reference_candidates(value: str | None) -> list[str]:
     """Expand glued store-code + internal-id references into lookup candidates.
 
-    Customers often paste both Tray handles together, e.g.
+    Customers often paste both provider handles together, e.g.
     ``0CC131B51070AEF25400`` = store code ``0CC131B51070AEF`` + id ``25400``.
     """
     raw = str(value or "").strip().strip(".,;!?")
@@ -123,7 +123,7 @@ def order_reference_candidates(value: str | None) -> list[str]:
         if 10 <= len(store_code) <= 16 and not store_code.isdigit():
             add(store_code)
             add(internal_id)
-    # Tray get_order*_ endpoints expect the numeric internal id first.
+    # The provider's get_order*_ capabilities expect the numeric internal id first.
     # Store hex codes from payment URLs often return 422.
     preferred: list[str] = []
     for token in candidates:
@@ -449,7 +449,7 @@ async def prepare_order(
                 },
                 "pending_action": "awaiting_checkout_data",
                 "pending_action_product_ids": [],
-                "used_tray": bool(state.cart_session_id),
+                "used_commerce_provider": bool(state.cart_session_id),
             },
         )
     print("[sales.order.confirmation.pending]", {
@@ -486,7 +486,7 @@ async def prepare_order(
             "purchase_stage": "order_review",
             "pending_action": "awaiting_order_confirmation",
             "pending_action_product_ids": [],
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -502,7 +502,7 @@ def confirm_prepared_order(state: CommerceConversationState) -> AgentResult:
             intent="commerce",
             safety_reason="order_confirmation_missing",
             commercial_data={"success": False, "stage": "order_confirmation"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     print("[sales.order.confirmation.accepted]", {
         "session": _session_tag(state.cart_session_id),
@@ -520,7 +520,7 @@ def confirm_prepared_order(state: CommerceConversationState) -> AgentResult:
                 "confirmed_order_review_version": state.order_review_version,
             },
             "clear_pending_action": True,
-            "used_tray": False,
+            "used_commerce_provider": False,
         },
     )
 
@@ -546,7 +546,7 @@ async def create_order(
                 "success": True, "existing": True, "order_id": state.order_id,
                 "status": state.order_status,
             },
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     if (
         state.order_confirmation_status != "confirmed"
@@ -558,7 +558,7 @@ async def create_order(
             intent="commerce",
             safety_reason="order_confirmation_required",
             commercial_data={"success": False, "stage": "order_creation"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     facts, missing = await _current_order_facts(state, execute)
     if facts is None:
@@ -579,7 +579,7 @@ async def create_order(
                 },
                 "pending_action": "awaiting_checkout_data",
                 "pending_action_product_ids": [],
-                "used_tray": True,
+                "used_commerce_provider": True,
             },
         )
     if facts["version"] != state.confirmed_order_review_version:
@@ -598,7 +598,7 @@ async def create_order(
                 "purchase_stage": "order_review",
                 "pending_action": "awaiting_order_confirmation",
                 "pending_action_product_ids": [],
-                "used_tray": True,
+                "used_commerce_provider": True,
             },
         )
     reconciled = None
@@ -620,7 +620,7 @@ async def create_order(
                 response_metadata={
                     "domain": "commerce",
                     "order_state": {"order_creation_ambiguous": True},
-                    "used_tray": True,
+                    "used_commerce_provider": True,
                 },
             )
         reconciled = _existing_order(preflight)
@@ -664,10 +664,10 @@ async def create_order(
             "session": _session_tag(state.cart_session_id),
             "success": False,
             "status_code": effective.get("status_code"),
-            "tray_error_field": effective.get("tray_error_field"),
-            "tray_error_fields": effective.get("tray_error_fields"),
-            "tray_error_code": effective.get("tray_error_code"),
-            "tray_error_message": effective.get("tray_error_message"),
+            "provider_error_field": effective.get("provider_error_field"),
+            "provider_error_fields": effective.get("provider_error_fields"),
+            "provider_error_code": effective.get("provider_error_code"),
+            "provider_error_message": effective.get("provider_error_message"),
         })
         return AgentResult(
             reply_text="A cria\u00e7\u00e3o do pedido n\u00e3o foi confirmada pela integra\u00e7\u00e3o.",
@@ -681,7 +681,7 @@ async def create_order(
             response_metadata={
                 "domain": "commerce",
                 "order_state": {"order_creation_ambiguous": ambiguous},
-                "used_tray": True,
+                "used_commerce_provider": True,
                 **_failure_metadata(effective),
             },
         )
@@ -715,7 +715,7 @@ async def create_order(
             },
             "purchase_stage": "order_created",
             "clear_pending_action": True,
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -731,7 +731,7 @@ def _order_not_found_result(target: str) -> AgentResult:
         commercial_data={"success": False, "stage": "order_status"},
         response_metadata={
             "domain": "commerce",
-            "used_tray": True,
+            "used_commerce_provider": True,
             "pending_action": "awaiting_order_customer_document",
             "order_state": {"order_lookup_id": target},
         },
@@ -746,7 +746,7 @@ def invalid_tax_document_result() -> AgentResult:
         commercial_data={"success": False, "stage": "order_customer_lookup"},
         response_metadata={
             "domain": "commerce",
-            "used_tray": False,
+            "used_commerce_provider": False,
             "pending_action": "awaiting_order_customer_document",
         },
     )
@@ -845,7 +845,7 @@ def _order_facts_result(
             "pending_action": (
                 "awaiting_payment" if awaiting_payment else None
             ),
-            "used_tray": True,
+            "used_commerce_provider": True,
         },
     )
 
@@ -904,7 +904,7 @@ async def get_order_facts(
             "status_lookup": True,
         })
 
-    # Storefront hex codes often 422 on Tray; resolve numeric id via CPF/email first.
+    # Storefront hex codes often 422 on the provider; resolve numeric id via CPF/email first.
     if allow_customer_recovery and (
         not targets
         or not any(token.isdigit() for token in targets)
@@ -925,7 +925,7 @@ async def get_order_facts(
             intent="commerce",
             safety_reason="order_id_required",
             commercial_data={"success": False, "stage": "order_status"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
 
     last_error: dict[str, Any] | None = None
@@ -969,7 +969,7 @@ async def get_order_facts(
                 commercial_data={"success": False, "stage": "order_status"},
                 response_metadata={
                     "domain": "commerce",
-                    "used_tray": True,
+                    "used_commerce_provider": True,
                     **_failure_metadata(result),
                 },
             )
@@ -992,7 +992,7 @@ async def get_order_facts(
             commercial_data={"success": False, "stage": "order_status"},
             response_metadata={
                 "domain": "commerce",
-                "used_tray": True,
+                "used_commerce_provider": True,
                 **_failure_metadata(last_error),
             },
         )
@@ -1001,7 +1001,7 @@ async def get_order_facts(
         intent="commerce",
         safety_reason="order_not_found",
         commercial_data={"success": False, "stage": "order_status"},
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )
 
 
@@ -1019,7 +1019,7 @@ async def find_order_by_customer_document(
             intent="commerce",
             safety_reason="order_id_required",
             commercial_data={"success": False, "stage": "order_customer_lookup"},
-            response_metadata={"domain": "commerce", "used_tray": False},
+            response_metadata={"domain": "commerce", "used_commerce_provider": False},
         )
     try:
         customer_result = await execute(
@@ -1034,7 +1034,7 @@ async def find_order_by_customer_document(
             intent="commerce",
             safety_reason="order_customer_lookup_technical_failure",
             commercial_data={"success": False, "stage": "order_customer_lookup"},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
     customers = [
         customer
@@ -1050,7 +1050,7 @@ async def find_order_by_customer_document(
             intent="commerce",
             safety_reason="order_customer_not_confirmed",
             commercial_data={"success": False, "stage": "order_customer_lookup"},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
     try:
         order_result = await execute(
@@ -1065,7 +1065,7 @@ async def find_order_by_customer_document(
             intent="commerce",
             safety_reason="customer_orders_lookup_technical_failure",
             commercial_data={"success": False, "stage": "order_customer_lookup"},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
     confirmed_customer_id = str(customers[0]["id"])
 
@@ -1106,7 +1106,7 @@ async def find_order_by_customer_document(
             intent="commerce",
             safety_reason="order_customer_mismatch",
             commercial_data={"success": False, "stage": "order_customer_lookup"},
-            response_metadata={"domain": "commerce", "used_tray": True},
+            response_metadata={"domain": "commerce", "used_commerce_provider": True},
         )
     canonical_id = str(
         matching_order.get("order_id")
@@ -1126,5 +1126,5 @@ async def find_order_by_customer_document(
         intent="commerce",
         safety_reason="order_status_technical_failure",
         commercial_data={"success": False, "stage": "order_status"},
-        response_metadata={"domain": "commerce", "used_tray": True},
+        response_metadata={"domain": "commerce", "used_commerce_provider": True},
     )

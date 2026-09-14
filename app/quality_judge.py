@@ -140,7 +140,7 @@ def collect_judge_risk_signals(
             signals.append("payment_consulted")
         else:
             signals.append("order_context_present")
-    if metadata.get("used_tray") and metadata.get("fallback_reason"):
+    if metadata.get("used_commerce_provider") and metadata.get("fallback_reason"):
         signals.append("fallback_after_partial_tooling")
     if result.safety_reason and "fail" in str(result.safety_reason).casefold():
         signals.append("tool_or_safety_failure")
@@ -222,7 +222,7 @@ def _judge_evidence_payload(result: AgentResult) -> dict[str, Any]:
             "evidence_sources": validation.get("evidence_sources") or [],
         },
         "commerce_flags": {
-            "used_tray": bool(metadata.get("used_tray")),
+            "used_commerce_provider": bool(metadata.get("used_commerce_provider")),
             "response_source": metadata.get("response_source"),
             "pending_action": metadata.get("pending_action"),
             "fallback_reason": metadata.get("fallback_reason"),

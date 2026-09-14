@@ -54,11 +54,6 @@ from .config import get_settings
 from .working_memory import WORKING_MEMORY_USAGE_POLICY, build_working_memory
 from .guardrails import (
     detect_commerce_inquiry,
-    detect_current_raffle_inquiry,
-    detect_raffle_history_inquiry,
-    detect_rules_inquiry,
-    detect_balance_inquiry,
-    detect_coupon_code_inquiry,
 )
 from .models import AgentResult, IncomingMessage, SalesInterpretation
 from .turn_runtime import LLMCallBudgetExceeded
@@ -438,8 +433,9 @@ def deterministic_scope(text: str | None) -> dict[str, Any]:
     normalized = value.lower()
     if _is_greeting(value):
         return {"domain": "greeting", "action": "greeting", "_source": "fallback"}
-    if detect_balance_inquiry(value) or detect_coupon_code_inquiry(value) or detect_raffle_history_inquiry(value) or detect_current_raffle_inquiry(value) or detect_rules_inquiry(value) or "sorteio" in normalized:
-        return {"domain": "raffle", "action": "local_flow", "_source": "fallback"}
+    # Parte 1: nao ha rota deterministica para o dominio de sorteio — a feature
+    # saiu do runtime. O texto de persona que menciona sorteios e preservado
+    # (PERSONA_PROTECTED), mas nao aciona mais fluxo local algum.
     if detect_commerce_inquiry(value) or normalized.startswith(("tem ", "vocês têm ", "voces tem ", "vende ")) or any(term in normalized for term in ("comprar", "adquirir", "quero ", "procuro", "busco", "orçamento", "orcamento", "comparar", "recomende")):
         plan = deterministic_sales_plan(value) or {}
         return {"domain": "commerce", **plan, "_source": "fallback"}
@@ -1047,7 +1043,7 @@ def _mark_sales_result(
     goal: str | None,
     response_source: str,
     used_openai_responder: bool,
-    used_tray: bool,
+    used_commerce_provider: bool,
     fallback_reason: str | None = None,
 ) -> AgentResult:
     interpreter_source = interpretation._source if interpretation else None
@@ -1057,7 +1053,7 @@ def _mark_sales_result(
         response_source=response_source,
         used_openai_interpreter=interpreter_source == "openai",
         used_openai_responder=used_openai_responder,
-        used_tray=used_tray,
+        used_commerce_provider=used_commerce_provider,
         fallback_reason=fallback_reason or (interpretation._fallback_reason if interpretation else None),
     )
     if interpretation is not None:
@@ -1177,7 +1173,7 @@ async def generate_clarification_reply(
     interpretation: SalesInterpretation,
     recent_turns: list[dict[str, Any]] | None = None,
     context_note: str | None = None,
-    used_tray: bool = False,
+    used_commerce_provider: bool = False,
     discovery_state: dict[str, Any] | None = None,
 ) -> AgentResult:
     settings = get_settings()
@@ -1197,7 +1193,7 @@ async def generate_clarification_reply(
             goal=interpretation.goal,
             response_source="openai",
             used_openai_responder=False,
-            used_tray=used_tray,
+            used_commerce_provider=used_commerce_provider,
         )
     if not settings.openai_api_key:
         return _mark_sales_result(
@@ -1211,7 +1207,7 @@ async def generate_clarification_reply(
             goal=interpretation.goal,
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=used_tray,
+            used_commerce_provider=used_commerce_provider,
             fallback_reason="openai_api_key_missing",
         )
 
@@ -1251,7 +1247,7 @@ async def generate_clarification_reply(
             goal=interpretation.goal,
             response_source="openai",
             used_openai_responder=True,
-            used_tray=used_tray,
+            used_commerce_provider=used_commerce_provider,
         )
     except (APIError, OpenAIGatewayError, LLMCallBudgetExceeded, ValueError, TypeError) as exc:
         print("[sales.clarification] failed", {"error_type": type(exc).__name__})
@@ -1266,7 +1262,7 @@ async def generate_clarification_reply(
             goal=interpretation.goal,
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=used_tray,
+            used_commerce_provider=used_commerce_provider,
             fallback_reason="clarification_responder_failed",
         )
 
@@ -1286,7 +1282,7 @@ async def _sales_response_with_openai(
 
     settings = get_settings()
     if not settings.openai_api_key or tray_result.safety_reason in {
-        "tray_adapter_unavailable", "product_match_failed", "product_not_found",
+        "commerce_provider_unavailable", "product_match_failed", "product_not_found",
         "ambiguous_product", "product_context_missing", "coupon_not_found",
         "order_not_found", "order_status_technical_failure",
         "invalid_customer_document", "order_customer_not_confirmed",
@@ -1409,7 +1405,7 @@ async def _sales_response_with_openai(
             goal=plan.get("goal"),
             response_source="openai",
             used_openai_responder=True,
-            used_tray=bool(tray_result.response_metadata.get("used_tray", True)),
+            used_commerce_provider=bool(tray_result.response_metadata.get("used_commerce_provider", True)),
         )
     except (APIError, OpenAIGatewayError, LLMCallBudgetExceeded, ValueError, TypeError) as exc:
         print("[sales.responder] failed", {"error_type": type(exc).__name__})
@@ -1514,7 +1510,7 @@ async def _execute_contextual_product_lookup(
             reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
             intent="commerce",
             handoff_required=False,
-            safety_reason="tray_adapter_unavailable",
+            safety_reason="commerce_provider_unavailable",
         )
     product = {
         key: value
@@ -1536,7 +1532,7 @@ async def _execute_contextual_product_lookup(
                 reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
                 intent="commerce",
                 handoff_required=False,
-                safety_reason="tray_adapter_unavailable",
+                safety_reason="commerce_provider_unavailable",
             )
     enriched = await enrich_product_variants([product], interpretation, execute_tool)
     availability_input = {
@@ -2077,7 +2073,7 @@ async def _execute_compiled_product_retrieval(
                 reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
                 intent="commerce",
                 handoff_required=False,
-                safety_reason="tray_adapter_unavailable",
+                safety_reason="commerce_provider_unavailable",
             )
         reason = "exact_product_not_found" if retrieval_plan.mode == "exact" else "catalog_empty"
         print("[sales.retrieval.empty]", {"reason": reason})
@@ -2103,7 +2099,7 @@ async def _execute_compiled_product_retrieval(
                     reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
                     intent="commerce",
                     handoff_required=False,
-                    safety_reason="tray_adapter_unavailable",
+                    safety_reason="commerce_provider_unavailable",
                 )
             brand = (interpretation.subject.brand or "").strip()
             if used_brand_candidates and brand and candidates:
@@ -2228,14 +2224,15 @@ async def _execute_compiled_product_retrieval(
                             {
                                 "tenant_id": tenant_id,
                                 "seeded": seeded,
-                                "fallback": "merged_with_tray_pool",
+                                "merged_with": "provider_pool",
                             },
                         )
-                elif bool(
-                    getattr(settings, "agent_catalog_index_fallback_to_tray", True)
-                ):
+                else:
+                    # Sem fallback de fornecedor: o indice vazio e apenas
+                    # observado. A setting AGENT_CATALOG_INDEX_FALLBACK_TO_TRAY
+                    # saiu do Settings e nao pode voltar por getattr default.
                     print(
-                        "[catalog.index.fallback]",
+                        "[catalog.index.empty]",
                         {"reason": "catalog_index_empty_or_unavailable"},
                     )
             except Exception as exc:  # noqa: BLE001
@@ -2243,21 +2240,20 @@ async def _execute_compiled_product_retrieval(
                     "[catalog.index.read.error]",
                     {"error_type": type(exc).__name__},
                 )
-                if bool(getattr(settings, "agent_catalog_index_fallback_to_tray", True)):
-                    print(
-                        "[catalog.index.fallback]",
-                        {"reason": "catalog_index_fallback"},
-                    )
+                print(
+                    "[catalog.index.read.failed]",
+                    {"reason": "catalog_index_unavailable"},
+                )
 
         # Hybrid hard/soft ranking over the filtered pool (no free LLM catalog search).
         hard_filtered = hybrid_rank_products(
             hard_filtered,
             interpretation,
             mode="recommendation",
-            factual_source="tray_search",
+            factual_source="commerce_search",
         )
         if bool(getattr(get_settings(), "agent_catalog_index_write_enabled", True)):
-            index_products_best_effort(hard_filtered, factual_source="tray_search")
+            index_products_best_effort(hard_filtered, factual_source="commerce_search")
         enriched = await enrich_product_variants(
             hard_filtered,
             interpretation,
@@ -2277,7 +2273,7 @@ async def _execute_compiled_product_retrieval(
             reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
             intent="commerce",
             handoff_required=False,
-            safety_reason="tray_adapter_unavailable",
+            safety_reason="commerce_provider_unavailable",
         )
     from .commerce_router import _product_result
 
@@ -2493,7 +2489,7 @@ async def _respond_to_commerce_service(
             else "deterministic_fallback"
         ),
         used_openai_responder=False,
-        used_tray=bool(result.response_metadata.get("used_tray")),
+        used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
         fallback_reason=result.safety_reason,
     )
 
@@ -2784,7 +2780,7 @@ def _pending_action_rejected_result(
         goal=interpretation.goal,
         response_source="deterministic_fallback",
         used_openai_responder=False,
-        used_tray=False,
+        used_commerce_provider=False,
         fallback_reason="pending_action_rejected",
     )
 
@@ -2848,7 +2844,7 @@ async def _handle_sales_message_inner(
                     "order_review_version": None,
                     "confirmed_order_review_version": None,
                 },
-                "used_tray": False,
+                "used_commerce_provider": False,
             },
         )
         print("[sales.order.confirmation.turn]", {
@@ -3187,7 +3183,7 @@ async def _handle_sales_message_inner(
                 goal=interpretation.goal,
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason="brevo_instagram_media_unviewable",
             )
         # Instagram Story / unsupported IG media never arrives with image_url via
@@ -3216,7 +3212,7 @@ async def _handle_sales_message_inner(
                 goal=interpretation.goal,
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason="instagram_price_without_media",
             )
         # Brevo often splits photo+caption: text "qual o preço desse?" arrives
@@ -3263,7 +3259,7 @@ async def _handle_sales_message_inner(
                     goal=interpretation.goal,
                     response_source="deterministic_fallback",
                     used_openai_responder=False,
-                    used_tray=False,
+                    used_commerce_provider=False,
                     fallback_reason="deictic_price_without_image",
                 )
         if (
@@ -3290,8 +3286,8 @@ async def _handle_sales_message_inner(
                     used_openai_responder=bool(
                         image_result.response_metadata.get("used_openai_responder")
                     ),
-                    used_tray=bool(
-                        image_result.response_metadata.get("used_tray")
+                    used_commerce_provider=bool(
+                        image_result.response_metadata.get("used_commerce_provider")
                         or (image_result.commercial_data or {}).get("products")
                     ),
                     fallback_reason=image_result.safety_reason,
@@ -3346,7 +3342,7 @@ async def _handle_sales_message_inner(
                 goal=interpretation.goal,
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason="plausible_matches_price_blocked",
             )
     purchase_action = interpretation.purchase_action if interpretation is not None else None
@@ -3363,7 +3359,7 @@ async def _handle_sales_message_inner(
                 response_metadata={
                     "domain": "commerce",
                     "clear_pending_action": True,
-                    "used_tray": False,
+                    "used_commerce_provider": False,
                 },
             )
             return await _respond_to_commerce_service(
@@ -3398,7 +3394,7 @@ async def _handle_sales_message_inner(
                     response_metadata={
                         "domain": "commerce",
                         "clear_pending_action": True,
-                        "used_tray": False,
+                        "used_commerce_provider": False,
                     },
                 )
             else:
@@ -3425,7 +3421,7 @@ async def _handle_sales_message_inner(
                     response_metadata={
                         "domain": "commerce",
                         "clear_pending_action": True,
-                        "used_tray": False,
+                        "used_commerce_provider": False,
                     },
                 )
             return await _respond_to_commerce_service(
@@ -3463,7 +3459,7 @@ async def _handle_sales_message_inner(
                     } if final_state.cart_session_id else {"cart_session_id": None, "cart_items": []},
                     "purchase_stage": "shopping",
                     "clear_pending_action": True,
-                    "used_tray": True,
+                    "used_commerce_provider": True,
                 },
             )
             state = final_state
@@ -3499,7 +3495,7 @@ async def _handle_sales_message_inner(
                 response_metadata={
                     "domain": "commerce",
                     "clear_pending_action": True,
-                    "used_tray": True,
+                    "used_commerce_provider": True,
                 },
             )
         return await _respond_to_commerce_service(
@@ -3612,7 +3608,7 @@ async def _handle_sales_message_inner(
                     "purchase_stage": "shipping",
                     "pending_action": "awaiting_shipping_zipcode",
                     "pending_action_product_ids": [],
-                    "used_tray": False,
+                    "used_commerce_provider": False,
                 },
             )
             return await _respond_to_commerce_service(
@@ -3790,13 +3786,13 @@ async def _handle_sales_message_inner(
                 response_source=(
                     "technical_fallback"
                     if lookup.safety_reason in {
-                        "tray_adapter_unavailable",
+                        "commerce_provider_unavailable",
                         "product_match_failed",
                     }
                     else "deterministic_fallback"
                 ),
                 used_openai_responder=False,
-                used_tray=bool(lookup.response_metadata.get("used_tray", True)),
+                used_commerce_provider=bool(lookup.response_metadata.get("used_commerce_provider", True)),
                 fallback_reason=lookup.safety_reason,
             )
     if (
@@ -3833,7 +3829,7 @@ async def _handle_sales_message_inner(
             goal=plan.get("goal"),
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
             fallback_reason=channel_result.safety_reason,
         )
     if interpretation is not None and interpretation.image_request:
@@ -3867,8 +3863,8 @@ async def _handle_sales_message_inner(
                         used_openai_responder=bool(
                             image_result.response_metadata.get("used_openai_responder")
                         ),
-                        used_tray=bool(
-                            image_result.response_metadata.get("used_tray")
+                        used_commerce_provider=bool(
+                            image_result.response_metadata.get("used_commerce_provider")
                             or (image_result.commercial_data or {}).get("products")
                         ),
                         fallback_reason=image_result.safety_reason,
@@ -3892,7 +3888,7 @@ async def _handle_sales_message_inner(
                 goal=plan.get("goal"),
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
             )
         media_result = await resolve_product_image(
             product_reference=resolved_product,
@@ -3916,7 +3912,7 @@ async def _handle_sales_message_inner(
                 else "deterministic_fallback"
             ),
             used_openai_responder=False,
-            used_tray=True,
+            used_commerce_provider=True,
             fallback_reason=media_result.safety_reason,
         )
     if interpretation is not None and pending_link_requested:
@@ -3928,7 +3924,7 @@ async def _handle_sales_message_inner(
                 goal=plan.get("goal"),
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason=missing.safety_reason,
             )
         link_facts = await execute_tool(
@@ -3946,7 +3942,7 @@ async def _handle_sales_message_inner(
             intent="commerce",
             handoff_required=False,
             safety_reason=(
-                "tray_adapter_unavailable"
+                "commerce_provider_unavailable"
                 if link_failed
                 else "product_link_not_available"
                 if not isinstance(product_url, str)
@@ -3965,7 +3961,7 @@ async def _handle_sales_message_inner(
                 "domain": "commerce",
                 "active_product": resolved_product.model_dump(mode="json"),
                 "clear_pending_action": True,
-                "used_tray": True,
+                "used_commerce_provider": True,
             },
         )
         final = await _sales_response_with_openai(
@@ -3982,11 +3978,11 @@ async def _handle_sales_message_inner(
             goal=plan.get("goal"),
             response_source=(
                 "technical_fallback"
-                if link_result.safety_reason == "tray_adapter_unavailable"
+                if link_result.safety_reason == "commerce_provider_unavailable"
                 else "deterministic_fallback"
             ),
             used_openai_responder=False,
-            used_tray=True,
+            used_commerce_provider=True,
             fallback_reason=link_result.safety_reason,
         )
     if purchase_action == "set_cart_item_quantity":
@@ -3998,7 +3994,7 @@ async def _handle_sales_message_inner(
                 goal=plan.get("goal"),
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason=missing.safety_reason,
             )
         if interpretation.quantity is None:
@@ -4010,7 +4006,7 @@ async def _handle_sales_message_inner(
                 commercial_data={
                     "cart": {"mutation_success": False},
                 },
-                response_metadata={"domain": "commerce", "used_tray": False},
+                response_metadata={"domain": "commerce", "used_commerce_provider": False},
             )
         else:
             quantity_result = await set_cart_item_quantity(
@@ -4049,7 +4045,7 @@ async def _handle_sales_message_inner(
             goal=plan.get("goal"),
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=bool(quantity_result.response_metadata.get("used_tray")),
+            used_commerce_provider=bool(quantity_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=quantity_result.safety_reason,
         )
     payment_preference = (
@@ -4109,7 +4105,7 @@ async def _handle_sales_message_inner(
                 goal=plan.get("goal"),
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason=missing.safety_reason,
             )
         _ensured_state, ensured_result = await _ensure_cart_for_purchase(
@@ -4137,7 +4133,7 @@ async def _handle_sales_message_inner(
                     else "deterministic_fallback"
                 ),
                 used_openai_responder=False,
-                used_tray=bool(ensured_result.response_metadata.get("used_tray", True)),
+                used_commerce_provider=bool(ensured_result.response_metadata.get("used_commerce_provider", True)),
                 fallback_reason=ensured_result.safety_reason,
             )
     if payment_requested:
@@ -4149,7 +4145,7 @@ async def _handle_sales_message_inner(
                 goal=plan.get("goal"),
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason=missing.safety_reason,
             )
 
@@ -4176,7 +4172,7 @@ async def _handle_sales_message_inner(
                         else "deterministic_fallback"
                     ),
                     used_openai_responder=False,
-                    used_tray=bool(cart_result.response_metadata.get("used_tray", True)),
+                    used_commerce_provider=bool(cart_result.response_metadata.get("used_commerce_provider", True)),
                     fallback_reason=cart_result.safety_reason,
                 )
         if not (
@@ -4190,7 +4186,7 @@ async def _handle_sales_message_inner(
                 goal=plan.get("goal"),
                 response_source="deterministic_fallback",
                 used_openai_responder=False,
-                used_tray=False,
+                used_commerce_provider=False,
                 fallback_reason=missing.safety_reason,
             )
 
@@ -4272,7 +4268,7 @@ async def _handle_sales_message_inner(
                 else "deterministic_fallback"
             ),
             used_openai_responder=False,
-            used_tray=bool(combined_result.response_metadata.get("used_tray")),
+            used_commerce_provider=bool(combined_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=payment_result.safety_reason,
         )
     if purchase_action == "inspect_cart":
@@ -4295,7 +4291,7 @@ async def _handle_sales_message_inner(
                 else "deterministic_fallback"
             ),
             used_openai_responder=False,
-            used_tray=bool(cart_result.response_metadata.get("used_tray")),
+            used_commerce_provider=bool(cart_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=cart_result.safety_reason,
         )
     if purchase_action in {"show_cart_link", "checkout_question"}:
@@ -4320,7 +4316,7 @@ async def _handle_sales_message_inner(
             goal=plan.get("goal"),
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
             fallback_reason="sales_responder_unavailable",
         )
     if purchase_action == "create_cart" and unresolved_purchase_items:
@@ -4348,7 +4344,7 @@ async def _handle_sales_message_inner(
             goal=plan.get("goal"),
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
             fallback_reason="purchase_item_unresolved",
         )
     if purchase_action == "create_cart" and (purchase_requests or resolved_product is not None):
@@ -4399,7 +4395,7 @@ async def _handle_sales_message_inner(
                 else "deterministic_fallback"
             ),
             used_openai_responder=False,
-            used_tray=bool(cart_result.response_metadata.get("used_tray", True)),
+            used_commerce_provider=bool(cart_result.response_metadata.get("used_commerce_provider", True)),
             fallback_reason=cart_result.safety_reason or "sales_responder_unavailable",
         )
     discovery_state = _discovery_state(interpretation, recent_turns) if interpretation else None
@@ -4448,7 +4444,7 @@ async def _handle_sales_message_inner(
             goal=plan.get("goal"),
             response_source="deterministic_fallback",
             used_openai_responder=False,
-            used_tray=False,
+            used_commerce_provider=False,
         )
 
     action = {
@@ -4495,12 +4491,12 @@ async def _handle_sales_message_inner(
                 query=query,
             )
             last_raw_result = raw_result
-            print("[sales.agent] tray_result", {"ok": raw_result is not None and raw_result.safety_reason != "tray_adapter_unavailable", "results_count": len((raw_result.commercial_data or {}).get("products", [])) if raw_result else 0})
+            print("[sales.agent] tray_result", {"ok": raw_result is not None and raw_result.safety_reason != "commerce_provider_unavailable", "results_count": len((raw_result.commercial_data or {}).get("products", [])) if raw_result else 0})
             tray_result = _ranked_result(raw_result, attempt_plan) if raw_result else None
             if tray_result:
                 print("[sales.agent] ranking", {"input_count": len((raw_result.commercial_data or {}).get("products", [])), "output_count": len((tray_result.commercial_data or {}).get("products", []))})
                 break
-            if raw_result and raw_result.safety_reason == "tray_adapter_unavailable":
+            if raw_result and raw_result.safety_reason == "commerce_provider_unavailable":
                 tray_result = raw_result
                 break
             if raw_result and raw_result.safety_reason not in {"product_not_found", "ambiguous_product"}:
@@ -4532,7 +4528,7 @@ async def _handle_sales_message_inner(
                 interpretation=interpretation,
                 recent_turns=recent_turns,
                 context_note="A busca atual não trouxe candidatos confiáveis; peça um critério diferente sem afirmar que o produto não existe.",
-                used_tray=True,
+                used_commerce_provider=True,
                 discovery_state=discovery_state,
             )
     final = await _sales_response_with_openai(
@@ -4546,7 +4542,7 @@ async def _handle_sales_message_inner(
     if final:
         return final
     technical_failure = tray_result.safety_reason in {
-        "tray_adapter_unavailable",
+        "commerce_provider_unavailable",
         "product_match_failed",
     }
     response_source = "technical_fallback" if technical_failure else "deterministic_fallback"
@@ -4556,7 +4552,7 @@ async def _handle_sales_message_inner(
         goal=plan.get("goal"),
         response_source=response_source,
         used_openai_responder=False,
-        used_tray=True,
+        used_commerce_provider=True,
         fallback_reason=(
             tray_result.safety_reason
             if response_source == "technical_fallback"

@@ -41,7 +41,9 @@ def test_commerce_intents_and_local_intents_remain_distinct():
     assert _primary_intent(detect_customer_intents("Tem estoque desse relógio?")) == "commerce"
     assert _primary_intent(detect_customer_intents("Quanto custa?")) == "commerce"
     assert _primary_intent(detect_customer_intents("Quanto fica no Pix?")) == "commerce"
-    assert _primary_intent(detect_customer_intents("saldo")) == "balance"
+    # Os intents locais do dominio de sorteio (balance, coupon_code, ...) sairam
+    # do runtime: "saldo" nao tem mais classificacao propria nem fonte de dados.
+    assert _primary_intent(detect_customer_intents("saldo")) != "commerce"
     assert "commerce" not in detect_customer_intents("saldo do João")
 
 
@@ -78,18 +80,16 @@ async def test_greeting_does_not_lookup_account_or_handoff(monkeypatch):
     from app import openai_agent
 
     monkeypatch.setattr(openai_agent, "get_settings", lambda: _settings(openai_api_key=""))
-    monkeypatch.setattr(openai_agent, "find_coupon_balance_by_phone", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("greeting must not lookup account")))
+    # Nao ha mais funcao de consulta de conta para espionar: a fonte saiu do
+    # runtime na Parte 1. A propriedade e agora estrutural, garantida por
+    # tests/test_no_legacy_dependencies.py.
     result = await openai_agent.generate_agent_reply_async(IncomingMessage(text="olá"), {})
     assert result.intent == "general"
     assert result.handoff_required is False
     assert result.reply_text
 
 
-def test_commerce_facts_do_not_lookup_personal_balance(monkeypatch):
-    def fail_account_lookup(*args, **kwargs):
-        raise AssertionError("commerce must not query local account")
-
-    monkeypatch.setattr("app.context_builder.find_coupon_balance_by_phone", fail_account_lookup)
+def test_commerce_facts_do_not_lookup_personal_balance():
     facts = gather_customer_facts(
         IncomingMessage(sender_phone="5511999999999", text="Vocês têm Tissot Seastar?"),
         {"found": True, "name": "Cliente"},
@@ -104,7 +104,6 @@ async def test_async_agent_does_not_preload_account_for_commerce(monkeypatch):
     from app import openai_agent
 
     monkeypatch.setattr(openai_agent, "get_settings", lambda: _settings(openai_api_key=""))
-    monkeypatch.setattr(openai_agent, "find_coupon_balance_by_phone", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not lookup account")))
     result = await openai_agent.generate_agent_reply_async(
         IncomingMessage(text="Quanto fica no Pix?"),
         {},
@@ -249,7 +248,7 @@ async def test_broad_recommendation_with_budget_starts_retrieval(monkeypatch):
     assert search_calls == [("search_products", {"name": "relógio", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
     assert result.reply_text == "Encontrei uma opção dentro da faixa informada."
     assert result.safety_reason != "recommendation_not_found"
-    assert result.response_metadata["used_tray"] is True
+    assert result.response_metadata["used_commerce_provider"] is True
 
 
 @pytest.mark.asyncio
@@ -322,26 +321,6 @@ async def test_ranking_removes_incompatible_brand_model_candidate(monkeypatch):
     )
     assert "Tissot Seastar" in result.reply_text
     assert "Tissot Tradition" not in result.reply_text
-
-
-@pytest.mark.asyncio
-async def test_rules_use_local_flow_without_commerce_provider(monkeypatch):
-    """Regra genérica: FAQ de regulamento é fluxo local e nunca chama o comercial.
-
-    O conteúdo do regulamento legado saiu do runtime (Task 10). Sem base oficial
-    a resposta declara explicitamente "não configurado" — nunca inventa regra.
-    """
-    from app import openai_agent
-    import app.sales_agent as sales_agent
-
-    settings = _settings(openai_api_key="")
-    monkeypatch.setattr(openai_agent, "get_settings", lambda: settings)
-    monkeypatch.setattr(sales_agent, "get_settings", lambda: settings)
-    monkeypatch.setattr("app.commerce_router.execute_tool", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("rules must not call the commerce provider")))
-    result = await openai_agent.generate_agent_reply_async(IncomingMessage(text="como funciona o sorteio?"), {})
-    assert result.intent == "rules_faq"
-    assert "não configurado" in result.reply_text.casefold()
-    assert "Lotomania" not in result.reply_text
 
 
 @pytest.mark.asyncio
