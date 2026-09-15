@@ -1167,6 +1167,106 @@ def _needs_clarification_before_retrieval(
     return not discovery_state["subject_identifiable"]
 
 
+async def _generic_catalog_fast_path(message: IncomingMessage) -> AgentResult | None:
+    """Responde pelo catalogo generico antes da logica especializada legada.
+
+    O matcher legado decide identidade por `brand`/`model`/`mechanism`/
+    `dial_color` — campos de um catalogo de relogios. Sobre um catalogo comum
+    ele erra nos dois sentidos: descarta tudo (nenhum campo casa) ou aceita
+    qualquer irmao de marca. Foi assim que "Cabo Lightning iPhone Hmaston"
+    virou "Sim, encontrei" com fone de ouvido.
+
+    Este caminho so decide quando tem certeza. Abstem-se (devolve ``None``) se
+    nao houver provider comercial, se a consulta falhar ou se a pergunta nao
+    for de catalogo — e ai o fluxo legado segue intacto.
+    """
+    from .commerce.tools import commerce_tools_available, execute_tool
+
+    if not commerce_tools_available():
+        return None
+
+    from .commerce.generic_catalog import (
+        ANSWER_AMBIGUOUS,
+        ANSWER_BROWSE,
+        ANSWER_NOT_FOUND,
+        ANSWER_PRODUCT,
+        resolve_catalog_request,
+    )
+
+    try:
+        resposta = await resolve_catalog_request(
+            message.text or "", execute=execute_tool
+        )
+    except Exception:  # noqa: BLE001 - fast path nunca derruba o turno
+        return None
+    if resposta is None:
+        # Consulta falhou: "nao consegui olhar" nao e "nao temos". Deixa o
+        # fluxo legado tratar como indisponibilidade.
+        return None
+
+    from .commerce_router import _product_lines
+
+    def _numerar(produtos, inventario=None):
+        return nl_join(
+            f"{posicao}. {linha}"
+            for posicao, linha in enumerate(
+                _product_lines(produtos, inventario, compact=True), start=1
+            )
+        )
+
+    if resposta.kind == ANSWER_BROWSE:
+        if not resposta.products:
+            return None
+        print("[sales.fastpath]", {"kind": "browse", "count": len(resposta.products)})
+        return AgentResult(
+            reply_text=(
+                "Estes são alguns dos produtos disponíveis:" + "\n"
+                + _numerar(resposta.products)
+            ),
+            intent="commerce",
+            handoff_required=False,
+            commercial_data={"products": resposta.products},
+        )
+
+    if resposta.kind == ANSWER_PRODUCT and resposta.product:
+        print("[sales.fastpath]", {"kind": "product", "has_inventory": bool(resposta.inventory)})
+        return AgentResult(
+            reply_text="Encontrei:" + "\n" + _numerar([resposta.product], resposta.inventory),
+            intent="commerce",
+            handoff_required=False,
+            commercial_data={"products": [resposta.product]},
+        )
+
+    if resposta.kind == ANSWER_AMBIGUOUS and resposta.products:
+        print("[sales.fastpath]", {"kind": "ambiguous", "count": len(resposta.products)})
+        return AgentResult(
+            reply_text=(
+                "Encontrei mais de uma opção. Qual destas você procura?" + "\n"
+                + _numerar(resposta.products)
+            ),
+            intent="commerce",
+            handoff_required=False,
+            safety_reason="commerce_clarification",
+            commercial_data={"products": resposta.products},
+        )
+
+    if resposta.kind == ANSWER_NOT_FOUND:
+        # Marca coincidente NAO promove irmao a resposta afirmativa.
+        print("[sales.fastpath]", {"kind": "not_found"})
+        return AgentResult(
+            reply_text="Não encontrei esse produto no catálogo agora.",
+            intent="commerce",
+            handoff_required=False,
+            safety_reason="product_not_found",
+        )
+
+    return None
+
+
+def nl_join(iteravel) -> str:
+    return "\n".join(iteravel)
+
+
 async def generate_clarification_reply(
     *,
     message: IncomingMessage,
@@ -4417,6 +4517,15 @@ async def _handle_sales_message_inner(
             "known_preferences_count": discovery_state["known_preferences_count"],
         })
     vague_query = str(plan.get("query") or "").strip().lower() in {"", "alguma coisa", "algo", "qualquer coisa", "um produto", "uma coisa", "produto"}
+
+    # Fast path do catalogo generico, ANTES dos gates de clarificacao: eles
+    # disparam em `goal="discover"`, que e exatamente como "o que voces
+    # vendem?" e classificada — e a pergunta voltava ao cliente com 6.120
+    # produtos indexados. Abstem-se quando nao tem certeza; o legado segue.
+    resposta_catalogo = await _generic_catalog_fast_path(message)
+    if resposta_catalogo is not None:
+        return resposta_catalogo
+
     if interpretation and discovery_state and _needs_clarification_before_retrieval(interpretation, plan, discovery_state):
         return await generate_clarification_reply(
             message=message,
