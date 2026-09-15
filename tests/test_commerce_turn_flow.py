@@ -410,3 +410,34 @@ async def test_a_presented_list_longer_than_three_keeps_its_positions():
     )
     assert len(proximo.last_presented_products) == 4
     assert proximo.last_presented_products[-1].position == 4
+
+
+def test_continuity_turns_are_decided_before_the_legacy_checkout_branches():
+    """Ramos legados de carrinho respondiam antes do fast path.
+
+    "quanto custa?" sobre item ja escolhido voltava "confirme qual produto voce
+    quer comprar". A checagem precoce cobre o turno de continuidade — e so ele:
+    mensagem sem contexto comercial segue o fluxo legado inteiro.
+    """
+    import inspect
+
+    from app import sales_agent
+
+    fonte = inspect.getsource(sales_agent._generic_catalog_fast_path)
+    assert "continuidade" in fonte
+    assert "if not generico and not continuidade:" in fonte
+
+    corpo = inspect.getsource(sales_agent._handle_sales_message_inner)
+    precoce = corpo[: corpo.index("deterministic_confirmation = ")]
+    assert "only_browse=True" in precoce
+
+
+def test_a_message_without_commerce_context_still_falls_through():
+    """Sem produto ativo e sem lista, nada e decidido cedo."""
+    import inspect
+
+    from app import sales_agent
+
+    fonte = inspect.getsource(sales_agent._generic_catalog_fast_path)
+    assert 'getattr(state, "active_product", None)' in fonte
+    assert 'getattr(state, "last_presented_products", None)' in fonte

@@ -1191,12 +1191,51 @@ async def _generic_catalog_fast_path(
         return None
 
     if only_browse:
-        # Chamada precoce: so pergunta generica de catalogo. Um pedido
-        # especifico aqui atravessaria fluxo de carrinho/checkout que ainda
-        # nem foi avaliado.
+        # Chamada precoce. Duas situacoes podem ser decididas aqui sem risco:
+        #
+        # 1. pergunta generica de catalogo — nao tem nada a ver com carrinho;
+        # 2. turno de CONTINUIDADE ("o segundo", "quanto custa?", "tem foto?")
+        #    quando ja existe produto ativo ou lista apresentada.
+        #
+        # O caso 2 precisa vir cedo porque ramos legados de checkout respondem
+        # antes do fast path la embaixo — e respondiam "confirme qual produto
+        # voce quer comprar" a uma pergunta de preco sobre item ja escolhido.
+        # Mensagem sem contexto comercial nenhum continua seguindo o fluxo
+        # legado inteiro.
         from .commerce.generic_catalog import GENERIC_BROWSE, classify_catalog_request
+        from .commerce.turn_resolver import (
+            ACTION_BROWSE_CATALOG,
+            ACTION_CHECK_INVENTORY,
+            ACTION_CORRECT_REFERENCE,
+            ACTION_GET_DETAILS,
+            ACTION_GET_PRICE,
+            ACTION_SHOW_MEDIA,
+            ACTION_SHOW_MORE_MEDIA,
+            resolve_commerce_turn,
+        )
 
-        if classify_catalog_request(message.text or "").kind != GENERIC_BROWSE:
+        generico = (
+            classify_catalog_request(message.text or "").kind == GENERIC_BROWSE
+        )
+        tem_contexto = bool(
+            state is not None
+            and (
+                getattr(state, "active_product", None)
+                or getattr(state, "last_presented_products", None)
+            )
+        )
+        continuidade = tem_contexto and resolve_commerce_turn(
+            message.text or "", state=state
+        ).action in {
+            ACTION_BROWSE_CATALOG,
+            ACTION_CHECK_INVENTORY,
+            ACTION_CORRECT_REFERENCE,
+            ACTION_GET_DETAILS,
+            ACTION_GET_PRICE,
+            ACTION_SHOW_MEDIA,
+            ACTION_SHOW_MORE_MEDIA,
+        }
+        if not generico and not continuidade:
             return None
 
     from .commerce.turn_flow import run_commerce_turn
