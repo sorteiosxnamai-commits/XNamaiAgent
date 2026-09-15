@@ -420,7 +420,7 @@ def test_the_early_call_is_restricted_to_browse():
 
     fonte = inspect.getsource(sales_agent._handle_sales_message_inner)
     precoce = fonte[: fonte.index("deterministic_confirmation = ")]
-    assert "_generic_catalog_fast_path(message, only_browse=True)" in precoce
+    assert "only_browse=True" in precoce
 
 
 def test_the_full_fast_path_runs_before_the_clarification_gates():
@@ -429,7 +429,7 @@ def test_the_full_fast_path_runs_before_the_clarification_gates():
     from app import sales_agent
 
     fonte = inspect.getsource(sales_agent._handle_sales_message_inner)
-    assert fonte.index("resposta_catalogo = await _generic_catalog_fast_path(message)") < fonte.index(
+    assert fonte.index("resposta_catalogo = await _generic_catalog_fast_path(") < fonte.index(
         "_needs_clarification_before_retrieval(interpretation, plan, discovery_state)"
     )
 

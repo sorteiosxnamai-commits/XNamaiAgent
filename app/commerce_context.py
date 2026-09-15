@@ -146,6 +146,17 @@ class CommerceConversationState(BaseModel):
     last_story_product: dict[str, Any] | None = None
     # found_available | found_unknown | found_unavailable | plausible_matches | None
     product_resolution_state: str | None = None
+
+    # --- continuidade da conversa comercial ---------------------------------
+    # Mensagem curta so tem sentido contra o que veio antes: "tem outra?" e
+    # outra FOTO depois de uma foto, e outro PRODUTO depois de um preco. Sem
+    # lembrar a ultima acao, o agente reinterpreta cada turno como busca nova.
+    last_commerce_action: str | None = None
+    last_requested_fact: str | None = None
+    previous_active_product: CommerceProductReference | None = None
+    # Paginacao de midia do produto atual, para "manda outra".
+    last_media_product_id: str | None = None
+    last_media_index: int = 0
     active_preferences: dict[str, Any] = Field(default_factory=dict)
     purchase_stage: str | None = None
     cart_id: str | None = None

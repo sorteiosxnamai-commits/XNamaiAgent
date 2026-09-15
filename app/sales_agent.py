@@ -1168,32 +1168,27 @@ def _needs_clarification_before_retrieval(
 
 
 async def _generic_catalog_fast_path(
-    message: IncomingMessage, *, only_browse: bool = False
+    message: IncomingMessage,
+    *,
+    only_browse: bool = False,
+    state: Any | None = None,
 ) -> AgentResult | None:
-    """Responde pelo catalogo generico antes da logica especializada legada.
+    """Resolve o turno comercial com continuidade, antes da logica legada.
 
     O matcher legado decide identidade por `brand`/`model`/`mechanism`/
-    `dial_color` — campos de um catalogo de relogios. Sobre um catalogo comum
-    ele erra nos dois sentidos: descarta tudo (nenhum campo casa) ou aceita
-    qualquer irmao de marca. Foi assim que "Cabo Lightning iPhone Hmaston"
-    virou "Sim, encontrei" com fone de ouvido.
+    `dial_color` — campos de um catalogo de relogios — e trata cada mensagem
+    como busca nova. Sobre um catalogo comum isso produz os dois erros que
+    chegaram a producao: "nao encontrei" para item que estava na tela, e "Sim,
+    encontrei" com o irmao de marca errado.
 
-    Este caminho so decide quando tem certeza. Abstem-se (devolve ``None``) se
-    nao houver provider comercial, se a consulta falhar ou se a pergunta nao
-    for de catalogo — e ai o fluxo legado segue intacto.
+    Aqui o turno passa pelo resolver (texto + estado) e pelo fluxo (tools +
+    estado). Abstem-se — devolve ``None`` — quando nao ha provider comercial ou
+    quando nao tem certeza; ai o fluxo legado segue intacto.
     """
     from .commerce.tools import commerce_tools_available, execute_tool
 
     if not commerce_tools_available():
         return None
-
-    from .commerce.generic_catalog import (
-        ANSWER_AMBIGUOUS,
-        ANSWER_BROWSE,
-        ANSWER_NOT_FOUND,
-        ANSWER_PRODUCT,
-        resolve_catalog_request,
-    )
 
     if only_browse:
         # Chamada precoce: so pergunta generica de catalogo. Um pedido
@@ -1204,71 +1199,150 @@ async def _generic_catalog_fast_path(
         if classify_catalog_request(message.text or "").kind != GENERIC_BROWSE:
             return None
 
+    from .commerce.turn_flow import run_commerce_turn
+
+    turno = state if state is not None else CommerceConversationState()
     try:
-        resposta = await resolve_catalog_request(
-            message.text or "", execute=execute_tool
+        resultado = await run_commerce_turn(
+            message.text or "", state=turno, execute=execute_tool
         )
     except Exception:  # noqa: BLE001 - fast path nunca derruba o turno
         return None
-    if resposta is None:
-        # Consulta falhou: "nao consegui olhar" nao e "nao temos". Deixa o
-        # fluxo legado tratar como indisponibilidade.
-        return None
 
+    return _render_commerce_turn(resultado)
+
+
+def _render_commerce_turn(resultado) -> AgentResult | None:
+    """Fatos -> texto. Nenhuma opiniao, nenhum produto reconstruido do texto."""
+    from .commerce.turn_flow import (
+        OUTCOME_AMBIGUOUS,
+        OUTCOME_BROWSE,
+        OUTCOME_CLARIFICATION,
+        OUTCOME_INVENTORY,
+        OUTCOME_MEDIA,
+        OUTCOME_MEDIA_UNAVAILABLE,
+        OUTCOME_PRODUCT_NOT_FOUND,
+        OUTCOME_PROVIDER_UNAVAILABLE,
+    )
     from .commerce_router import _product_lines
 
+    quebra = chr(10)
+
     def _numerar(produtos, inventario=None):
-        return nl_join(
+        return quebra.join(
             f"{posicao}. {linha}"
             for posicao, linha in enumerate(
                 _product_lines(produtos, inventario, compact=True), start=1
             )
         )
 
-    if resposta.kind == ANSWER_BROWSE:
-        if not resposta.products:
+    def _metadados(**extra):
+        base = {"domain": "commerce", "used_commerce_provider": True}
+        base.update(extra)
+        return base
+
+    print("[sales.turn]", {"outcome": resultado.outcome, "action": resultado.action})
+
+    if resultado.outcome == OUTCOME_PROVIDER_UNAVAILABLE:
+        # "Nao consegui olhar" nunca pode virar "nao temos".
+        return AgentResult(
+            reply_text=(
+                "Não consegui consultar as informações da loja neste momento. "
+                "Tente novamente em instantes."
+            ),
+            intent="commerce",
+            handoff_required=False,
+            safety_reason="commerce_provider_unavailable",
+            response_metadata=_metadados(used_commerce_provider=False),
+        )
+
+    if resultado.outcome == OUTCOME_BROWSE:
+        if not resultado.products:
             return None
-        print("[sales.fastpath]", {"kind": "browse", "count": len(resposta.products)})
         return AgentResult(
-            reply_text=(
-                "Estes são alguns dos produtos disponíveis:" + "\n"
-                + _numerar(resposta.products)
-            ),
+            reply_text="Estes são alguns dos produtos disponíveis:"
+            + quebra
+            + _numerar(resultado.products),
             intent="commerce",
             handoff_required=False,
-            commercial_data={"products": resposta.products},
-        )
-
-    if resposta.kind == ANSWER_PRODUCT and resposta.product:
-        print("[sales.fastpath]", {"kind": "product", "has_inventory": bool(resposta.inventory)})
-        return AgentResult(
-            reply_text="Encontrei:" + "\n" + _numerar([resposta.product], resposta.inventory),
-            intent="commerce",
-            handoff_required=False,
-            commercial_data={"products": [resposta.product]},
-        )
-
-    if resposta.kind == ANSWER_AMBIGUOUS and resposta.products:
-        print("[sales.fastpath]", {"kind": "ambiguous", "count": len(resposta.products)})
-        return AgentResult(
-            reply_text=(
-                "Encontrei mais de uma opção. Qual destas você procura?" + "\n"
-                + _numerar(resposta.products)
+            commercial_data={"products": resultado.products},
+            response_metadata=_metadados(
+                presented_products=True, active_topic="product_catalog"
             ),
+        )
+
+    if resultado.outcome == OUTCOME_AMBIGUOUS and resultado.products:
+        return AgentResult(
+            reply_text="Encontrei mais de uma opção. Qual destas você procura?"
+            + quebra
+            + _numerar(resultado.products),
             intent="commerce",
             handoff_required=False,
             safety_reason="commerce_clarification",
-            commercial_data={"products": resposta.products},
+            commercial_data={"products": resultado.products},
+            response_metadata=_metadados(
+                presented_products=True, active_topic="product_catalog"
+            ),
         )
 
-    if resposta.kind == ANSWER_NOT_FOUND:
-        # Marca coincidente NAO promove irmao a resposta afirmativa.
-        print("[sales.fastpath]", {"kind": "not_found"})
+    if resultado.outcome == OUTCOME_MEDIA and resultado.media:
+        nome = str((resultado.product or {}).get("name") or "Produto")
+        return AgentResult(
+            reply_text=quebra.join([nome, *resultado.media]),
+            intent="commerce",
+            handoff_required=False,
+            commercial_data={
+                "products": [resultado.product],
+                "media": resultado.media,
+            },
+            response_metadata=_metadados(active_topic="product_media"),
+        )
+
+    if resultado.outcome == OUTCOME_MEDIA_UNAVAILABLE:
+        # Produto existe; a FOTO e que nao existe. Dizer "nao encontrei o
+        # produto" aqui faria o cliente desistir de algo disponivel.
+        nome = str((resultado.product or {}).get("name") or "esse produto")
+        texto = (
+            f"Essa é a única imagem disponível de {nome} no catálogo."
+            if resultado.only_one_media
+            else (
+                f"Encontrei {nome}, mas não tenho uma foto dele disponível "
+                "no catálogo neste momento."
+            )
+        )
+        return AgentResult(
+            reply_text=texto,
+            intent="commerce",
+            handoff_required=False,
+            safety_reason="product_media_unavailable",
+            commercial_data={
+                "products": [resultado.product] if resultado.product else []
+            },
+            response_metadata=_metadados(active_topic="product_media"),
+        )
+
+    if resultado.outcome == OUTCOME_PRODUCT_NOT_FOUND:
         return AgentResult(
             reply_text="Não encontrei esse produto no catálogo agora.",
             intent="commerce",
             handoff_required=False,
             safety_reason="product_not_found",
+            response_metadata=_metadados(),
+        )
+
+    if resultado.outcome == OUTCOME_CLARIFICATION:
+        return None
+
+    if resultado.product:
+        inventario = (
+            resultado.inventory if resultado.outcome == OUTCOME_INVENTORY else None
+        )
+        return AgentResult(
+            reply_text="Encontrei:" + quebra + _numerar([resultado.product], inventario),
+            intent="commerce",
+            handoff_required=False,
+            commercial_data={"products": [resultado.product]},
+            response_metadata=_metadados(active_topic="product_catalog"),
         )
 
     return None
@@ -2940,7 +3014,9 @@ async def _handle_sales_message_inner(
     # resto desta funcao: ha ramos que devolvem None antes do fast path mais
     # abaixo, e ai o turno cai no tool loop do openai_agent. Aqui e restrito a
     # browse justamente para nao atravessar carrinho ou checkout.
-    amostra_catalogo = await _generic_catalog_fast_path(message, only_browse=True)
+    amostra_catalogo = await _generic_catalog_fast_path(
+        message, only_browse=True, state=state
+    )
     if amostra_catalogo is not None:
         return amostra_catalogo
 
@@ -4542,7 +4618,7 @@ async def _handle_sales_message_inner(
     # disparam em `goal="discover"`, que e exatamente como "o que voces
     # vendem?" e classificada — e a pergunta voltava ao cliente com 6.120
     # produtos indexados. Abstem-se quando nao tem certeza; o legado segue.
-    resposta_catalogo = await _generic_catalog_fast_path(message)
+    resposta_catalogo = await _generic_catalog_fast_path(message, state=state)
     if resposta_catalogo is not None:
         return resposta_catalogo
 
