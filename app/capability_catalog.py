@@ -107,14 +107,58 @@ def build_capability_catalog() -> dict[str, Any]:
     }
 
 
+#: APIs que sustentam falar de pedido. Sem NENHUMA delas exposta, prometer
+#: acompanhamento e anuncio de capacidade inexistente.
+_ORDER_CAPABILITIES = frozenset({
+    "list_orders", "get_order", "get_order_complete", "get_order_payment",
+    "create_order",
+})
+
+#: Idem para dado cadastral de cliente.
+_CUSTOMER_CAPABILITIES = frozenset({"search_customer", "get_customer"})
+
+
+def _restrictions_for(commerce_apis: list[str]) -> list[str]:
+    """Proibicoes derivadas do runtime, nao da persona.
+
+    Listar as APIs disponiveis diz o que existe, mas nao fecha a porta do que
+    NAO existe — e o modelo preenchia a lacuna oferecendo "acompanhar pedidos"
+    com zero capability de pedido exposta. Estas linhas so aparecem quando a
+    capacidade correspondente esta mesmo ausente; assim que ela for exposta, a
+    proibicao some sozinha, sem ninguem editar prompt.
+    """
+    disponiveis = set(commerce_apis)
+    linhas: list[str] = []
+    if not (disponiveis & _ORDER_CAPABILITIES):
+        linhas.append(
+            "- NAO ha consulta de pedido neste atendimento: nao ofereca "
+            "acompanhar, rastrear ou consultar status de pedido, e nao diga que "
+            "consegue fazer isso."
+        )
+    if not (disponiveis & _CUSTOMER_CAPABILITIES):
+        linhas.append(
+            "- NAO ha consulta de cadastro de cliente neste atendimento."
+        )
+    if linhas:
+        linhas.insert(0, "NAO disponivel agora (nunca anuncie o que esta abaixo):")
+    if not disponiveis:
+        linhas.append(
+            "- Nenhuma consulta comercial esta ativa: nao prometa catalogo, "
+            "preco, estoque nem pedido."
+        )
+    return linhas
+
+
 def format_capability_catalog_for_prompt(catalog: dict[str, Any] | None = None) -> str:
     payload = catalog or build_capability_catalog()
     lines = ["CAPABILITIES (o que você pode fazer):"]
     for policy in payload.get("policy") or []:
         lines.append(f"- {policy}")
     lines.append("APIs commerce disponíveis:")
-    for name in payload.get("commerce_apis") or []:
-        hint = _API_HINTS.get(str(name), "")
+    commerce_apis = [str(name) for name in (payload.get("commerce_apis") or [])]
+    for name in commerce_apis:
+        hint = _API_HINTS.get(name, "")
         retry = "retryable" if name in RETRYABLE_API_NAMES else "manual"
         lines.append(f"- {name} ({retry}){': ' + hint if hint else ''}")
+    lines.extend(_restrictions_for(commerce_apis))
     return "\n".join(lines)

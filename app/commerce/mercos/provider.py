@@ -286,6 +286,12 @@ class MercosCommerceProvider:
 
         return await run_product_sync()
 
+    async def run_product_full_refresh(self) -> dict[str, Any]:
+        """Reconstroi o indice inteiro sem mover a posicao do incremental."""
+        from .sync_runner import run_product_full_refresh
+
+        return await run_product_full_refresh()
+
     async def execute(self, capability: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Despacha por capacidade. Falha fechada e explicita."""
         support = CAPABILITY_BY_NAME.get(capability)

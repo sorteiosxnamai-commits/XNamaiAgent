@@ -27,6 +27,10 @@ def _to_product(row: dict[str, Any]) -> CommerceProduct | None:
         return None
 
     payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    # DIVIDA DE NOMENCLATURA: `changed_at` aqui carrega `freshness_at`, que e o
+    # instante do SYNC (nao a `ultima_alteracao` da origem — essa fica no
+    # payload). `catalog_search._freshness_for` o consome como `synced_at`, que e
+    # a leitura correta. Renomear o campo fica para outra tarefa.
     freshness = row.get("freshness_at")
     changed_at = freshness.isoformat() if isinstance(freshness, datetime) else (
         str(freshness) if freshness else None
@@ -143,4 +147,9 @@ class CatalogIndexProductReader:
                     raw=fields["payload"],
                 )
             )
-        return upsert_canonical_items(items)
+        # `persist_raw_payload`: o reader deste pacote le `nome`, `ativo`,
+        # `excluido` e `ultima_alteracao` do payload — campos que so existem no
+        # raw ja sanitizado por `catalog.sanitize_payload`.
+        # `strict`: falha de escrita precisa VIRAR excecao, senao o writer
+        # conclui a pagina, o cursor avanca e os registros somem do sync.
+        return upsert_canonical_items(items, persist_raw_payload=True, strict=True)

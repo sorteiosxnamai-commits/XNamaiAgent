@@ -90,3 +90,101 @@ async def run_product_sync(
         store.record_failure(PROVIDER_NAME, PRODUCTS_RESOURCE, error_code=outcome.error_code)
 
     return {"ok": outcome.ok, **outcome.as_log()}
+
+
+#: Orcamento de paginas do full refresh. Maior que o do incremental porque
+#: percorre o catalogo inteiro, nao um delta.
+FULL_REFRESH_MAX_PAGES = 200
+
+
+async def run_product_full_refresh(
+    *,
+    settings: Any | None = None,
+    client: Any | None = None,
+    writer: Any | None = None,
+    state_store: Any | None = None,
+    max_pages: int = FULL_REFRESH_MAX_PAGES,
+) -> dict[str, Any]:
+    """Reconstroi o indice inteiro, sem tocar a posicao do sync incremental.
+
+    Por que existe: o sync normal comeca no cursor confirmado. Depois de uma
+    correcao no formato do que e GRAVADO (semantica de `freshness_at`, payload
+    persistido), reexecutar o incremental nao repara nada — produto ativo que
+    nao mudou na origem simplesmente nao e revisitado, e continua no indice com
+    o snapshot antigo. Idempotencia so ajuda quem e visitado de novo.
+
+    Como: mesmo motor, mesmo writer, mesmo lifecycle. A unica diferenca e o
+    store da paginacao, que aqui e o `InMemorySyncStateStore` — entao o refresh
+    parte de `cursor=None` e o `last_cursor` duravel nunca e escrito.
+
+    O que ele NAO faz, deliberadamente: nao grava `record_success`, nao mexe em
+    `last_success_at` e nao fabrica prontidao. Readiness continua sendo assunto
+    do sync incremental; este runner so reescreve linhas do catalogo.
+
+    Reconstrucao nao substitui o incremental: enquanto as paginas rodam, um
+    produto pode mudar na origem. Por isso o fluxo operacional e "full refresh
+    ok -> incremental em seguida", e o incremental parte do cursor antigo,
+    justamente para capturar esse delta.
+    """
+    from ...config import get_settings
+
+    resolved_settings = settings or get_settings()
+
+    if not getattr(resolved_settings, "mercos_adaptor_configured", False):
+        return {"ok": False, "error": "commerce_adaptor_not_configured"}
+    if not getattr(resolved_settings, "database_url", ""):
+        return {"ok": False, "error": "database_not_configured"}
+
+    tenant_id = resolved_settings.commerce_tenant_id
+
+    if client is None:
+        from .client import MercosAdaptorClient
+
+        client = MercosAdaptorClient(
+            base_url=resolved_settings.mercos_adaptor_url,
+            api_key=resolved_settings.mercos_adaptor_api_key,
+            timeout_seconds=getattr(resolved_settings, "mercos_adaptor_timeout_seconds", 90.0),
+        )
+    if writer is None:
+        from .catalog import ProductPageWriter
+        from .catalog_index_reader import CatalogIndexProductReader
+
+        writer = ProductPageWriter(CatalogIndexProductReader(), tenant_id=tenant_id)
+    if state_store is None:
+        from .sync_state import DatabaseSyncStateStore
+
+        state_store = DatabaseSyncStateStore(tenant_id=tenant_id)
+
+    # Leitura apenas: sem a 023 o passo seguinte (incremental) nao teria onde
+    # gravar, e um refresh isolado daria falsa sensacao de reparo concluido.
+    state = state_store.read(PROVIDER_NAME, PRODUCTS_RESOURCE)
+    if getattr(state, "missing_table", False):
+        return {
+            "ok": False,
+            "error": "sync_state_table_missing",
+            "hint": "aplicar sql/023_mercos_sync_state.sql",
+        }
+
+    from .sync import InMemorySyncStateStore
+
+    pagination = InMemorySyncStateStore()  # comeca em None: catalogo inteiro
+
+    outcome: SyncOutcome = await sync_resource(
+        client=client,
+        resource=PRODUCTS_RESOURCE,
+        store=pagination,
+        writer=writer,
+        max_pages=max_pages,
+        provider=PROVIDER_NAME,
+    )
+
+    # Percorrer ate o teto de paginas NAO e reconstrucao completa: o operador
+    # precisa saber que sobrou catalogo para tras.
+    complete = outcome.ok and outcome.stopped_reason is None
+
+    return {
+        "ok": outcome.ok,
+        "mode": "full_refresh",
+        "complete": complete,
+        **outcome.as_log(),
+    }

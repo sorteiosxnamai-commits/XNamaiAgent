@@ -58,12 +58,23 @@ def product_to_index_fields(
 ) -> dict[str, Any]:
     """Produto normalizado -> colunas do indice.
 
-    `freshness_at` usa `ultima_alteracao` quando ela existe — e o instante em que
-    a Mercos afirma o dado — e cai para o momento do sync quando nao existe.
-    Nunca inventa um instante mais recente do que o provider garante.
+    `freshness_at` e o instante em que ESTE sync confirmou o snapshot — nao a
+    data em que a Mercos alterou o registro pela ultima vez. Sao coisas
+    diferentes, e o resto da arquitetura ja lia a primeira:
+
+    * `CatalogIndexRepository` usa `coalesce(freshness_at, updated_at)` como TTL
+      de leitura ("ha quanto tempo confirmamos esta linha?");
+    * `catalog_search` passa esse instante a `evaluate_freshness` como
+      `synced_at`, para decidir se preco e estoque seguem confirmados.
+
+    Gravar `ultima_alteracao` aqui tornava invisivel todo produto estavel: um
+    item nao editado na origem nas ultimas 24h caia fora do TTL e o catalogo
+    inteiro voltava vazio, por mais recente que fosse o sync.
+
+    `ultima_alteracao` continua preservada no payload sanitizado, que e o lugar
+    certo para um metadado da origem.
     """
     now = synced_at or datetime.now(timezone.utc)
-    changed_at = _parse_changed_at(product.changed_at)
     return {
         "product_id": product.external_id,
         "reference": product.reference,
@@ -72,7 +83,7 @@ def product_to_index_fields(
         "stock": product.stock,
         "available": product.available,
         "category": product.category_id,
-        "freshness_at": changed_at or now,
+        "freshness_at": now,
         "factual_source": CATALOG_FACTUAL_SOURCE,
         "payload": sanitize_payload(product.raw),
     }

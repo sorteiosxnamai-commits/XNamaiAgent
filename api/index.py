@@ -1133,6 +1133,46 @@ async def commerce_product_sync_cron():
     return result
 
 
+#: Frase exata que o corpo precisa trazer para o full refresh rodar.
+FULL_REFRESH_CONFIRMATION = "FULL_REFRESH_PRODUCTS"
+
+
+@app.post(
+    "/api/admin/commerce/sync/products/full-refresh",
+    dependencies=[Depends(verify_admin_token)],
+)
+async def commerce_product_full_refresh_admin(request: Request):
+    """Reconstroi o catalogo inteiro. Operacao de REPARO, nao de rotina.
+
+    O sync incremental parte do cursor confirmado: depois de uma correcao no
+    formato do que e gravado, ele nao alcanca produto ativo que ninguem alterou
+    na origem. Este caminho percorre o catalogo do inicio com cursor proprio, em
+    memoria, e por isso NAO move o `last_cursor` duravel nem registra sucesso —
+    prontidao continua sendo assunto do incremental.
+
+    Fluxo operacional: full refresh -> se `ok` -> incremental em seguida, que
+    parte do cursor antigo e captura o que mudou durante a reconstrucao.
+
+    Exige confirmacao explicita no corpo. E uma varredura completa do catalogo
+    contra o adaptador: disparar por engano custa dezenas de paginas.
+    """
+    payload = await read_request_payload(request)
+    if (payload or {}).get("confirm") != FULL_REFRESH_CONFIRMATION:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "confirmation_required",
+                "expected": {"confirm": FULL_REFRESH_CONFIRMATION},
+            },
+        )
+
+    from app.commerce.health import run_configured_product_full_refresh
+
+    result = await run_configured_product_full_refresh()
+    log_event("commerce.sync.products.full_refresh", {**result, "trigger": "admin"})
+    return result
+
+
 @app.get(
     "/api/cron/remarketing",
     dependencies=[Depends(verify_remarketing_cron)],

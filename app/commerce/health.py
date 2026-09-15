@@ -49,3 +49,27 @@ async def run_configured_product_sync() -> dict[str, Any]:
             "provider": getattr(provider, "name", "unknown"),
         }
     return await runner()
+
+
+async def run_configured_product_full_refresh() -> dict[str, Any]:
+    """Reconstroi o catalogo do provider ativo, sem mover o cursor incremental.
+
+    Operacao administrativa de reparo: existe para quando o FORMATO do que foi
+    gravado mudou, caso em que reexecutar o sync incremental nao alcanca as
+    linhas que ninguem alterou na origem.
+    """
+    try:
+        from .provider import get_commerce_provider
+
+        provider = get_commerce_provider()
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "error": "commerce_provider_unavailable"}
+
+    runner = getattr(provider, "run_product_full_refresh", None)
+    if not callable(runner):
+        return {
+            "ok": False,
+            "error": "full_refresh_not_supported_by_provider",
+            "provider": getattr(provider, "name", "unknown"),
+        }
+    return await runner()

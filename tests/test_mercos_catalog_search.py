@@ -209,10 +209,18 @@ def test_index_keeps_none_instead_of_zero():
     assert fields["stock"] is None
 
 
-def test_freshness_uses_provider_timestamp_when_available():
+def test_freshness_uses_the_sync_instant_not_the_provider_timestamp():
+    """Este teste ja afirmou o contrario — e era o bug.
+
+    `freshness_at` alimenta o TTL de leitura do indice e o `synced_at` da
+    politica de frescor: ambos perguntam "ha quanto tempo NOS confirmamos isto",
+    nao "quando a origem mudou". Gravar `ultima_alteracao` aqui apagava o
+    catalogo inteiro da leitura. A data da origem segue no payload.
+    """
     stamp = "2026-02-01T08:00:00"
     fields = product_to_index_fields(_product(ultima_alteracao=stamp), synced_at=NOW)
-    assert fields["freshness_at"].isoformat().startswith("2026-02-01T08:00:00")
+    assert fields["freshness_at"] == NOW
+    assert fields["payload"]["ultima_alteracao"] == stamp
 
 
 def test_freshness_falls_back_to_sync_time_without_provider_timestamp():

@@ -786,8 +786,29 @@ def filter_products_to_allowed(
     return kept, rejected
 
 
-def upsert_canonical_items(items: list[CanonicalCatalogItem]) -> int:
-    """Best-effort durable index write (no-op without database)."""
+def upsert_canonical_items(
+    items: list[CanonicalCatalogItem],
+    *,
+    persist_raw_payload: bool = False,
+    strict: bool = False,
+) -> int:
+    """Best-effort durable index write (no-op without database).
+
+    Os dois parametros sao OPT-IN: com os defaults, o comportamento e
+    exatamente o legado. Nenhum caller existente muda.
+
+    ``persist_raw_payload`` grava ``item.raw`` na coluna ``payload`` em vez da
+    projecao das proprias colunas. O caminho Mercos precisa disso porque seu
+    reader le ``nome``, ``ativo``, ``excluido`` e ``ultima_alteracao`` de la — e
+    a projecao nao tem nenhum deles. Quem liga a flag e responsavel por ter
+    sanitizado o ``raw`` antes (no Mercos, `catalog.sanitize_payload`); o writer
+    compartilhado nao sanitiza nada, para nao duplicar a regra.
+
+    ``strict`` propaga a falha de escrita em vez de engolir. O default
+    best-effort e adequado a indexacao oportunista, mas mente para um sync
+    incremental: retornar 0 numa falha de banco faz o chamador concluir que a
+    pagina foi processada e avancar o cursor, pulando os registros para sempre.
+    """
     if not items:
         return 0
     try:
@@ -799,6 +820,11 @@ def upsert_canonical_items(items: list[CanonicalCatalogItem]) -> int:
             with conn.cursor() as cur:
                 for item in items:
                     payload = item.model_dump(mode="json", exclude={"raw"})
+                    # A projecao das colunas segue sendo o bind do INSERT; so o
+                    # CONTEUDO da coluna `payload` muda quando o caller opta.
+                    stored_payload = payload
+                    if persist_raw_payload and isinstance(item.raw, dict):
+                        stored_payload = item.raw
                     cur.execute(
                         """
                         INSERT INTO public.ai_catalog_index (
@@ -850,7 +876,7 @@ def upsert_canonical_items(items: list[CanonicalCatalogItem]) -> int:
                             or f"product:{payload.get('product_id')}",
                             "colors_normalized": to_jsonb(payload.get("colors_normalized") or []),
                             "aliases": to_jsonb(payload.get("aliases") or []),
-                            "payload": to_jsonb(payload),
+                            "payload": to_jsonb(stored_payload),
                         },
                     )
                     written += 1
@@ -858,6 +884,8 @@ def upsert_canonical_items(items: list[CanonicalCatalogItem]) -> int:
         return written
     except Exception as exc:
         print("[catalog.index.upsert.error]", {"error_type": type(exc).__name__})
+        if strict:
+            raise
         return 0
 
 
