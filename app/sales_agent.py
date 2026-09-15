@@ -1167,7 +1167,9 @@ def _needs_clarification_before_retrieval(
     return not discovery_state["subject_identifiable"]
 
 
-async def _generic_catalog_fast_path(message: IncomingMessage) -> AgentResult | None:
+async def _generic_catalog_fast_path(
+    message: IncomingMessage, *, only_browse: bool = False
+) -> AgentResult | None:
     """Responde pelo catalogo generico antes da logica especializada legada.
 
     O matcher legado decide identidade por `brand`/`model`/`mechanism`/
@@ -1192,6 +1194,15 @@ async def _generic_catalog_fast_path(message: IncomingMessage) -> AgentResult | 
         ANSWER_PRODUCT,
         resolve_catalog_request,
     )
+
+    if only_browse:
+        # Chamada precoce: so pergunta generica de catalogo. Um pedido
+        # especifico aqui atravessaria fluxo de carrinho/checkout que ainda
+        # nem foi avaliado.
+        from .commerce.generic_catalog import GENERIC_BROWSE, classify_catalog_request
+
+        if classify_catalog_request(message.text or "").kind != GENERIC_BROWSE:
+            return None
 
     try:
         resposta = await resolve_catalog_request(
@@ -2924,6 +2935,15 @@ async def _handle_sales_message_inner(
             message_text=message.text,
         )
     state = commerce_state or CommerceConversationState()
+
+    # Pergunta generica de catalogo ("o que voces vendem?") nao sobrevive ao
+    # resto desta funcao: ha ramos que devolvem None antes do fast path mais
+    # abaixo, e ai o turno cai no tool loop do openai_agent. Aqui e restrito a
+    # browse justamente para nao atravessar carrinho ou checkout.
+    amostra_catalogo = await _generic_catalog_fast_path(message, only_browse=True)
+    if amostra_catalogo is not None:
+        return amostra_catalogo
+
     deterministic_confirmation = _confirmation_text_kind(state, message.text)
     if deterministic_confirmation == "confirm":
         return await _confirm_current_order_review(

@@ -407,3 +407,37 @@ async def test_widening_never_turns_a_sibling_into_an_answer():
         "quanto custa o Cabo Lightning iPhone Hmaston?", execute=executar
     )
     assert resposta.kind == ANSWER_NOT_FOUND
+
+
+# === 10. ordem das chamadas no sales_agent ================================
+
+
+def test_the_early_call_is_restricted_to_browse():
+    """Cedo demais para pedido especifico: carrinho e checkout vem depois."""
+    import inspect
+
+    from app import sales_agent
+
+    fonte = inspect.getsource(sales_agent._handle_sales_message_inner)
+    precoce = fonte[: fonte.index("deterministic_confirmation = ")]
+    assert "_generic_catalog_fast_path(message, only_browse=True)" in precoce
+
+
+def test_the_full_fast_path_runs_before_the_clarification_gates():
+    import inspect
+
+    from app import sales_agent
+
+    fonte = inspect.getsource(sales_agent._handle_sales_message_inner)
+    assert fonte.index("resposta_catalogo = await _generic_catalog_fast_path(message)") < fonte.index(
+        "_needs_clarification_before_retrieval(interpretation, plan, discovery_state)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_checkout_message_is_not_hijacked_by_the_early_call(monkeypatch):
+    """"quero pagar" nao pode virar consulta de catalogo."""
+    from app.commerce.generic_catalog import GENERIC_BROWSE, classify_catalog_request
+
+    for texto in ("quero pagar", "confirma o pedido", "qual o link de pagamento"):
+        assert classify_catalog_request(texto).kind != GENERIC_BROWSE
