@@ -111,7 +111,18 @@ def test_settings_declare_only_the_two_allowed_variables():
         "mercos_adaptor_url",
         "mercos_adaptor_api_key",
         "mercos_adaptor_timeout_seconds",
+        # Portoes de mutacao. Entram nesta lista por serem BOOLEANOS de
+        # operacao, nunca credencial: dizem se este ambiente pode criar, e o
+        # default e nao. Credencial Mercos segue proibida aqui — e a assercao
+        # acima continua provando isso.
+        "mercos_order_mutations_enabled",
+        "mercos_customer_mutations_enabled",
     }, f"campo Mercos inesperado: {sorted(mercos_fields)}"
+
+    # O que realmente importa nesta fronteira: nenhum campo novo carrega segredo.
+    for nome in ("mercos_order_mutations_enabled", "mercos_customer_mutations_enabled"):
+        assert Settings.model_fields[nome].annotation is bool
+        assert Settings.model_fields[nome].default is False
 
 
 def test_env_example_declares_only_the_two_allowed_variables():

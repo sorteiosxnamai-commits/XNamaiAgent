@@ -25,6 +25,9 @@ KEY = "internal-key"
 
 def _client(handler, **kwargs) -> MercosAdaptorClient:
     return MercosAdaptorClient(
+        # Portao aberto: estes testes exercitam o caminho de mutacao.
+        mutations_enabled=True,
+        customer_mutations_enabled=True,
         base_url=BASE,
         api_key=KEY,
         timeout_seconds=5,
@@ -72,6 +75,9 @@ async def test_base_url_trailing_slash_is_normalized():
         return httpx.Response(200, json={"resources": []})
 
     client = MercosAdaptorClient(
+        # Portao aberto: estes testes exercitam o caminho de mutacao.
+        mutations_enabled=True,
+        customer_mutations_enabled=True,
         base_url=BASE + "/",
         api_key=KEY,
         timeout_seconds=5,

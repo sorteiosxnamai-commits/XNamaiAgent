@@ -46,6 +46,52 @@ ACTION_SHOW_MORE_MEDIA = "show_more_media"
 ACTION_COMPARE = "compare_products"
 ACTION_REJECT_PRODUCT = "reject_product"
 ACTION_CORRECT_REFERENCE = "correct_reference"
+ACTION_START_PURCHASE = "start_purchase"
+ACTION_TRANSACTION = "transaction"
+ACTION_ADD_TO_CART = "add_to_cart"
+ACTION_REMOVE_FROM_CART = "remove_from_cart"
+ACTION_SET_QUANTITY = "set_quantity"
+ACTION_SHOW_CART = "show_cart"
+ACTION_CLEAR_CART = "clear_cart"
+ACTION_REVIEW_ORDER = "review_order"
+ACTION_CONFIRM_ORDER = "confirm_order"
+ACTION_CANCEL_ORDER = "cancel_order"
+
+#: Operacoes que acontecem SO na conversa. A fonte comercial nao tem carrinho, e
+#: o adaptador serializa chamadas com pausa de dois segundos — mexer no carrinho
+#: nao pode custar rede.
+LOCAL_CART_ACTIONS = frozenset({
+    ACTION_ADD_TO_CART,
+    ACTION_REMOVE_FROM_CART,
+    ACTION_SET_QUANTITY,
+    ACTION_SHOW_CART,
+    ACTION_CLEAR_CART,
+})
+
+#: Pendencia de confirmacao do pedido.
+PENDING_CONFIRM_ORDER = "confirm_order"
+ACTION_CONFIRM_PENDING = "confirm_pending"
+ACTION_REJECT_PENDING = "reject_pending"
+
+#: Acoes que apenas LEEM fato de produto. Precisam decidir antes do fluxo
+#: legado: "qual valor do AD-190?" caia num ramo de link de produto e voltava
+#: "a fonte oficial nao informou um link" para uma pergunta de preco.
+READ_ONLY_ACTIONS = frozenset({
+    ACTION_BROWSE_CATALOG,
+    ACTION_SEARCH_PRODUCT,
+    ACTION_SELECT_PRODUCT,
+    ACTION_GET_DETAILS,
+    ACTION_GET_PRICE,
+    ACTION_CHECK_INVENTORY,
+    ACTION_SHOW_MEDIA,
+    ACTION_SHOW_MORE_MEDIA,
+    ACTION_COMPARE,
+    ACTION_CORRECT_REFERENCE,
+    ACTION_REJECT_PRODUCT,
+})
+
+#: Tipos de acao pendente aguardando sim/nao.
+PENDING_BROWSE = "browse_catalog"
 
 # --- tipos de referencia ----------------------------------------------------
 REF_EXPLICIT = "explicit"
@@ -82,7 +128,9 @@ _CURRENT_WORDS = frozenset({
 
 _PRICE = (
     "quanto custa", "quanto fica", "quanto sai", "sai por quanto", "e quanto",
-    "qual o preco", "qual preco", "qual o valor", "qual valor", "preco", "valor",
+    "qual o preco", "qual preco", "qual o valor", "qual valor", "qual valor d",
+    "valor desse", "preco desse", "sai quanto", "por quanto", "custa quanto",
+    "quanto e", "preco", "valor",
 )
 _INVENTORY = (
     "tem estoque", "ainda tem", "esta disponivel", "tem disponivel",
@@ -96,9 +144,10 @@ _MEDIA = (
     "foto", "fotos", "imagem", "imagens",
 )
 _DETAILS = (
-    "me fala mais", "fala mais", "me explica", "explica", "quais detalhes",
-    "detalhes", "quais especificacoes", "especificacoes", "como ele e",
-    "informacao dele", "ficha tecnica",
+    "me fala mais", "me fale mais", "fala mais", "fale mais", "me conta mais",
+    "conta mais", "me explica", "explica melhor", "explica", "saber mais",
+    "quais detalhes", "detalhes", "quais especificacoes", "especificacoes",
+    "como ele e", "como e ele", "informacao dele", "ficha tecnica",
 )
 _COMPARE = (
     "qual e melhor", "qual o melhor", "qual desses", "qual deles",
@@ -112,6 +161,98 @@ _BROWSE = (
     "recomend", "sugest",
 )
 _MORE = ("outra", "outro", "mais", "proxima", "proximo", "seguinte")
+
+_ADD_CART = (
+    "coloca no carrinho", "poe no carrinho", "adiciona no carrinho",
+    "adicionar ao carrinho", "no carrinho", "adiciona", "adicionar",
+    "coloca esse", "poe esse", "inclui", "incluir",
+)
+_REMOVE_CART = (
+    "tira do carrinho", "remove do carrinho", "tira esse", "tira o",
+    "remove esse", "remove o", "remover", "retira", "tirar",
+)
+_SHOW_CART = (
+    "meu carrinho", "no carrinho", "como ficou", "como esta o pedido",
+    "meu pedido", "o que tem no pedido", "resumo do pedido", "ver o carrinho",
+    "o que eu escolhi", "o que escolhi", "quanto deu", "quanto ficou",
+)
+#: Perguntas que SO podem ser "me mostra o carrinho". Ficam separadas porque
+#: "no carrinho" sozinho tambem aparece em "coloca no carrinho".
+_SHOW_CART_STRONG = (
+    "o que tem no carrinho", "o que tem no meu pedido", "o que ha no carrinho",
+    "o que eu escolhi", "o que escolhi", "como ficou", "meu carrinho",
+    "resumo do pedido", "quanto deu", "quanto ficou", "ver o carrinho",
+    "me mostra meu pedido", "me mostra o carrinho",
+)
+
+_CLEAR_CART = (
+    "limpa o carrinho", "limpar carrinho", "esvazia", "limpa tudo",
+    "cancela tudo", "zera o carrinho",
+)
+#: Pedir para FECHAR e pedir para VER a revisao, nao para cria-la. A revisao
+#: resolve preco, estoque e condicao — e so entao existe algo a confirmar.
+_REVIEW_ORDER = (
+    "pode fechar", "fecha o pedido", "fechar pedido", "quero fechar",
+    "quero finalizar", "finaliza o pedido", "finalizar pedido",
+    "vamos finalizar", "vamos fechar", "pode concluir", "quero concluir",
+    "concluir pedido", "revisa o pedido", "revisar pedido", "revisar antes",
+    "antes de fechar", "prosseguir com o pedido", "prosseguir com a compra",
+    "quero prosseguir", "fechar a compra", "finalizar a compra",
+)
+
+#: Confirmacao explicita: nao pede para ver, autoriza o que ja foi visto.
+_CONFIRM_ORDER = (
+    "confirmo", "confirmar", "pode criar", "sim pode criar", "pode mandar",
+    "confirma o pedido", "pode fazer o pedido",
+    # "sim, pode fechar" e autorizacao explicita, nao pedido de ver.
+    "sim pode fechar", "sim, pode fechar", "sim pode",
+)
+_QUANTITY_SET = ("coloca", "poe", "quero", "muda para", "deixa")
+_QUANTITY_ADD = ("mais", "adiciona mais", "acrescenta", "soma")
+
+#: Intencao TRANSACIONAL. "pedido" e "compra" sao operacoes, nunca produtos —
+#: buscar por elas no catalogo produzia "nao encontrei esse produto".
+_PURCHASE = (
+    "fazer um pedido", "fazer pedido", "fechar um pedido", "fechar pedido",
+    "quero comprar", "quero pedir", "quero levar", "como faco um pedido",
+    "como faco pedido", "como compro", "como faco para comprar",
+    "fazer uma compra", "realizar um pedido", "efetuar pedido",
+)
+
+#: Transacao de verdade: tem fluxo proprio e nao pode ser engolida aqui.
+_TRANSACTION = (
+    "quero pagar", "forma de pagamento", "formas de pagamento", "finalizar compra",
+    "finalizar pedido", "pagamento", "pagar",
+    "pix", "boleto", "cartao", "frete", "entrega do pedido",
+)
+
+#: Pergunta de disponibilidade SEM produto: e uma vitrine, nao uma consulta de
+#: estoque. Perguntar "qual tipo voce quer?" antes de mostrar qualquer coisa
+#: custava tres turnos e falhava no meio.
+_AVAILABLE_BROWSE = (
+    "produto disponivel", "produtos disponiveis", "coisa disponivel",
+    "pronta entrega", "em estoque", "tem disponivel", "tem em estoque",
+    "voces tem disponivel", "o que tem disponivel", "que tem disponivel",
+    "tem produto", "tem produtos", "produtos disponiveis", "disponiveis",
+    "tem disponiveis", "disponivel agora", "o que voces tem",
+)
+
+_CONFIRM = frozenset({
+    "sim", "s", "ss", "ssim", "sim!", "claro", "pode", "pode ser", "quero",
+    "manda", "mostra", "mostre", "vamos", "beleza", "blz", "ok", "okay",
+    "isso", "positivo", "bora", "aham",
+})
+_DENY = frozenset({
+    "nao", "n", "nop", "nao quero", "agora nao", "deixa", "deixa pra la",
+    "nao precisa", "negativo", "depois",
+})
+
+#: Normalizacoes seguras de digitacao que aparecem no WhatsApp. Nenhuma
+#: biblioteca de fuzzy: so colagem de espaco em palavra curta conhecida.
+_TYPOS = {
+    "si m": "sim", "na o": "nao", "pre co": "preco", "va lor": "valor",
+    "estoq": "estoque", "vlr": "valor", "qto": "quanto", "qnt": "quanto",
+}
 _REJECT = ("nao esse", "esse nao", "nao quero esse", "nao e esse", "nao")
 _CORRECTION = ("quis dizer", "na verdade", "nao,", "nao e", "corrig")
 
@@ -131,6 +272,14 @@ _NON_PRODUCT = frozenset({
     "outra", "outro", "outros", "outras", "mais", "proxima", "proximo",
     "seguinte", "parecido", "parecida", "similar", "nao", "sim",
     "posso", "consigo", "da", "pra", "poderia",
+    "pedido", "pedidos", "compra", "compras", "comprar", "pedir", "levar",
+    "coisa", "coisas", "agora", "hoje", "ver", "vendem", "vende",
+    "tem", "temos", "ter", "tenho", "tinha", "teria",
+    # Verbos de carrinho: dizem a OPERACAO, nunca o produto.
+    "adiciona", "adicionar", "coloca", "colocar", "poe", "por", "inclui",
+    "incluir", "tira", "tirar", "remove", "remover", "retira", "limpa",
+    "limpar", "esvazia", "zera", "carrinho", "confirmo", "confirma",
+    "fazer", "faco", "como", "entrega", "pronta", "sim", "ok", "claro",
 })
 
 #: Conectivos que nao distinguem produto. Lista propria, e nao a do
@@ -160,6 +309,14 @@ def _product_tokens(texto_normalizado: str) -> list[str]:
 _SHORT_MEANINGFUL = ("tipo c", "usb c", "type c", "p2", "p3", "3a", "5g")
 
 
+def normalize_typos(texto: str) -> str:
+    """Colagens de espaco conhecidas do WhatsApp. Nada de fuzzy generico."""
+    resultado = texto
+    for errado, certo in _TYPOS.items():
+        resultado = re.sub(rf"\b{re.escape(errado)}\b", certo, resultado)
+    return resultado
+
+
 def _contem(texto: str, termos) -> bool:
     return any(termo in texto for termo in termos)
 
@@ -171,7 +328,7 @@ def product_query_for(text: str) -> str | None:
     consulta e o que fazia a busca lexical nao casar nada: nenhum produto se
     chama "quero carregador".
     """
-    normalizado = normalize_text(text)
+    normalizado = normalize_typos(normalize_text(text))
     for verbo in _CONVERSATIONAL:
         normalizado = re.sub(rf"\b{re.escape(verbo)}\b", " ", normalizado)
     normalizado = re.sub(r"\s+", " ", normalizado).strip()
@@ -184,6 +341,62 @@ def product_query_for(text: str) -> str | None:
         # Token isolado curto nao identifica produto; "tipo c" identifica.
         return None
     return consulta
+
+
+def trailing_position(text: str, state) -> tuple[int, object] | None:
+    """Numero colado ao fim do texto que E posicao da lista — validado.
+
+    "me fale mais sobre o iphone kit carregador lightning7" quer o item 7. Mas
+    "quero iphone7" quer o modelo 7, nao o setimo item. A diferenca nao esta no
+    numero: esta em se o TEXTO tambem casa o produto daquela posicao.
+
+    Por isso a regra exige as tres coisas juntas — sufixo numerico, posicao
+    existente na lista, e forte sobreposicao dos termos com o item de la. Sem a
+    terceira, qualquer "s23" ou "watch5" viraria selecao silenciosa do item
+    errado, com preco e estoque de outro produto.
+    """
+    lista = list(getattr(state, "last_presented_products", None) or [])
+    if not lista:
+        return None
+    normalizado = normalize_typos(normalize_text(text))
+    casamento = re.search(r"([a-z]+)\s*(\d{1,2})\s*$", normalizado)
+    if not casamento:
+        return None
+    posicao = int(casamento.group(2))
+    alvo = next((p for p in lista if p.position == posicao), None)
+    if alvo is None:
+        return None
+
+    sem_numero = normalizado[: casamento.start(2)]
+    termos = set(_product_tokens(sem_numero))
+    if not termos:
+        return None
+    do_nome = set(_product_tokens(normalize_text(alvo.name or "")))
+    if not do_nome:
+        return None
+    cobertura = len([x for x in termos if x in do_nome]) / len(termos)
+    if cobertura < 0.66:
+        return None
+    return posicao, alvo
+
+
+def cart_quantity(normalizado: str) -> tuple[int, bool] | None:
+    """(quantidade, incremental). "coloca 3" troca; "adiciona mais 2" soma.
+
+    Tratar os dois como a mesma coisa faz o carrinho divergir do que o cliente
+    pediu — e o erro so aparece no total do pedido.
+    """
+    numero = re.search(r"\b(\d{1,3})\b", normalizado)
+    if not numero:
+        return None
+    quantidade = int(numero.group(1))
+    incremental = bool(re.search(r"\bmais\b|\bacrescent|\bsoma\b", normalizado))
+    return quantidade, incremental
+
+
+def _tem_termo_de_produto(normalizado: str) -> bool:
+    """Sobrou alguma palavra que possa nomear produto?"""
+    return bool(_product_tokens(normalizado))
 
 
 def _posicao_pedida(normalizado: str) -> int | None:
@@ -222,6 +435,8 @@ class CommerceTurnResolution:
     resolved_product: Any | None = None
     rejected_product_id: str | None = None
     requested_fact: str | None = None
+    #: (quantidade, incremental) quando o turno fala de quantidade.
+    cart_quantity: tuple[int, bool] | None = None
     requires_catalog_search: bool = False
     requires_clarification: bool = False
     candidates: list[Any] = field(default_factory=list)
@@ -279,9 +494,78 @@ def _lista_unica(state):
 
 
 def _detectar_acao(normalizado: str, state) -> tuple[str, str | None]:
-    """(acao, fato) a partir do texto E do contexto da ultima acao."""
+    """(acao, fato) a partir do texto E do contexto da ultima acao.
+
+    A ordem aqui e a decisao de projeto mais importante do modulo: PRIMEIRO o
+    que o cliente quer fazer, so depois sobre qual produto. Invertido, "quero
+    fazer um pedido" virava busca por um produto chamado "pedido".
+    """
     ultima = getattr(state, "last_commerce_action", None)
     ultimo_fato = getattr(state, "last_requested_fact", None)
+    pendente = getattr(state, "pending_commerce_action", None)
+
+    # 1. resposta a uma pergunta que o proprio bot fez. So conta como resposta
+    #    quando existe pergunta pendente — "sim" solto nao inventa acao.
+    if pendente:
+        enxuto = normalizado.strip(" ?!.")
+        if enxuto in _CONFIRM:
+            return ACTION_CONFIRM_PENDING, None
+        if enxuto in _DENY or enxuto.startswith("nao "):
+            return ACTION_REJECT_PENDING, None
+
+    # 2. fechar/finalizar/revisar pede a REVISAO. Vem antes de compra e de
+    #    transacao porque as mesmas palavras aparecem nos tres vocabularios, e
+    #    aqui o sentido e o de ver o pedido montado antes de autorizar.
+    revisao_pendente = (
+        getattr(state, "order_confirmation_status", None) == "pending"
+        and bool(getattr(state, "order_review_version", None))
+    )
+    if _contem(normalizado, _CONFIRM_ORDER):
+        return ACTION_CONFIRM_ORDER, None
+    if _contem(normalizado, _REVIEW_ORDER) and (state.cart_items or []):
+        # Carrinho vazio nao tem o que revisar: ali "quero fechar um pedido" e
+        # intencao de COMECAR, e cai no ramo de compra logo abaixo.
+        return (
+            ACTION_CONFIRM_ORDER if revisao_pendente else ACTION_REVIEW_ORDER
+        ), None
+
+    # 3. transacao real tem fluxo proprio: nao pode ser engolida aqui.
+    if _contem(normalizado, _TRANSACTION):
+        return ACTION_TRANSACTION, None
+
+    # 3. intencao de comprar sem produto: operacao, nunca nome de produto.
+    if _contem(normalizado, _PURCHASE):
+        return ACTION_START_PURCHASE, None
+
+    # 3.5 carrinho: operacoes locais, antes de qualquer consulta de fato.
+    if _contem(normalizado, _CLEAR_CART):
+        return ACTION_CLEAR_CART, None
+    if _contem(normalizado, _CONFIRM_ORDER):
+        return ACTION_CONFIRM_ORDER, None
+    if _contem(normalizado, _REMOVE_CART):
+        return ACTION_REMOVE_FROM_CART, None
+    if _contem(normalizado, _SHOW_CART_STRONG):
+        return ACTION_SHOW_CART, None
+    if _contem(normalizado, _SHOW_CART) and not _contem(normalizado, _ADD_CART):
+        return ACTION_SHOW_CART, None
+    quantidade = cart_quantity(normalizado)
+    if quantidade is not None and (
+        _contem(normalizado, _QUANTITY_ADD)
+        or any(re.search(rf"\b{v}\b", normalizado) for v in _QUANTITY_SET)
+    ):
+        return ACTION_SET_QUANTITY, None
+    if _contem(normalizado, _ADD_CART):
+        return ACTION_ADD_TO_CART, None
+
+    # 4. disponibilidade sem produto e vitrine, nao consulta de estoque. Com
+    #    produto ativo a mesma frase e sobre ELE: "tem estoque?" logo depois de
+    #    escolher um item pergunta daquele item, nao pede uma vitrine nova.
+    if (
+        _contem(normalizado, _AVAILABLE_BROWSE)
+        and not _tem_termo_de_produto(normalizado)
+        and getattr(state, "active_product", None) is None
+    ):
+        return ACTION_BROWSE_CATALOG, None
 
     if _contem(normalizado, _COMPARE):
         return ACTION_COMPARE, None
@@ -323,7 +607,7 @@ def resolve_commerce_turn(text: str, *, state) -> CommerceTurnResolution:
     codigo explicito, posicao na lista, referencia contextual ("esse"), termos
     que casam a lista apresentada, e so entao busca no catalogo global.
     """
-    normalizado = normalize_text(text)
+    normalizado = normalize_typos(normalize_text(text))
     consulta = product_query_for(text)
     referencia, ean = _referencia_explicita(text)
     acao, fato = _detectar_acao(normalizado, state)
@@ -334,7 +618,15 @@ def resolve_commerce_turn(text: str, *, state) -> CommerceTurnResolution:
         explicit_reference=referencia,
         explicit_ean=ean,
         requested_fact=fato,
+        cart_quantity=cart_quantity(normalizado),
     )
+
+    # Resposta a pergunta pendente e transacao ja estao decididas: nao passam
+    # pelo bloco de rejeicao abaixo, que interpretaria "nao" como recusa de
+    # produto em vez de resposta a pergunta do bot.
+    if acao in {ACTION_CONFIRM_PENDING, ACTION_REJECT_PENDING, ACTION_TRANSACTION,
+                ACTION_START_PURCHASE}:
+        return resolucao
 
     # --- rejeicao / correcao ------------------------------------------------
     negativo = bool(re.match(r"^\s*n[aã]o\b", normalizado)) or _contem(
@@ -358,6 +650,16 @@ def resolve_commerce_turn(text: str, *, state) -> CommerceTurnResolution:
         resolucao.requires_catalog_search = bool(consulta)
         return resolucao
 
+    # --- 0. posicao colada ao texto, validada pelo contexto ----------------
+    colada = trailing_position(text, state)
+    if colada is not None:
+        posicao_colada, alvo_colado = colada
+        resolucao.reference_type = REF_LIST_POSITION
+        resolucao.reference_position = posicao_colada
+        resolucao.resolved_product = alvo_colado
+        resolucao.confidence = 0.85
+        return resolucao
+
     # --- 1. referencia explicita -------------------------------------------
     if referencia or ean:
         resolucao.reference_type = REF_EXPLICIT
@@ -367,6 +669,10 @@ def resolve_commerce_turn(text: str, *, state) -> CommerceTurnResolution:
 
     # --- 2. posicao na lista ------------------------------------------------
     posicao = _posicao_pedida(normalizado)
+    # Em turno de quantidade o numero E a quantidade: "adiciona mais 2" pede
+    # duas unidades do produto atual, nao o segundo item da lista.
+    if acao == ACTION_SET_QUANTITY:
+        posicao = None
     if posicao is not None and not consulta:
         alvo = _por_posicao(state, posicao)
         resolucao.reference_type = REF_LIST_POSITION

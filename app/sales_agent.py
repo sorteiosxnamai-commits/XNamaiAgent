@@ -1191,57 +1191,57 @@ async def _generic_catalog_fast_path(
         return None
 
     if only_browse:
-        # Chamada precoce. Duas situacoes podem ser decididas aqui sem risco:
+        # Chamada precoce. Decide aqui tudo que e LEITURA de fato comercial —
+        # preco, estoque, midia, detalhes, selecao, comparacao, vitrine — mais
+        # intencao de compra e resposta a uma pergunta que o proprio bot fez.
         #
-        # 1. pergunta generica de catalogo — nao tem nada a ver com carrinho;
-        # 2. turno de CONTINUIDADE ("o segundo", "quanto custa?", "tem foto?")
-        #    quando ja existe produto ativo ou lista apresentada.
+        # A precedencia importa: ramos legados respondiam antes e produziam
+        # incoerencia. "qual valor do AD-190?" caia num ramo de link e voltava
+        # "a fonte oficial nao informou um link" para uma pergunta de preco;
+        # "quero fazer um pedido" virava busca por um produto chamado pedido.
         #
-        # O caso 2 precisa vir cedo porque ramos legados de checkout respondem
-        # antes do fast path la embaixo — e respondiam "confirme qual produto
-        # voce quer comprar" a uma pergunta de preco sobre item ja escolhido.
-        # Mensagem sem contexto comercial nenhum continua seguindo o fluxo
-        # legado inteiro.
-        from .commerce.generic_catalog import GENERIC_BROWSE, classify_catalog_request
+        # O que NAO e decidido aqui: transacao de verdade (pagamento, carrinho,
+        # finalizacao) segue para os fluxos proprios, que tem efeito real.
         from .commerce.turn_resolver import (
             ACTION_BROWSE_CATALOG,
             ACTION_CHECK_INVENTORY,
+            ACTION_COMPARE,
+            ACTION_CONFIRM_PENDING,
             ACTION_CORRECT_REFERENCE,
             ACTION_GET_DETAILS,
             ACTION_GET_PRICE,
+            ACTION_REJECT_PENDING,
+            ACTION_REJECT_PRODUCT,
+            ACTION_SEARCH_PRODUCT,
             ACTION_SELECT_PRODUCT,
             ACTION_SHOW_MEDIA,
             ACTION_SHOW_MORE_MEDIA,
+            ACTION_START_PURCHASE,
+            READ_ONLY_ACTIONS,
             resolve_commerce_turn,
         )
 
-        generico = (
-            classify_catalog_request(message.text or "").kind == GENERIC_BROWSE
-        )
-        tem_contexto = bool(
-            state is not None
-            and (
-                getattr(state, "active_product", None)
-                or getattr(state, "last_presented_products", None)
-            )
-        )
-        continuidade = tem_contexto and resolve_commerce_turn(
-            message.text or "", state=state
-        ).action in {
-            ACTION_BROWSE_CATALOG,
-            ACTION_CHECK_INVENTORY,
-            ACTION_CORRECT_REFERENCE,
-            ACTION_GET_DETAILS,
-            ACTION_GET_PRICE,
-            # Escolher da lista tambem e continuidade: "o segundo" caia num ramo
-            # legado que respondia sobre link de produto.
-            ACTION_SELECT_PRODUCT,
-            ACTION_SHOW_MEDIA,
-            ACTION_SHOW_MORE_MEDIA,
+        decisao = resolve_commerce_turn(message.text or "", state=state)
+        decidiveis = READ_ONLY_ACTIONS | {
+            ACTION_START_PURCHASE,
+            ACTION_CONFIRM_PENDING,
+            ACTION_REJECT_PENDING,
         }
-        if not generico and not continuidade:
+        if decisao.action not in decidiveis:
             return None
-
+        # Busca e selecao sem contexto nenhum continuam passando pelo fluxo
+        # legado antes, para nao atropelar interpretacao mais rica que ele
+        # tenha para a primeira mensagem de uma conversa.
+        if decisao.action in {ACTION_SEARCH_PRODUCT, ACTION_SELECT_PRODUCT}:
+            tem_contexto = bool(
+                state is not None
+                and (
+                    getattr(state, "active_product", None)
+                    or getattr(state, "last_presented_products", None)
+                )
+            )
+            if not tem_contexto and not decisao.explicit_reference:
+                return None
     from .commerce.turn_flow import run_commerce_turn
 
     turno = state if state is not None else CommerceConversationState()

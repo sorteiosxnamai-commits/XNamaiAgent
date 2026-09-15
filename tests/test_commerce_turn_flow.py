@@ -424,8 +424,8 @@ def test_continuity_turns_are_decided_before_the_legacy_checkout_branches():
     from app import sales_agent
 
     fonte = inspect.getsource(sales_agent._generic_catalog_fast_path)
-    assert "continuidade" in fonte
-    assert "if not generico and not continuidade:" in fonte
+    assert "READ_ONLY_ACTIONS" in fonte
+    assert "if decisao.action not in decidiveis:" in fonte
 
     corpo = inspect.getsource(sales_agent._handle_sales_message_inner)
     precoce = corpo[: corpo.index("deterministic_confirmation = ")]
@@ -441,3 +441,4 @@ def test_a_message_without_commerce_context_still_falls_through():
     fonte = inspect.getsource(sales_agent._generic_catalog_fast_path)
     assert 'getattr(state, "active_product", None)' in fonte
     assert 'getattr(state, "last_presented_products", None)' in fonte
+    assert 'if not tem_contexto and not decisao.explicit_reference:' in fonte

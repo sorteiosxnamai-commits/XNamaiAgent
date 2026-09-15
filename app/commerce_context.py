@@ -158,6 +158,20 @@ class CommerceConversationState(BaseModel):
     # lembrar a ultima acao, o agente reinterpreta cada turno como busca nova.
     last_commerce_action: str | None = None
     last_requested_fact: str | None = None
+    # Acao conversacional simples aguardando sim/nao ("posso mostrar alguns
+    # produtos?"). Deliberadamente separado de `pending_action` do checkout:
+    # um e pergunta de conversa, o outro e etapa de compra com efeito real.
+    pending_commerce_action: str | None = None
+    # Id do cliente NA FONTE COMERCIAL. Sem ele o pedido nao existe, e por isso
+    # a revisao tem um estado proprio para a ausencia em vez de listar o campo
+    # junto com os outros que faltam.
+    mercos_customer_id: str | None = None
+    # Condicao COMERCIAL (prazo) da fonte, distinta de `selected_payment_option`,
+    # que modela FORMA de pagamento (pix/cartao/boleto, parcelas, desconto).
+    # Dois escalares em vez de um modelo novo: o pedido so precisa do id, e o
+    # nome existe para a revisao poder mostrar o que foi escolhido.
+    mercos_payment_condition_id: str | None = None
+    mercos_payment_condition_name: str | None = None
     previous_active_product: CommerceProductReference | None = None
     # Paginacao de midia do produto atual, para "manda outra".
     last_media_product_id: str | None = None
@@ -851,6 +865,7 @@ def evolve_commerce_state(
         for field in (
             "last_commerce_action", "last_requested_fact",
             "last_media_product_id", "last_media_index",
+            "pending_commerce_action",
         ):
             if field in turn_state:
                 setattr(state, field, turn_state[field])

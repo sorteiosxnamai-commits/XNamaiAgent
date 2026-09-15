@@ -26,6 +26,14 @@ class NullCommerceProvider:
     #: Gating generico por provider, nunca por env de fornecedor.
     available = False
 
+    async def list_payment_conditions(self) -> list[Any]:
+        """Sem fonte comercial nao ha condicoes. Vazio, nunca excecao.
+
+        A revisao entao bloqueia por "nenhuma condicao ativa", que e um estado
+        tratado — em vez de o turno quebrar por falta de fornecedor.
+        """
+        return []
+
     async def execute(self, capability: str, arguments: dict[str, Any]) -> dict[str, Any]:
         raise CommerceUnavailableError(capability)
 

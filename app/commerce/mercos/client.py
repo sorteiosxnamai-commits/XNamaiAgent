@@ -138,6 +138,18 @@ class AdaptorPage:
         return bool(self.next_cursor)
 
 
+class MercosMutationDisabled(RuntimeError):
+    """Mutacao pedida com o portao fechado.
+
+    Nao e falha de rede nem do fornecedor: e a configuracao dizendo que este
+    ambiente ainda nao esta autorizado a criar nada.
+    """
+
+    def __init__(self, operacao: str) -> None:
+        super().__init__(f"mutacao desabilitada neste ambiente: {operacao}")
+        self.operation = operacao
+
+
 class MercosAdaptorClient:
     """Cliente async do MercosAdaptor."""
 
@@ -149,12 +161,18 @@ class MercosAdaptorClient:
         timeout_seconds: float = 90.0,
         transport: httpx.AsyncBaseTransport | None = None,
         max_transport_retries: int = 2,
+        mutations_enabled: bool = False,
+        customer_mutations_enabled: bool = False,
     ) -> None:
         self._base_url = (base_url or "").strip().rstrip("/")
         self._api_key = (api_key or "").strip()
         self._timeout = timeout_seconds
         self._transport = transport
         self._max_transport_retries = max(1, int(max_transport_retries))
+        # Portoes DESLIGADOS por padrao. Um pedido criado por engano aparece no
+        # ERP do cliente e nao tem desfazer — o default seguro e nao criar.
+        self._mutations_enabled = bool(mutations_enabled)
+        self._customer_mutations_enabled = bool(customer_mutations_enabled)
 
     # --- infraestrutura ----------------------------------------------------
 
@@ -314,6 +332,16 @@ class MercosAdaptorClient:
             next_cursor=payload.get("nextCursor"),
         )
 
+    async def list_payment_conditions(self) -> list[dict[str, Any]]:
+        """Condicoes de pagamento cadastradas, pela rota que o adaptador ja expoe.
+
+        Leitura pura: a selecao (uma ativa? nenhuma? varias?) e decidida fora,
+        em `commerce.payment_conditions`, para que a regra possa ser testada sem
+        rede.
+        """
+        pagina = await self.list_resource("payment-conditions")
+        return list(getattr(pagina, "data", None) or [])
+
     async def get_detail(self, resource: str, mercos_id: str) -> dict[str, Any]:
         """`GET /v1/{resource}/{mercos_id}`.
 
@@ -351,14 +379,23 @@ class MercosAdaptorClient:
                 ) from exc
             raise
 
+    def _exigir_portao(self, aberto: bool, operacao: str) -> None:
+        """Recusa ANTES de abrir conexao: nada sai enquanto o portao fechar."""
+        if not aberto:
+            raise MercosMutationDisabled(operacao)
+
     async def create_customer(self, payload: dict[str, Any]) -> Any:
+        self._exigir_portao(self._customer_mutations_enabled, "create_customer")
         return await self._mutate("POST", "/v1/customers", payload)
 
     async def update_customer(self, mercos_id: str, payload: dict[str, Any]) -> Any:
+        self._exigir_portao(self._customer_mutations_enabled, "update_customer")
         return await self._mutate("PUT", f"/v1/customers/{mercos_id}", payload)
 
     async def create_order(self, payload: dict[str, Any]) -> Any:
+        self._exigir_portao(self._mutations_enabled, "create_order")
         return await self._mutate("POST", "/v1/orders", payload)
 
     async def update_order(self, mercos_id: str, payload: dict[str, Any]) -> Any:
+        self._exigir_portao(self._mutations_enabled, "update_order")
         return await self._mutate("PUT", f"/v1/orders/{mercos_id}", payload)

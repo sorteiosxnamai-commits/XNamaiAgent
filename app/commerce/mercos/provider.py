@@ -338,6 +338,21 @@ class MercosCommerceProvider:
             return {"ok": False, "error": "missing_argument", "argument": "product_id"}
         return check_inventory(self._index, tenant_id=self._tenant_id, product_id=product_id)
 
+    async def list_payment_conditions(self) -> list[dict[str, Any]]:
+        """Condicoes de pagamento cadastradas na fonte comercial.
+
+        Capacidade PUBLICA do provider, e nao uma tool do modelo. O fluxo de
+        revisao chega ate a fonte por aqui em vez de alcancar `_client` por
+        dentro: quem consome o provider deve enxergar capacidade, nao fiacao —
+        e isso e o que sobrevive a uma troca de fornecedor.
+
+        A regra de selecao (uma ativa seleciona; varias perguntam; nenhuma
+        bloqueia) vive fora, em `commerce.payment_conditions`, para poder ser
+        testada sem rede.
+        """
+        page = await self._client.list_resource("payment-conditions")
+        return list(page.data or [])
+
     async def _do_list_categories(self, arguments: dict[str, Any]) -> dict[str, Any]:
         page = await self._client.list_resource(
             "categories", changed_after=arguments.get("changed_after")

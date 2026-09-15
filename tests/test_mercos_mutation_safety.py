@@ -16,6 +16,9 @@ from app.commerce.mercos.client import MercosAdaptorClient, MercosAdaptorError
 
 def _client(handler, **kwargs):
     return MercosAdaptorClient(
+        # Portao aberto de proposito: este teste exercita o caminho de mutacao.
+        mutations_enabled=True,
+        customer_mutations_enabled=True,
         base_url="https://adaptor.example.com",
         api_key="internal-key",
         timeout_seconds=5,

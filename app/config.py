@@ -576,6 +576,15 @@ class Settings(BaseSettings):
     # SOMENTE estas duas. Os tokens da Mercos (ApplicationToken/CompanyToken) e
     # a MERCOS_BASE_URL pertencem ao MercosAdaptor e NAO podem existir aqui: o
     # XNamai fala com o adaptador por chave interna e nunca com a Mercos.
+    # Portoes de mutacao, DESLIGADOS por padrao. Pedido criado por engano nao
+    # tem desfazer: aparece no ERP do cliente. Ligar e decisao operacional
+    # explicita, nunca efeito colateral de um deploy.
+    mercos_order_mutations_enabled: bool = Field(
+        default=False, alias="MERCOS_ORDER_MUTATIONS_ENABLED"
+    )
+    mercos_customer_mutations_enabled: bool = Field(
+        default=False, alias="MERCOS_CUSTOMER_MUTATIONS_ENABLED"
+    )
     mercos_adaptor_url: str = Field(default="", alias="MERCOS_ADAPTOR_URL")
     mercos_adaptor_api_key: str = Field(default="", alias="MERCOS_ADAPTOR_API_KEY")
     mercos_adaptor_timeout_seconds: float = Field(
