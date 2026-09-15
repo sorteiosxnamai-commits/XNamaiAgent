@@ -74,20 +74,29 @@ class CatalogIndexProductReader:
         category_id: str | None,
         available: bool | None,
         limit: int,
+        offset: int = 0,
     ) -> list[CommerceProduct]:
         repo = self._repo()
         rows: list[dict[str, Any]] = []
+        # `offset` desce ate o SQL: paginar recortando em memoria obrigaria a
+        # ler a janela inteira so para descartar o comeco dela.
+        salto = max(0, int(offset))
 
         # Referencia e identificador: quando o cliente a informa, ela manda.
+        # Nao pagina: e no maximo um produto.
         if reference:
             rows = repo.search_exact(tenant_id=tenant_id, reference=reference) or []
         if not rows and text:
-            rows = repo.search_lexical(tenant_id=tenant_id, query=text) or []
+            rows = repo.search_lexical(
+                tenant_id=tenant_id, query=text, limit=limit, offset=salto
+            ) or []
         if not rows and not reference and not text:
             # Pergunta generica de catalogo. Sem este ramo a busca voltaria
             # vazia e o agente concluiria "nao temos produtos" — quando na
             # verdade ninguem perguntou por nada especifico.
-            rows = repo.list_catalog_items(tenant_id=tenant_id, limit=limit) or []
+            rows = repo.list_catalog_items(
+                tenant_id=tenant_id, limit=limit, offset=salto
+            ) or []
 
         products = []
         for row in rows:

@@ -27,7 +27,6 @@ import pytest
 from app.commerce.mercos.catalog_index_reader import CatalogIndexProductReader
 from app.commerce.mercos.catalog_search import (
     HINT_FILTERS,
-    MAX_SCAN,
     SUPPORTED_FILTERS,
     UNSUPPORTED_FILTERS,
     prefer_brand,
@@ -54,21 +53,28 @@ def _linha(n: int, nome: str | None = None) -> dict[str, Any]:
 
 
 class _Repo:
+    """Duplo que pagina como o SQL: LIMIT/OFFSET, nao recorte em memoria."""
+
     def __init__(self, linhas):
         self.linhas = linhas
-        self.limites_pedidos: list[int] = []
+        self.chamadas: list[dict] = []
 
-    def list_catalog_items(self, *, tenant_id, limit):
-        self.limites_pedidos.append(limit)
-        return self.linhas[:limit] if tenant_id == TENANT else []
+    def list_catalog_items(self, *, tenant_id, limit, offset=0):
+        self.chamadas.append({"metodo": "browse", "limit": limit, "offset": offset})
+        if tenant_id != TENANT:
+            return []
+        return self.linhas[offset : offset + limit]
 
-    def search_lexical(self, *, tenant_id, query, **kwargs):
-        limite = kwargs.get("limit", len(self.linhas))
-        self.limites_pedidos.append(limite)
+    def search_lexical(self, *, tenant_id, query, limit=None, offset=0, **kwargs):
+        self.chamadas.append(
+            {"metodo": "lexical", "query": query, "limit": limit, "offset": offset}
+        )
         if tenant_id != TENANT:
             return []
         alvo = (query or "").casefold()
-        return [l for l in self.linhas if alvo in (l["title_normalized"] or "")][:limite]
+        casam = [l for l in self.linhas if alvo in (l["title_normalized"] or "")]
+        limite = limit or len(casam)
+        return casam[offset : offset + limite]
 
     def search_exact(self, *, tenant_id, reference=None, **kwargs):
         return [l for l in self.linhas if l.get("reference") == reference]
@@ -108,14 +114,13 @@ def test_the_exact_argument_shape_the_agent_sends_is_accepted():
 def test_page_one_returns_the_first_window():
     resultado = _buscar([_linha(n) for n in range(1, 26)], limit=10, page=1)
     assert _ids(resultado) == [str(n) for n in range(1, 11)]
-    assert resultado["page"] == 1
-    assert resultado["has_more"] is True
+    assert resultado["paging"] == {"page": 1, "limit": 10, "returned": 10}
 
 
 def test_page_two_returns_the_next_window():
     resultado = _buscar([_linha(n) for n in range(1, 26)], limit=10, page=2)
     assert _ids(resultado) == [str(n) for n in range(11, 21)]
-    assert resultado["page"] == 2
+    assert resultado["paging"]["page"] == 2
 
 
 def test_pages_do_not_overlap():
@@ -125,10 +130,22 @@ def test_pages_do_not_overlap():
     assert p1 & p2 == set()
 
 
-def test_the_last_page_reports_no_more():
+def test_the_last_page_returns_the_remainder():
     resultado = _buscar([_linha(n) for n in range(1, 16)], limit=10, page=2)
     assert resultado["count"] == 5
-    assert resultado["has_more"] is False
+    assert resultado["paging"]["returned"] == 5
+
+
+def test_the_offset_reaches_the_index_instead_of_being_sliced_in_memory():
+    """A janela sai do banco: paginar nao le o comeco so para descartar."""
+    repo = _Repo([_linha(n) for n in range(1, 60)])
+    search_products(
+        CatalogIndexProductReader(repository=repo),
+        tenant_id=TENANT,
+        arguments={"limit": 10, "page": 4},
+    )
+    assert repo.chamadas[0]["offset"] == 30
+    assert repo.chamadas[0]["limit"] == 10
 
 
 @pytest.mark.parametrize("bruto,esperado", [(None, 1), (0, 1), (-3, 1), ("2", 2), ("abc", 1), (3, 3)])
@@ -137,23 +154,23 @@ def test_an_invalid_page_falls_back_to_the_first(bruto, esperado):
     assert resolve_page(bruto) == esperado
 
 
-def test_a_page_beyond_the_scan_window_is_empty_not_an_error():
+def test_a_page_past_the_end_is_empty_not_an_error():
     resultado = _buscar([_linha(n) for n in range(1, 26)], limit=10, page=99)
     assert resultado["ok"] is True
     assert resultado["count"] == 0
-    assert resultado["has_more"] is False
+    assert resultado["paging"]["returned"] == 0
 
 
-def test_the_scan_window_is_capped():
-    """Paginar nao pode virar varredura ilimitada do indice."""
+def test_the_page_size_asked_of_the_index_is_the_page_size():
+    """Sem inflar a leitura: o banco devolve exatamente uma pagina."""
     repo = _Repo([_linha(n) for n in range(1, 500)])
     search_products(
         CatalogIndexProductReader(repository=repo),
         tenant_id=TENANT,
-        arguments={"limit": 20, "page": 5},  # offset 80, dentro da janela
+        arguments={"limit": 20, "page": 5},
     )
-    assert repo.limites_pedidos, "a busca nem chegou ao indice"
-    assert max(repo.limites_pedidos) <= MAX_SCAN
+    assert repo.chamadas[0]["limit"] == 20
+    assert repo.chamadas[0]["offset"] == 80
 
 
 # === 2. brand e pista, nunca filtro =======================================
@@ -240,6 +257,7 @@ def test_browse_without_filters_still_works():
     assert resultado["ok"] is True
     assert resultado["count"] == 3
     assert resultado["source"] == "local_index"
+    assert resultado["paging"]["page"] == 1
 
 
 def test_the_lifecycle_defence_survives_pagination():
@@ -252,3 +270,69 @@ def test_the_lifecycle_defence_survives_pagination():
 def test_the_result_still_carries_freshness():
     resultado = _buscar([_linha(1)], limit=10, page=1)
     assert "freshness" in resultado["products"][0]
+
+
+def test_the_brand_is_never_concatenated_into_the_lexical_query():
+    """`"Hmaston cabo"` zeraria o recall: a leitura e um LIKE de trecho unico."""
+    repo = _Repo([_linha(1, "Cabo Hmaston")])
+    search_products(
+        CatalogIndexProductReader(repository=repo),
+        tenant_id=TENANT,
+        arguments={"query": "cabo", "brand": "Hmaston", "limit": 10},
+    )
+    lexicais = [c for c in repo.chamadas if c["metodo"] == "lexical"]
+    assert lexicais[0]["query"] == "cabo"
+    assert "hmaston cabo" not in str(repo.chamadas).casefold()
+
+
+def test_the_brand_becomes_an_alternative_query_when_the_text_finds_nothing():
+    """Ampliar recuperacao, nunca estreitar: so roda se o texto voltou vazio."""
+    repo = _Repo([_linha(1, "Fone Hmaston")])
+    resultado = search_products(
+        CatalogIndexProductReader(repository=repo),
+        tenant_id=TENANT,
+        arguments={"query": "inexistente", "brand": "Hmaston", "limit": 10},
+    )
+    consultas = [c["query"] for c in repo.chamadas if c["metodo"] == "lexical"]
+    assert consultas == ["inexistente", "hmaston"]
+    assert resultado["count"] == 1
+
+
+def test_the_alternative_query_does_not_run_when_the_text_already_matched():
+    repo = _Repo([_linha(1, "Cabo Hmaston"), _linha(2, "Cabo Outro")])
+    search_products(
+        CatalogIndexProductReader(repository=repo),
+        tenant_id=TENANT,
+        arguments={"query": "cabo", "brand": "Hmaston", "limit": 10},
+    )
+    consultas = [c["query"] for c in repo.chamadas if c["metodo"] == "lexical"]
+    assert consultas == ["cabo"]
+
+
+def test_paging_is_reported_on_every_successful_search():
+    for args in ({}, {"query": "produto"}, {"limit": 5, "page": 2}):
+        resultado = _buscar([_linha(n) for n in range(1, 30)], **args)
+        assert set(resultado["paging"]) == {"page", "limit", "returned"}
+        assert resultado["paging"]["returned"] == resultado["count"]
+
+
+def test_the_paginated_queries_order_by_a_unique_tiebreaker():
+    """Sem desempate, OFFSET sobre empate repete e pula linhas.
+
+    Descoberto contra o catalogo real: depois de um full refresh milhares de
+    linhas compartilham o mesmo `freshness_at`, e a page 3 trazia um produto que
+    a page 2 ja tinha mostrado.
+    """
+    import inspect
+
+    from app.catalog_index_repository import CatalogIndexRepository
+
+    for metodo in (
+        CatalogIndexRepository.list_catalog_items,
+        CatalogIndexRepository.search_lexical,
+    ):
+        fonte = inspect.getsource(metodo)
+        assert "OFFSET %(offset)s" in fonte, f"{metodo.__name__} nao pagina"
+        assert "catalog_item_key" in fonte.split("ORDER BY")[1].split("LIMIT")[0], (
+            f"{metodo.__name__} pagina sem desempate estavel"
+        )

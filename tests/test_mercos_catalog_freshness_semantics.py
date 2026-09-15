@@ -180,7 +180,7 @@ class _RepoAdaptado:
     def __init__(self, repo):
         self._repo = repo
 
-    def list_catalog_items(self, *, tenant_id, limit):
+    def list_catalog_items(self, *, tenant_id, limit, offset=0):
         return self._repo.list_catalog_items(tenant_id=tenant_id, limit=limit)
 
     def search_exact(self, *, tenant_id, reference=None, **kwargs):
@@ -189,7 +189,7 @@ class _RepoAdaptado:
             if linha.get("reference") == reference
         ]
 
-    def search_lexical(self, *, tenant_id, query, **kwargs):
+    def search_lexical(self, *, tenant_id, query, limit=None, offset=0, **kwargs):
         alvo = (query or "").casefold()
         return [
             linha for linha in self._repo.list_catalog_items(tenant_id=tenant_id, limit=100)

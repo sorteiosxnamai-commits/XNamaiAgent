@@ -123,6 +123,23 @@ def brand_hint(arguments: dict[str, Any]) -> str | None:
     return texto or None
 
 
+def lexical_text(arguments: dict[str, Any], brand: str | None) -> str | None:
+    """Texto da busca. A marca so vira consulta quando nao ha outra.
+
+    NAO se concatena marca ao texto (`"Hmaston cabo"`): a leitura do indice e um
+    `LIKE '%texto%'`, um unico trecho contiguo. Concatenar exigiria que o nome
+    trouxesse exatamente "hmaston cabo" em sequencia e zeraria o recall — o
+    oposto de ampliar candidatos. A marca entra como consulta ALTERNATIVA (ver
+    `search_products`) e como criterio de ordenacao.
+    """
+    args = arguments or {}
+    bruto = args.get("query") or args.get("name")
+    texto = str(bruto).strip() if bruto else ""
+    if texto:
+        return texto
+    return brand or None
+
+
 def prefer_brand(
     products: list[CommerceProduct], brand: str | None
 ) -> list[CommerceProduct]:
@@ -189,48 +206,45 @@ def search_products(
     page = resolve_page(args.get("page"))
     brand = brand_hint(args)
 
-    text = args.get("query") or args.get("name")
-    text = str(text).strip() if text else None
-    if text is None and brand:
-        # Marca sozinha e o unico texto disponivel: vira a busca lexical.
-        text = brand
-
+    text = lexical_text(args, brand)
     offset = (page - 1) * limit
-    if offset >= MAX_SCAN:
-        # Pagina alem do alcance da leitura. Vazia de verdade, sem fingir erro
-        # nem fingir que existe mais catalogo adiante.
-        return _search_result([], page=page, has_more=False)
 
-    janela = reader.search_products(
-        tenant_id=tenant_id,
-        text=text,
-        reference=str(args["reference"]).strip() if args.get("reference") else None,
-        category_id=None,
-        available=args.get("available") if isinstance(args.get("available"), bool) else None,
-        # Um item alem da janela, so para saber se existe proxima pagina sem
-        # precisar de uma segunda consulta.
-        limit=min(offset + limit + 1, MAX_SCAN),
-    )
-    # Segunda barreira: o indice nao deveria conter inativo/excluido, mas um
-    # snapshot legado nao pode virar oferta.
-    vendaveis = [p for p in janela if not is_commercially_unavailable(p)]
-    ordenados = prefer_brand(vendaveis, brand)
-    recorte = ordenados[offset : offset + limit]
-    return _search_result(
-        recorte, page=page, has_more=len(ordenados) > offset + limit
-    )
+    referencia = str(args["reference"]).strip() if args.get("reference") else None
+    disponivel = args.get("available") if isinstance(args.get("available"), bool) else None
+
+    def _ler(consulta: str | None) -> list[CommerceProduct]:
+        janela = reader.search_products(
+            tenant_id=tenant_id,
+            text=consulta,
+            reference=referencia,
+            category_id=None,
+            available=disponivel,
+            limit=limit,
+            offset=offset,
+        )
+        # Segunda barreira: o indice nao deveria conter inativo/excluido, mas um
+        # snapshot legado nao pode virar oferta.
+        return [p for p in janela if not is_commercially_unavailable(p)]
+
+    vendaveis = _ler(text)
+    if not vendaveis and brand and (text or "").casefold() != brand:
+        # A marca como consulta ALTERNATIVA: amplia a recuperacao quando o texto
+        # do cliente nao casou. Nunca estreita — so roda se o resultado veio
+        # vazio, e a decisao final continua no SalesAgent.
+        vendaveis = _ler(brand)
+
+    return _search_result(prefer_brand(vendaveis, brand), page=page, limit=limit)
 
 
 def _search_result(
-    products: list[CommerceProduct], *, page: int, has_more: bool
+    products: list[CommerceProduct], *, page: int, limit: int
 ) -> dict[str, Any]:
     return {
         "ok": True,
         "count": len(products),
         "source": "local_index",
         "products": [present_product(product) for product in products],
-        "page": page,
-        "has_more": has_more,
+        "paging": {"page": page, "limit": limit, "returned": len(products)},
     }
 
 

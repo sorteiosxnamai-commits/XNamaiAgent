@@ -60,7 +60,7 @@ class _Index:
         return removed
 
     # leitura, para os testes de read path
-    def search_products(self, *, tenant_id, text, reference, category_id, available, limit):
+    def search_products(self, *, tenant_id, text, reference, category_id, available, limit, offset=0):
         return list(self.items.values())[:limit]
 
     def get_product(self, *, tenant_id, product_id):

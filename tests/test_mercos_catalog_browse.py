@@ -42,7 +42,7 @@ class _Repo:
         self.tenant = tenant
         self.calls: list[str] = []
 
-    def list_catalog_items(self, *, tenant_id, limit):
+    def list_catalog_items(self, *, tenant_id, limit, offset=0):
         self.calls.append("browse")
         if tenant_id != self.tenant:
             return []
@@ -54,7 +54,7 @@ class _Repo:
             return []
         return [r for r in self.rows if r.get("reference") == reference]
 
-    def search_lexical(self, *, tenant_id, query, **kwargs):
+    def search_lexical(self, *, tenant_id, query, limit=None, offset=0, **kwargs):
         self.calls.append("lexical")
         if tenant_id != self.tenant:
             return []
@@ -93,10 +93,10 @@ def test_browse_returns_the_canonical_search_shape():
     """Nenhuma estrutura paralela: e o mesmo contrato de search_products."""
     repo = _Repo([_row(1)])
     result = search_products(_reader(repo), tenant_id=TENANT, arguments={})
-    # `page`/`has_more` entraram com a paginacao local: o browse continua sendo
-    # o mesmo contrato, agora dizendo tambem em que pagina esta.
-    assert set(result) == {"ok", "count", "source", "products", "page", "has_more"}
-    assert result["page"] == 1
+    # `paging` entrou com a paginacao local: o browse continua sendo o mesmo
+    # contrato, agora dizendo tambem em que pagina esta.
+    assert set(result) == {"ok", "count", "source", "products", "paging"}
+    assert result["paging"] == {"page": 1, "limit": 10, "returned": 1}
     produto = result["products"][0]
     assert produto["external_id"] == "1"
     assert "freshness" in produto

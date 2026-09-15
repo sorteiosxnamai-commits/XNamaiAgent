@@ -32,6 +32,7 @@ class CatalogIndexRepository:
         *,
         tenant_id: str,
         limit: int = 10,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Amostra do catalogo do tenant, sem filtro de busca.
 
@@ -50,6 +51,9 @@ class CatalogIndexRepository:
         params: dict[str, Any] = {
             "tenant_id": tenant,
             "limit": max(1, min(int(limit), 100)),
+            # Paginacao local: a janela sai do banco em vez de ser
+            # recortada em memoria.
+            "offset": max(0, int(offset)),
         }
         clauses = ["tenant_id = %(tenant_id)s"]
         cutoff = _ttl_cutoff()
@@ -60,8 +64,11 @@ class CatalogIndexRepository:
             SELECT *
             FROM public.ai_catalog_index
             WHERE {" AND ".join(clauses)}
-            ORDER BY freshness_at DESC NULLS LAST
-            LIMIT %(limit)s
+            -- Desempate estavel: depois de um full refresh milhares de linhas
+            -- compartilham o mesmo `freshness_at`, e OFFSET sobre empate e
+            -- nao-deterministico no Postgres — paginas repetiam e pulavam itens.
+            ORDER BY freshness_at DESC NULLS LAST, catalog_item_key
+            LIMIT %(limit)s OFFSET %(offset)s
         """
         return self._fetch(sql, params)
 
@@ -123,6 +130,7 @@ class CatalogIndexRepository:
         query: str,
         brand: str | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         tenant = str(tenant_id or "").strip()
         if not tenant:
@@ -140,6 +148,7 @@ class CatalogIndexRepository:
             "tenant_id": tenant,
             "q": f"%{q.lower()}%",
             "limit": max(1, min(lim, 100)),
+            "offset": max(0, int(offset)),
         }
         ttl_sql = ""
         cutoff = _ttl_cutoff()
@@ -161,8 +170,11 @@ class CatalogIndexRepository:
               )
               {brand_sql}
               {ttl_sql}
-            ORDER BY freshness_at DESC NULLS LAST
-            LIMIT %(limit)s
+            -- Desempate estavel: depois de um full refresh milhares de linhas
+            -- compartilham o mesmo `freshness_at`, e OFFSET sobre empate e
+            -- nao-deterministico no Postgres — paginas repetiam e pulavam itens.
+            ORDER BY freshness_at DESC NULLS LAST, catalog_item_key
+            LIMIT %(limit)s OFFSET %(offset)s
         """
         return self._fetch(sql, params)
 

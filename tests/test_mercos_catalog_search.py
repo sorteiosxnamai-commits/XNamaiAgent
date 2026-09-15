@@ -42,7 +42,7 @@ class _Reader:
         self.products = products or []
         self.calls = []
 
-    def search_products(self, *, tenant_id, text, reference, category_id, available, limit):
+    def search_products(self, *, tenant_id, text, reference, category_id, available, limit, offset=0):
         self.calls.append(
             {"text": text, "reference": reference, "category_id": category_id,
              "available": available, "limit": limit}
@@ -84,10 +84,7 @@ def test_supported_filters_reach_the_index():
     )
     assert reader.calls[0] == {
         "text": "relogio", "reference": "REF-1", "category_id": None,
-        "available": True,
-        # Um item alem do pedido: e assim que a paginacao sabe se existe
-        # proxima pagina sem fazer uma segunda consulta.
-        "limit": 4,
+        "available": True, "limit": 3,
     }
 
 
