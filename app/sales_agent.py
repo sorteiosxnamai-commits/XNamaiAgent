@@ -1209,6 +1209,7 @@ async def _generic_catalog_fast_path(
             ACTION_CORRECT_REFERENCE,
             ACTION_GET_DETAILS,
             ACTION_GET_PRICE,
+            ACTION_SELECT_PRODUCT,
             ACTION_SHOW_MEDIA,
             ACTION_SHOW_MORE_MEDIA,
             resolve_commerce_turn,
@@ -1232,6 +1233,9 @@ async def _generic_catalog_fast_path(
             ACTION_CORRECT_REFERENCE,
             ACTION_GET_DETAILS,
             ACTION_GET_PRICE,
+            # Escolher da lista tambem e continuidade: "o segundo" caia num ramo
+            # legado que respondia sobre link de produto.
+            ACTION_SELECT_PRODUCT,
             ACTION_SHOW_MEDIA,
             ACTION_SHOW_MORE_MEDIA,
         }
