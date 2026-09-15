@@ -1074,6 +1074,24 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 fallback_reason=interpretation._fallback_reason,
                 interpretation_confidence=interpretation.confidence,
             )
+    # Pergunta generica de catalogo pode chegar aqui sem passar pelo fluxo de
+    # vendas: o escopo nem sempre e classificado como "commerce", e ai o turno
+    # ia direto para o tool loop e voltava `tools_request_failed`. Uma amostra
+    # do catalogo e deterministica e nao precisa de tool loop nenhum.
+    if commerce_tools_available():
+        from .sales_agent import _generic_catalog_fast_path
+
+        amostra_catalogo = await _generic_catalog_fast_path(message, only_browse=True)
+        if amostra_catalogo is not None:
+            return _annotate_agent_result(
+                amostra_catalogo,
+                domain="commerce",
+                goal=None,
+                used_openai_interpreter=False,
+                used_openai_responder=False,
+                used_commerce_provider=True,
+            )
+
     print("[openai.agent] routing", {"mode": "openai_with_db_context_and_tools", "primary_intent": facts.get("primary_intent"), "has_openai_key": bool(get_settings().openai_api_key), "commerce_tools_enabled": commerce_tools_available()})
     result = await generate_openai_reply_async(message, customer_context, facts)
     return _annotate_agent_result(

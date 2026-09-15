@@ -441,3 +441,21 @@ async def test_a_checkout_message_is_not_hijacked_by_the_early_call(monkeypatch)
 
     for texto in ("quero pagar", "confirma o pedido", "qual o link de pagamento"):
         assert classify_catalog_request(texto).kind != GENERIC_BROWSE
+
+
+def test_the_openai_route_also_answers_generic_browse_before_the_tool_loop():
+    """Nem toda pergunta de catalogo e roteada como escopo comercial.
+
+    "o que voces vendem?" chegava ao tool loop sem passar pelo fluxo de vendas e
+    voltava `tools_request_failed`. Uma amostra do catalogo e deterministica: nao
+    precisa de tool loop nenhum.
+    """
+    import inspect
+
+    from app import openai_agent
+
+    fonte = inspect.getsource(openai_agent.generate_agent_reply_async)
+    assert "_generic_catalog_fast_path(message, only_browse=True)" in fonte
+    assert fonte.index("_generic_catalog_fast_path") < fonte.index(
+        "generate_openai_reply_async(message, customer_context, facts)"
+    )
