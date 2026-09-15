@@ -1209,11 +1209,17 @@ async def _generic_catalog_fast_path(
     except Exception:  # noqa: BLE001 - fast path nunca derruba o turno
         return None
 
-    return _render_commerce_turn(resultado)
+    return _render_commerce_turn(resultado, turno)
 
 
-def _render_commerce_turn(resultado) -> AgentResult | None:
-    """Fatos -> texto. Nenhuma opiniao, nenhum produto reconstruido do texto."""
+def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
+    """Fatos -> texto, publicando o estado que o proximo turno vai reconstruir.
+
+    O runtime nao guarda o objeto de estado entre mensagens: ele o remonta a
+    partir do `response_metadata` do turno anterior. Resolver tudo em memoria e
+    nao publicar nada aqui faz o produto ativo morrer no fim da mensagem — que
+    foi exatamente o que producao mostrou.
+    """
     from .commerce.turn_flow import (
         OUTCOME_AMBIGUOUS,
         OUTCOME_BROWSE,
@@ -1238,6 +1244,18 @@ def _render_commerce_turn(resultado) -> AgentResult | None:
 
     def _metadados(**extra):
         base = {"domain": "commerce", "used_commerce_provider": True}
+        if state is not None:
+            base["commerce_turn_state"] = {
+                "last_commerce_action": getattr(state, "last_commerce_action", None),
+                "last_requested_fact": getattr(state, "last_requested_fact", None),
+                "last_media_product_id": getattr(state, "last_media_product_id", None),
+                "last_media_index": getattr(state, "last_media_index", 0),
+            }
+            ativo = getattr(state, "active_product", None)
+            if ativo is not None:
+                base["active_product"] = ativo.model_dump()
+            else:
+                base["clear_active_product"] = True
         base.update(extra)
         return base
 

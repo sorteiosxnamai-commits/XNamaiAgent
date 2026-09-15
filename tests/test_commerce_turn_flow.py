@@ -335,3 +335,78 @@ async def test_after_a_disambiguation_the_options_become_the_list():
 
     await run_commerce_turn("o segundo", state=estado, execute=executar)
     assert estado.active_product.product_id == "3"
+
+
+# === o estado precisa atravessar o turno (ida e volta pelo metadata) =======
+
+
+def _proximo_turno(resultado_anterior, state_anterior):
+    """Reconstroi o estado como o runtime faz entre mensagens."""
+    from app.commerce_context import CommerceConversationState, evolve_commerce_state
+
+    return evolve_commerce_state(CommerceConversationState(), resultado_anterior)
+
+
+@pytest.mark.asyncio
+async def test_the_rendered_turn_carries_the_state_forward():
+    """Sem isto, cada mensagem recomeca do zero — foi o que producao mostrou.
+
+    O estado do proximo turno e reconstruido do `response_metadata` do turno
+    anterior. Um fast path que resolve tudo em memoria e nao publica nada no
+    metadata perde o produto ativo assim que a mensagem termina.
+    """
+    from app.sales_agent import _render_commerce_turn
+
+    estado = CommerceConversationState()
+    executar = _executor()
+
+    browse = await run_commerce_turn("me mostre alguns produtos", state=estado, execute=executar)
+    render_browse = _render_commerce_turn(browse, estado)
+    assert render_browse.response_metadata.get("presented_products") is True
+    estado2 = _proximo_turno(render_browse, estado)
+    assert [p.product_id for p in estado2.last_presented_products] == ["1", "2", "3", "4"]
+
+    escolha = await run_commerce_turn("o segundo", state=estado2, execute=executar)
+    render_escolha = _render_commerce_turn(escolha, estado2)
+    assert render_escolha.response_metadata.get("active_product", {}).get("product_id") == "2"
+
+    estado3 = _proximo_turno(render_escolha, estado2)
+    assert estado3.active_product is not None, "produto ativo nao sobreviveu ao turno"
+    assert estado3.active_product.product_id == "2"
+
+    preco = await run_commerce_turn("quanto custa?", state=estado3, execute=executar)
+    assert preco.outcome == OUTCOME_PRICE
+    assert _ids(executar, "get_product")[-1] == "2"
+
+
+@pytest.mark.asyncio
+async def test_the_last_action_survives_the_turn():
+    from app.commerce_context import CommerceConversationState, evolve_commerce_state
+    from app.sales_agent import _render_commerce_turn
+
+    estado = CommerceConversationState()
+    executar = _executor()
+    await run_commerce_turn("me mostre alguns produtos", state=estado, execute=executar)
+    await run_commerce_turn("o primeiro", state=estado, execute=executar)
+    midia = await run_commerce_turn("tem foto?", state=estado, execute=executar)
+
+    render = _render_commerce_turn(midia, estado)
+    proximo = evolve_commerce_state(CommerceConversationState(), render)
+    assert proximo.last_commerce_action == "show_media"
+    assert proximo.last_requested_fact == "media"
+
+
+@pytest.mark.asyncio
+async def test_a_presented_list_longer_than_three_keeps_its_positions():
+    """"o quarto" so funciona se a lista inteira atravessar o turno."""
+    from app.commerce_context import CommerceConversationState, evolve_commerce_state
+    from app.sales_agent import _render_commerce_turn
+
+    estado = CommerceConversationState()
+    executar = _executor()
+    browse = await run_commerce_turn("me mostre alguns produtos", state=estado, execute=executar)
+    proximo = evolve_commerce_state(
+        CommerceConversationState(), _render_commerce_turn(browse, estado)
+    )
+    assert len(proximo.last_presented_products) == 4
+    assert proximo.last_presented_products[-1].position == 4

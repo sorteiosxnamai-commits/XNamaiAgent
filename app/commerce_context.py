@@ -138,6 +138,11 @@ def checkout_missing_fields(draft: CheckoutDraft) -> list[str]:
     return [field for field in CHECKOUT_REQUIRED_FIELDS if not fields[field]]
 
 
+#: Quantos produtos apresentados atravessam o turno. Truncar em 3 quebrava
+#: "o quarto": a posicao que o cliente viu deixava de existir no turno seguinte.
+MAX_PRESENTED_PRODUCTS = 10
+
+
 class CommerceConversationState(BaseModel):
     active_domain: Literal["commerce", "raffle"] | None = None
     active_topic: str | None = None
@@ -821,7 +826,7 @@ def evolve_commerce_state(
     products = (result.commercial_data or {}).get("products")
     compact_products: list[PresentedCommerceProduct] = []
     if isinstance(products, list):
-        for position, product in enumerate(products[:3], start=1):
+        for position, product in enumerate(products[:MAX_PRESENTED_PRODUCTS], start=1):
             if not isinstance(product, dict):
                 continue
             identity = product_reference_from_product(product)
@@ -838,6 +843,18 @@ def evolve_commerce_state(
         state.active_product = CommerceProductReference.model_validate(
             compact_products[0].model_dump(exclude={"position"})
         )
+    # Continuidade da conversa comercial. Sem este bloco o estado morre no fim
+    # da mensagem: o proximo turno reconstroi tudo do metadata, e "quanto
+    # custa?" voltaria a falar de um produto que o cliente nunca escolheu.
+    turn_state = metadata.get("commerce_turn_state")
+    if isinstance(turn_state, dict):
+        for field in (
+            "last_commerce_action", "last_requested_fact",
+            "last_media_product_id", "last_media_index",
+        ):
+            if field in turn_state:
+                setattr(state, field, turn_state[field])
+
     resolution_state = metadata.get("product_resolution_state")
     if isinstance(resolution_state, str) and resolution_state.strip():
         state.product_resolution_state = resolution_state.strip()
