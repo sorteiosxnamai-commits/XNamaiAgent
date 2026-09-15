@@ -32,7 +32,14 @@ def get_conn() -> Iterator[psycopg.Connection]:
     if not settings.database_url:
         raise RuntimeError("DATABASE_URL is not configured")
     register_database_call()
-    conn = psycopg.connect(settings.database_url, row_factory=dict_row, connect_timeout=10)
+    # Supabase transaction pooler (6543) nao suporta prepared statements
+    # persistentes entre transacoes; desabilitar auto-prepare do psycopg.
+    conn = psycopg.connect(
+        settings.database_url,
+        row_factory=dict_row,
+        connect_timeout=10,
+        prepare_threshold=None,
+    )
     try:
         yield conn
         conn.commit()
