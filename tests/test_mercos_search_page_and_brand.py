@@ -336,3 +336,29 @@ def test_the_paginated_queries_order_by_a_unique_tiebreaker():
         assert "catalog_item_key" in fonte.split("ORDER BY")[1].split("LIMIT")[0], (
             f"{metodo.__name__} pagina sem desempate estavel"
         )
+
+
+# === 5. o contrato que o caminho legado consome ===========================
+
+
+def test_every_product_carries_the_id_key_the_legacy_path_reads():
+    """`sales_agent._absorb_products` descarta produto sem `id`.
+
+    O Mercos apresentava so `external_id`, entao TODO candidato era descartado
+    na absorcao e o cliente ouvia "nao encontrei opcoes" com o catalogo cheio.
+    E o mesmo identificador sob a chave que o consumidor procura.
+    """
+    resultado = _buscar([_linha(n) for n in range(1, 4)])
+    for produto in resultado["products"]:
+        assert produto.get("id") is not None
+        assert produto["id"] == produto["external_id"]
+
+
+def test_the_absorption_gate_would_keep_every_product():
+    """Reproduz literalmente a condicao de `_absorb_products`."""
+    resultado = _buscar([_linha(n) for n in range(1, 6)])
+    aceitos = [
+        p for p in resultado["products"]
+        if isinstance(p, dict) and p.get("id") is not None
+    ]
+    assert len(aceitos) == resultado["count"] == 5

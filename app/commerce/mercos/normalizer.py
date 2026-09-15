@@ -168,6 +168,12 @@ class CommerceProduct:
     def for_model(self) -> dict[str, Any]:
         """O que pode chegar ao modelo. Sem `raw`, sem campo nao mapeado."""
         return {
+            # `id` e o MESMO identificador de `external_id`, repetido sob o nome
+            # que o caminho legado le. Sem ele, `sales_agent._absorb_products`
+            # descartava TODO produto ("id is None") e o cliente ouvia "nao
+            # encontrei opcoes" com 6.120 itens no catalogo. Nenhum dado novo:
+            # so o mesmo valor sob a chave que o consumidor procura.
+            "id": self.external_id,
             "external_id": self.external_id,
             "provider": self.provider,
             "reference": self.reference,
