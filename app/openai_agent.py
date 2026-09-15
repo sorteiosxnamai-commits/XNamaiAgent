@@ -158,6 +158,24 @@ def _truncate(text: str, max_chars: int) -> str:
     return text[: max_chars - 1].rstrip() + "…"
 
 
+def _runtime_capability_blocks() -> list[str]:
+    """Bloco com as capacidades REAIS do turno, derivadas do provider ativo.
+
+    Este caminho nunca via o catalogo de capabilities: perguntado "o que voce
+    consegue fazer?", o modelo oferecia acompanhamento de pedido com zero
+    capability de pedido exposta. O bloco fecha essa lacuna sem tocar a
+    persona e sem nomear fornecedor — some sozinho quando a capacidade for
+    ligada de verdade.
+    """
+    try:
+        from .capability_catalog import runtime_capability_block
+
+        texto = runtime_capability_block()
+    except Exception:  # noqa: BLE001 - prompt nunca derruba o turno
+        return []
+    return [texto] if texto.strip() else []
+
+
 def _sanitize_log_message(text: str) -> str:
     redacted = re.sub(r"sk-(?:proj-)?[^\s'\"]+", "sk-***", text or "")
     return redacted[:300]
@@ -264,7 +282,8 @@ def generate_openai_reply(
         extra_system_blocks=legacy_contract_extra_blocks(
             SYSTEM_INSTRUCTIONS,
             tag="legacy_agent_contract",
-        ),
+        )
+        + _runtime_capability_blocks(),
     )
     legacy_messages = [
         {"role": "system", "content": system_instructions},
@@ -385,7 +404,8 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
         extra_system_blocks=legacy_contract_extra_blocks(
             SYSTEM_INSTRUCTIONS,
             tag="legacy_agent_contract",
-        ),
+        )
+        + _runtime_capability_blocks(),
     )
     messages: list[dict] = [
         {"role": "system", "content": system_instructions},

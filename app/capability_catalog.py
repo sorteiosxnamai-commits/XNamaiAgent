@@ -118,6 +118,47 @@ _ORDER_CAPABILITIES = frozenset({
 _CUSTOMER_CAPABILITIES = frozenset({"search_customer", "get_customer"})
 
 
+def runtime_commerce_capabilities() -> frozenset[str]:
+    """O que o provider ativo consegue servir NESTE turno.
+
+    Diferente de `build_capability_catalog`, que descreve o CONTRATO: aqui so
+    entra o que da para executar agora. Sem provider disponivel o conjunto e
+    vazio — e vazio e a resposta honesta, nao a lista completa do contrato.
+    """
+    try:
+        from .commerce.provider import get_commerce_provider
+
+        provider = get_commerce_provider()
+    except Exception:  # noqa: BLE001 - capacidade nunca derruba o turno
+        return frozenset()
+    if not getattr(provider, "available", False):
+        return frozenset()
+    return frozenset(getattr(provider, "llm_capabilities", None) or ())
+
+
+def runtime_capability_block() -> str:
+    """Bloco de sistema com as capacidades REAIS do turno.
+
+    Existe porque o caminho geral do agente (`openai_agent`) nunca viu o
+    catalogo de capabilities: perguntado "o que voce consegue fazer?", o modelo
+    preenchia a lacuna oferecendo acompanhamento de pedido com zero capability
+    de pedido exposta.
+
+    Derivado do runtime, jamais da persona: nao nomeia fornecedor, e some
+    sozinho quando a capacidade for realmente ligada.
+    """
+    disponiveis = sorted(runtime_commerce_capabilities())
+    linhas = ["<runtime_capabilities>"]
+    if disponiveis:
+        linhas.append(
+            "Consultas comerciais disponiveis AGORA: " + ", ".join(disponiveis) + "."
+        )
+    linhas.extend(_restrictions_for(disponiveis))
+    linhas.append("Nao anuncie capacidade que nao esteja nesta lista.")
+    linhas.append("</runtime_capabilities>")
+    return "\n".join(linhas)
+
+
 def _restrictions_for(commerce_apis: list[str]) -> list[str]:
     """Proibicoes derivadas do runtime, nao da persona.
 

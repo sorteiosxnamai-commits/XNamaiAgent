@@ -217,9 +217,30 @@ def test_generic_browse_returns_a_product_synced_from_an_old_source_record(repos
     assert resultado["source"] == "local_index"
 
 
+def _linha_sincronizada_agora(**overrides: Any) -> dict[str, Any]:
+    """Como `_linha_do_indice`, mas com o sync ACONTECENDO agora.
+
+    A politica de frescor mede contra o relogio real (estoque vence em 1h), e um
+    instante fixo no passado faria estes dois testes passarem pela manha e
+    falharem a tarde.
+    """
+    overrides.setdefault("ultima_alteracao", DATA_ANTIGA_NA_ORIGEM)
+    agora = datetime.now(timezone.utc)
+    campos = product_to_index_fields(
+        normalize_product(fx.product(**overrides)), synced_at=agora
+    )
+    return {
+        "tenant_id": TENANT,
+        "catalog_item_key": f"p:{campos['product_id']}",
+        "updated_at": agora,
+        "variant_id": None,
+        **campos,
+    }
+
+
 def test_price_and_stock_are_confirmed_right_after_a_sync(repositorio):
     """Freshness correto significa fato afirmavel — nao "nao confirmado"."""
-    repo, _ = repositorio([_linha_do_indice()])
+    repo, _ = repositorio([_linha_sincronizada_agora()])
     reader = CatalogIndexProductReader(repository=_RepoAdaptado(repo))
     produto = search_products(reader, tenant_id=TENANT, arguments={})["products"][0]
     freshness = produto["freshness"]
@@ -230,12 +251,13 @@ def test_price_and_stock_are_confirmed_right_after_a_sync(repositorio):
 def test_an_old_source_date_never_invalidates_a_fresh_snapshot(repositorio):
     """`ultima_alteracao` de 2025 nao pode marcar como vencido o que acabou de
     ser confirmado — era o efeito colateral da semantica antiga."""
-    linha = _linha_do_indice()
+    linha = _linha_sincronizada_agora()
     assert linha["payload"]["ultima_alteracao"] == DATA_ANTIGA_NA_ORIGEM
     repo, _ = repositorio([linha])
     reader = CatalogIndexProductReader(repository=_RepoAdaptado(repo))
     produto = search_products(reader, tenant_id=TENANT, arguments={})["products"][0]
     assert produto["freshness"]["price_confirmed"] is True
+    assert produto["freshness"]["stock_confirmed"] is True
 
 
 def test_lexical_search_also_crosses_the_ttl_boundary(repositorio):

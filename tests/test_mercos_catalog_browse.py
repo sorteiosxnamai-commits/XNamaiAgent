@@ -93,7 +93,10 @@ def test_browse_returns_the_canonical_search_shape():
     """Nenhuma estrutura paralela: e o mesmo contrato de search_products."""
     repo = _Repo([_row(1)])
     result = search_products(_reader(repo), tenant_id=TENANT, arguments={})
-    assert set(result) == {"ok", "count", "source", "products"}
+    # `page`/`has_more` entraram com a paginacao local: o browse continua sendo
+    # o mesmo contrato, agora dizendo tambem em que pagina esta.
+    assert set(result) == {"ok", "count", "source", "products", "page", "has_more"}
+    assert result["page"] == 1
     produto = result["products"][0]
     assert produto["external_id"] == "1"
     assert "freshness" in produto

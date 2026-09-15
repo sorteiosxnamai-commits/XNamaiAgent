@@ -84,7 +84,10 @@ def test_supported_filters_reach_the_index():
     )
     assert reader.calls[0] == {
         "text": "relogio", "reference": "REF-1", "category_id": None,
-        "available": True, "limit": 3,
+        "available": True,
+        # Um item alem do pedido: e assim que a paginacao sabe se existe
+        # proxima pagina sem fazer uma segunda consulta.
+        "limit": 4,
     }
 
 

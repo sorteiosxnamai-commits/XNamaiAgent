@@ -5,9 +5,15 @@ nao existe busca textual. Baixar o catalogo a cada mensagem seria inviavel (o
 adaptador serializa chamadas e pausa entre paginas). O sync incremental mantem o
 indice atualizado; a busca acontece aqui, em memoria do banco local.
 
-Filtros: o schema herdado anuncia `brand` e `ean`, que a integracao Mercos **nao**
-mapeia. Em vez de ignorar em silencio — o que faria o agente crer que filtrou —
-estes filtros sao REJEITADOS explicitamente, com o nome de cada um.
+Filtros, em tres categorias:
+
+* SUPORTADOS — aplicados de verdade (`query`, `name`, `reference`, `limit`,
+  `available`, `page`);
+* PISTAS — aceitos, mas reordenam em vez de descartar (`brand`), porque a Mercos
+  nao tem campo de marca e filtrar por substring esconderia produto que existe;
+* RECUSADOS — sem mapeamento nenhum (`ean`, `tokens`, `category_id`). A recusa e
+  explicita, com o nome de cada um: ignorar em silencio faria o agente crer que
+  filtrou.
 """
 
 from __future__ import annotations
@@ -19,21 +25,33 @@ from .freshness import FactFreshness, evaluate_freshness
 from .normalizer import CommerceProduct
 
 #: Filtros que a busca local sabe aplicar hoje.
+#: `page` entrou aqui porque o caminho legado o envia em TODA requisicao: como
+#: ele estava entre os recusados, 100% das buscas do agente voltavam
+#: `unsupported_filter` e o catalogo inteiro ficava inalcancavel. Paginar sobre
+#: o indice local e trivial, entao a resposta certa e implementar, nao recusar.
 SUPPORTED_FILTERS: frozenset[str] = frozenset(
-    {"query", "name", "reference", "limit", "available"}
+    {"query", "name", "reference", "limit", "available", "page"}
 )
+
+#: Aceitos como PISTA, nunca como filtro estruturado. A diferenca importa: uma
+#: pista reordena, um filtro descarta. Como a Mercos nao tem campo de marca, um
+#: filtro de marca inventado esconderia produto que existe — e busca vazia o
+#: agente le como "nao temos esse produto".
+HINT_FILTERS: frozenset[str] = frozenset({"brand"})
 
 #: Anunciados pelo schema herdado, sem mapeamento nesta integracao.
 #: `category_id` entrou aqui apos a validacao contra a Mercos real: o campo
 #: `categoria_id` nao existe em nenhuma das 500 linhas inspecionadas. Anunciar
-#: um filtro que nunca casa produziria busca vazia sem erro — e busca vazia o
-#: agente le como "nao temos esse produto".
-UNSUPPORTED_FILTERS: frozenset[str] = frozenset(
-    {"brand", "ean", "tokens", "page", "category_id"}
-)
+#: um filtro que nunca casa produziria busca vazia sem erro.
+UNSUPPORTED_FILTERS: frozenset[str] = frozenset({"ean", "tokens", "category_id"})
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 20
+
+#: Teto da janela que a busca local percorre para paginar. Alem disto a leitura
+#: do indice nao alcanca, e fingir que alcanca produziria pagina vazia
+#: indistinguivel de "acabou".
+MAX_SCAN = 100
 
 
 class ProductIndexReader(Protocol):
@@ -65,6 +83,7 @@ class SearchRejection:
             "error": "unsupported_filter",
             "unsupported_filters": list(self.filters),
             "supported_filters": sorted(SUPPORTED_FILTERS),
+            "hint_filters": sorted(HINT_FILTERS),
         }
 
 
@@ -86,6 +105,39 @@ def resolve_limit(raw: Any) -> int:
     except (TypeError, ValueError):
         return DEFAULT_LIMIT
     return max(1, min(limit, MAX_LIMIT))
+
+
+def resolve_page(raw: Any) -> int:
+    """Pagina 1-based. Valor invalido vira a primeira pagina, nunca um erro."""
+    try:
+        page = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, page)
+
+
+def brand_hint(arguments: dict[str, Any]) -> str | None:
+    """A marca pedida, normalizada — ou ``None`` quando nao veio."""
+    raw = (arguments or {}).get("brand")
+    texto = str(raw).strip().casefold() if raw else ""
+    return texto or None
+
+
+def prefer_brand(
+    products: list[CommerceProduct], brand: str | None
+) -> list[CommerceProduct]:
+    """Reordena trazendo a marca pedida para a frente. NAO descarta nada.
+
+    A Mercos nao expoe campo de marca: ela aparece, quando aparece, dentro do
+    nome. Filtrar por substring descartaria produto cujo nome escreve a marca de
+    outro jeito, e o agente leria a lista vazia como ausencia de catalogo. Como
+    pista, o pior caso e uma ordem menos util — nunca um produto escondido.
+    """
+    if not brand:
+        return products
+    combina = [p for p in products if brand in (p.name or "").casefold()]
+    resto = [p for p in products if brand not in (p.name or "").casefold()]
+    return combina + resto
 
 
 def _freshness_for(product: CommerceProduct) -> dict[str, Any]:
@@ -133,23 +185,52 @@ def search_products(
         return rejection.as_result()
 
     args = dict(arguments or {})
+    limit = resolve_limit(args.get("limit"))
+    page = resolve_page(args.get("page"))
+    brand = brand_hint(args)
+
     text = args.get("query") or args.get("name")
-    products = reader.search_products(
+    text = str(text).strip() if text else None
+    if text is None and brand:
+        # Marca sozinha e o unico texto disponivel: vira a busca lexical.
+        text = brand
+
+    offset = (page - 1) * limit
+    if offset >= MAX_SCAN:
+        # Pagina alem do alcance da leitura. Vazia de verdade, sem fingir erro
+        # nem fingir que existe mais catalogo adiante.
+        return _search_result([], page=page, has_more=False)
+
+    janela = reader.search_products(
         tenant_id=tenant_id,
-        text=str(text).strip() if text else None,
+        text=text,
         reference=str(args["reference"]).strip() if args.get("reference") else None,
         category_id=None,
         available=args.get("available") if isinstance(args.get("available"), bool) else None,
-        limit=resolve_limit(args.get("limit")),
+        # Um item alem da janela, so para saber se existe proxima pagina sem
+        # precisar de uma segunda consulta.
+        limit=min(offset + limit + 1, MAX_SCAN),
     )
     # Segunda barreira: o indice nao deveria conter inativo/excluido, mas um
     # snapshot legado nao pode virar oferta.
-    vendaveis = [p for p in products if not is_commercially_unavailable(p)]
+    vendaveis = [p for p in janela if not is_commercially_unavailable(p)]
+    ordenados = prefer_brand(vendaveis, brand)
+    recorte = ordenados[offset : offset + limit]
+    return _search_result(
+        recorte, page=page, has_more=len(ordenados) > offset + limit
+    )
+
+
+def _search_result(
+    products: list[CommerceProduct], *, page: int, has_more: bool
+) -> dict[str, Any]:
     return {
         "ok": True,
-        "count": len(vendaveis),
+        "count": len(products),
         "source": "local_index",
-        "products": [present_product(product) for product in vendaveis],
+        "products": [present_product(product) for product in products],
+        "page": page,
+        "has_more": has_more,
     }
 
 
