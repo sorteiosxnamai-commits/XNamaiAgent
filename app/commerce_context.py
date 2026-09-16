@@ -158,6 +158,8 @@ class CommerceConversationState(BaseModel):
     # lembrar a ultima acao, o agente reinterpreta cada turno como busca nova.
     last_commerce_action: str | None = None
     last_requested_fact: str | None = None
+    last_catalog_query: str | None = None
+    conversation_repair_attempts: int = Field(default=0, ge=0)
     # Acao conversacional simples aguardando sim/nao ("posso mostrar alguns
     # produtos?"). Deliberadamente separado de `pending_action` do checkout:
     # um e pergunta de conversa, o outro e etapa de compra com efeito real.
@@ -864,6 +866,7 @@ def evolve_commerce_state(
     if isinstance(turn_state, dict):
         for field in (
             "last_commerce_action", "last_requested_fact",
+            "last_catalog_query", "conversation_repair_attempts",
             "last_media_product_id", "last_media_index",
             "pending_commerce_action",
         ):

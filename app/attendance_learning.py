@@ -45,14 +45,15 @@ def fetch_recent_attendances(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT
+                WITH delivered AS (
+                SELECT DISTINCT ON (response.inbound_id)
                     response.id AS response_id,
                     response.inbound_id,
                     response.reply_text AS agent_reply,
                     response.intent,
                     response.handoff_required,
                     response.safety_reason,
-                    response.response_metadata,
+                    COALESCE(response.provider_response->'_agent_metadata', '{}'::jsonb) AS response_metadata,
                     response.created_at AS response_created_at,
                     response.sender_key,
                     inbound.text AS customer_text,
@@ -60,17 +61,29 @@ def fetch_recent_attendances(
                     inbound.conversation_id,
                     inbound.sender_phone
                 FROM public.ai_agent_responses AS response
-                LEFT JOIN public.ai_inbound_messages AS inbound
+                INNER JOIN public.ai_inbound_messages AS inbound
                   ON inbound.id = response.inbound_id
                 WHERE response.created_at >= %s
-                ORDER BY response.created_at DESC
+                  AND response.provider_send_ok = true
+                  AND NULLIF(TRIM(response.reply_text), '') IS NOT NULL
+                  AND response.provider_response->>'_agent_tenant_id' = %s
+                  AND LOWER(COALESCE(response.provider_response->>'dry_run', 'false')) NOT IN ('true', '1')
+                  AND LOWER(COALESCE(response.provider_response->>'skipped', 'false')) IN ('false', '0', '')
+                  AND LOWER(COALESCE(response.provider_response#>>'{provider_response,dry_run}', 'false')) NOT IN ('true', '1')
+                  AND LOWER(COALESCE(response.provider_response#>>'{provider_response,skipped}', 'false')) IN ('false', '0', '')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM public.ai_attendance_reviews AS review
+                    JOIN public.ai_agent_responses AS reviewed ON reviewed.id = review.response_id
+                    WHERE review.tenant_id = %s AND reviewed.inbound_id = response.inbound_id
+                  )
+                ORDER BY response.inbound_id, response.id DESC
+                )
+                SELECT * FROM delivered ORDER BY response_created_at DESC, response_id DESC
                 LIMIT %s
                 """,
-                (since, limit),
+                (since, tenant_id, tenant_id, max(1, min(int(limit), 1000))),
             )
             rows = list(cur.fetchall() or [])
-    # tenant_id is reserved for multi-tenant filtering when column exists.
-    _ = tenant_id
     return rows
 
 

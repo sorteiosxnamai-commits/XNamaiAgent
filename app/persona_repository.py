@@ -8,6 +8,7 @@ from typing import Any
 
 from .db import get_conn, get_returning_id, to_jsonb
 from .persona_models import PersonaVersion
+from .turn_cache import cached_turn_read, invalidates_turn_reads
 
 
 DEFAULT_TENANT_ID = "newstore"
@@ -22,6 +23,7 @@ def _row_to_persona(row: dict[str, Any]) -> PersonaVersion:
     return PersonaVersion.model_validate(row)
 
 
+@cached_turn_read
 def get_active_persona(
     tenant_id: str = DEFAULT_TENANT_ID,
     persona_key: str = DEFAULT_PERSONA_KEY,
@@ -98,10 +100,11 @@ def _next_version(cur: Any, tenant_id: str, persona_key: str) -> int:
     return int(row.get("next_version") or 1)
 
 
+@invalidates_turn_reads
 def create_persona_version(
     *,
     instructions: str,
-    name: str = "NewStore Commercial",
+    name: str = "XNamai Comercial",
     tenant_id: str = DEFAULT_TENANT_ID,
     persona_key: str = DEFAULT_PERSONA_KEY,
     source: str = "user",
@@ -112,6 +115,8 @@ def create_persona_version(
     from .persona_policy import assert_persona_instructions_safe
 
     assert_persona_instructions_safe(instructions)
+    from .business_policy import BusinessPolicy
+    BusinessPolicy.model_validate((metadata or {}).get("business_policies") or {})
     instructions_hash = hash_instructions(instructions)
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -145,6 +150,7 @@ def create_persona_version(
     return persona
 
 
+@invalidates_turn_reads
 def activate_persona_version(
     persona_id: int,
     *,
@@ -206,6 +212,7 @@ def activate_persona_version(
     return persona
 
 
+@invalidates_turn_reads
 def archive_persona_version(
     persona_id: int,
     *,

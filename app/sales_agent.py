@@ -1190,6 +1190,14 @@ async def _generic_catalog_fast_path(
     if not commerce_tools_available():
         return None
 
+    from .commerce.conversation_repair import recover_conversation
+    repair = await recover_conversation(message.text or "", state=state, execute=execute_tool,
+                                        render=_render_commerce_turn)
+    if repair is not None:
+        return repair
+    if state is not None:
+        state.conversation_repair_attempts = 0
+
     if only_browse:
         # Chamada precoce. Decide aqui tudo que e LEITURA de fato comercial —
         # preco, estoque, midia, detalhes, selecao, comparacao, vitrine — mais
@@ -1291,6 +1299,8 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
             base["commerce_turn_state"] = {
                 "last_commerce_action": getattr(state, "last_commerce_action", None),
                 "last_requested_fact": getattr(state, "last_requested_fact", None),
+                "last_catalog_query": getattr(state, "last_catalog_query", None),
+                "conversation_repair_attempts": getattr(state, "conversation_repair_attempts", 0),
                 "last_media_product_id": getattr(state, "last_media_product_id", None),
                 "last_media_index": getattr(state, "last_media_index", 0),
             }

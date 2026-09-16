@@ -1,6 +1,10 @@
-# NewStoreAgent — Python Webhook para WhatsApp/Brevo
+# XNamaiAgent — atendimento comercial da Xnamai
 
-Projeto Python/FastAPI preparado para Vercel. Ele recebe webhooks inbound da Brevo, registra auditoria, chama OpenAI pelo SDK oficial e retorna uma resposta segura.
+Agente Python/FastAPI com catálogo Mercos, continuidade de produtos e carrinho local. Recebe mensagens via YCloud, Brevo e Meta Instagram, registra auditoria e usa OpenAI quando necessário.
+
+O fluxo Mercos prepara a revisão do pedido; `create_order` continua desabilitado. Preço e estoque dependem da fonte comercial disponível.
+
+Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-reliability.md) e o [comparativo com NsAgent](docs/audits/2026-09-15/comparacao-xnamai-nsagent.md).
 
 > Este projeto não inclui credenciais reais. Configure tudo em Environment Variables na Vercel.
 
@@ -10,7 +14,8 @@ Projeto Python/FastAPI preparado para Vercel. Ele recebe webhooks inbound da Bre
 - Vercel Python Runtime
 - OpenAI Python SDK (`openai==2.7.2`) — Chat Completions (produção) + gateway Responses
 - PostgreSQL/Supabase via `psycopg`
-- Brevo inbound webhook
+- Webhooks YCloud, Brevo e Meta Instagram
+- Inbox/outbox persistentes e worker de recuperação
 
 ## OpenAI API mode (migração)
 
@@ -33,20 +38,20 @@ OPENAI_USE_PREVIOUS_RESPONSE_ID=false
 2. Subir para `0.10` após métricas verdes
 3. `OPENAI_API_MODE=responses` + `OPENAI_CHAT_COMPLETIONS_PRIMARY_ALLOWED=false`
 
-Tool loops **nunca** fazem fallback para Chat (evita mutação dupla Tray/carrinho/pedido).
+Tool loops **nunca** fazem fallback para Chat (evita repetir ações comerciais).
 Texto/structured podem cair para Chat quando `OPENAI_RESPONSES_FALLBACK_TO_CHAT=true`.
 
 ### Persona versionada (produção)
 
 ```txt
 sql/009_ai_agent_persona.sql         # ai_agent_persona_versions + ai_prompt_compilations
-persona NS.txt                       # conteúdo exato da v1 (seed)
-scripts/seed_newstore_persona.py     # seed idempotente
 AGENT_DB_PERSONA_ENABLED=true        # tom/identidade do banco; fallback = contrato em código
 ```
 
 Sem persona ativa/ falha de DB → usa contrato operacional em código + `<fixed_safety_policy>`.
 Persona **não** pode embutir preço/estoque/link de checkout voláteis.
+
+Os identificadores legados `newstore` / `newstore_commercial` podem continuar no cadastro existente de persona. Não os altere sem migrar o cadastro; o tenant comercial é configurado separadamente em `COMMERCE_TENANT_ID` (default `xnamai`). Novas personas usam o nome de exibição `XNamai Comercial`.
 
 Admin (Bearer `ADMIN_API_TOKEN`):
 
@@ -92,7 +97,11 @@ app/webhook_parser.py                # Parser defensivo do payload Brevo
 app/openai_agent.py                  # Chamada OpenAI + instruções do agente
 app/openai_gateway.py                # Gateway Chat Completions / Responses / shadow
 app/response_presenter.py            # Naturalidade / regras de apresentação
-app/product_snapshot.py              # ProductSnapshot + cache TTL Tray
+app/commerce/mercos/                  # provider, normalização e sincronização Mercos
+app/ingress/                         # filas persistentes e workers
+app/business_policy.py               # políticas publicadas com a persona
+app/persona_knowledge.py             # recuperação documental com fontes e validade
+scripts/process_queues.py            # consumidor periódico de inbox/outbox
 app/turn_metrics.py                  # Evento turn.quality (sem PII)
 app/sales/                           # Extração incremental do sales_agent
 app/prompt_compiler.py               # Compila instructions (persona + overlays)
@@ -114,7 +123,7 @@ Canary progressivo / rollback (Etapa 12): `AGENT_ROLLOUT_PROFILE=canary_5|…|fu
 
 ## Segurança obrigatória
 
-As chaves reais devem ficar somente na Vercel:
+Configure as chaves no ambiente do serviço e do worker:
 
 ```txt
 OPENAI_API_KEY
@@ -122,6 +131,9 @@ DATABASE_URL
 BREVO_API_KEY
 BREVO_WEBHOOK_SECRET
 ADMIN_API_TOKEN
+YCLOUD_API_KEY
+YCLOUD_WEBHOOK_SECRET
+CRON_SECRET
 ```
 
 Não suba `.env` para GitHub.
@@ -131,7 +143,7 @@ Não suba `.env` para GitHub.
 1. Suba este projeto para um repositório.
 2. Na Vercel, importe o repositório.
 3. Configure as Environment Variables usando `.env.example` como referência.
-4. Rode a SQL `sql/001_ai_agent_audit.sql` no banco, ou defina `AUTO_CREATE_TABLES=true` temporariamente.
+4. Aplique as migrações necessárias de `sql/` em ordem. As filas precisam de `022_inbound_inbox_outbox.sql`; consulte o [guia operacional](docs/xnamai-reliability.md) antes de ativá-las.
 5. Configure na Brevo o webhook apontando para:
 
 ```txt
@@ -188,11 +200,6 @@ BREVO_REPLY_MODE=brevo
 BREVO_SEND_URL=https://...
 ```
 
-## Observação sobre o agente criado no painel OpenAI
-
-O nome `NewStoreAgent` foi usado como identidade/instrução do agente. Para usar um agente/assistant específico criado no painel, normalmente você precisa do identificador do recurso, não apenas do nome. Este projeto usa a Responses API com instruções equivalentes.
-
 ## Limites intencionais
 
-Este boilerplate não implementa ações sensíveis, alteração de dados do cliente, campanhas, disparos ou consultas reguladas. Ele foi feito para atendimento seguro, auditoria e handoff.
-"# XNamaiAgent" 
+As capacidades comerciais são expostas pelo provider. Esta versão não cria pedidos no Mercos e o transporte YCloud continua limitado a texto. Configuração por workspace no painel, ingestão de anexos e suporte a mídia exigem integração própria; publicar documentos em `metadata.knowledge_documents` já permite utilizá-los nos prompts.

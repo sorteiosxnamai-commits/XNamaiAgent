@@ -28,7 +28,7 @@ jobs:
       - name: Release package dry-run
         run: python scripts/package_release.py --dry-run
 
-      - name: Unit tests
+      - name: Unit tests and branch coverage
         env:
           OPENAI_API_KEY: ""
           DATABASE_URL: ""
@@ -37,8 +37,37 @@ jobs:
         run: |
           python -m pytest -q \
             --ignore=tests/evals \
+            --cov=app --cov=api --cov-branch \
+            --cov-fail-under=70 --cov-report=term:skip-covered --cov-report=xml \
             -x \
             --tb=short
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  offline-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Offline conversation evaluations
+        env:
+          OPENAI_API_KEY: ""
+          DATABASE_URL: ""
+          MERCOS_ADAPTOR_URL: ""
+          MERCOS_ADAPTOR_API_KEY: ""
+          DRY_RUN: "true"
+          AUTO_CREATE_TABLES: "false"
+        run: python -m pytest -q tests/evals -m "not online_eval" --tb=short
 
   # Optional heavier path — does not block on missing DB services yet.
   package-only:

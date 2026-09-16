@@ -115,3 +115,56 @@ async def test_database_infra_failure_is_unavailable(monkeypatch):
             database_url="postgresql://example/db",
             timeout_seconds=1,
         )
+
+
+def test_database_lock_pins_transaction_and_releases_it(monkeypatch):
+    from unittest.mock import MagicMock
+    from app import conversation_lock as module
+
+    connection = MagicMock()
+    connect = MagicMock(return_value=connection)
+    monkeypatch.setattr(module.psycopg, "connect", connect)
+    assert module._acquire_database_lock("test-only", 123, 1) is connection
+    assert connect.call_args.kwargs["prepare_threshold"] is None
+    assert connection.autocommit is False
+    queries = [call.args[0] for call in connection.cursor.return_value.__enter__.return_value.execute.call_args_list]
+    assert "set_config('lock_timeout'" in queries[0]
+    assert "pg_advisory_xact_lock" in queries[1]
+    module._release_database_lock(connection, 123)
+    connection.rollback.assert_called_once()
+    connection.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_releases_lock_acquired_by_background_thread(monkeypatch):
+    import threading
+    from app import conversation_lock as module
+
+    started, finish = threading.Event(), threading.Event()
+    released = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    connection = object()
+
+    def acquire(*args):
+        started.set()
+        assert finish.wait(3)
+        return connection
+
+    def release(value, lock_id):
+        assert value is connection
+        loop.call_soon_threadsafe(released.set)
+
+    monkeypatch.setattr(module, "_acquire_database_lock", acquire)
+    monkeypatch.setattr(module, "_release_database_lock", release)
+    task = asyncio.create_task(acquire_conversation_lock("cancel-late", database_url="test-only"))
+    try:
+        assert await asyncio.to_thread(started.wait, 3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        # The cancelled request no longer owns the local conversation lock.
+        handle = await acquire_conversation_lock("cancel-late", timeout_seconds=0.1)
+        await release_conversation_lock(handle)
+    finally:
+        finish.set()
+    await asyncio.wait_for(released.wait(), 3)

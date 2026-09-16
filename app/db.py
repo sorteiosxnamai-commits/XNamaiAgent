@@ -1322,7 +1322,19 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
     safe_data.setdefault("safety_reason", None)
     safe_data.setdefault("provider_send_ok", False)
 
-    safe_data["provider_response"] = to_jsonb(safe_data.get("provider_response") or {})
+    provider_response = dict(safe_data.get("provider_response") or {})
+    metadata = safe_data.get("response_metadata")
+    if isinstance(metadata, dict):
+        provider_response["_agent_metadata"] = metadata
+        # Keep the history contract identical for synchronous and queued turns.
+        context = dict(provider_response.get("_agent_context") or {})
+        for key in ("commerce_state", "decision_snapshot", "factual_validation", "quality_judge"):
+            if isinstance(metadata.get(key), dict):
+                context[key] = metadata[key]
+        if context:
+            provider_response["_agent_context"] = context
+    provider_response["_agent_tenant_id"] = settings.agent_persona_tenant_id
+    safe_data["provider_response"] = to_jsonb(provider_response)
 
     with get_conn() as conn:
         with conn.cursor() as cur:

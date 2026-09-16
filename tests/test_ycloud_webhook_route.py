@@ -138,6 +138,21 @@ def test_valid_signature_is_accepted(ycloud_env, client, spy):
     assert response.json()["ok"] is True
 
 
+def test_unpersisted_inbound_returns_retryable_error(ycloud_env, client, spy, monkeypatch):
+    monkeypatch.setattr("app.ingress.inbox.enqueue_inbound", lambda **kwargs: (False, None))
+    body = _body()
+    response = client.post(ROUTE, content=body, headers={"YCloud-Signature": _sign(body)})
+    assert response.status_code == 503
+    assert spy["batches"] == []
+
+
+def test_large_webhook_is_rejected_before_queue(ycloud_env, client, spy):
+    body = b"x" * (1024 * 1024 + 1)
+    response = client.post(ROUTE, content=body, headers={"YCloud-Signature": _sign(body)})
+    assert response.status_code == 413
+    assert spy["enqueued"] == []
+
+
 def test_invalid_signature_is_rejected_with_401(ycloud_env, client, spy):
     body = _body()
     response = client.post(

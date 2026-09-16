@@ -224,6 +224,8 @@ async def run_commerce_turn(
     """Um turno comercial completo, do texto ao fato — atualizando o estado."""
     resolucao = resolve_commerce_turn(text, state=state)
     acao = resolucao.action
+    if resolucao.requires_catalog_search and resolucao.product_query:
+        state.last_catalog_query = resolucao.product_query
 
     # --- resposta a uma pergunta que o proprio bot fez ----------------------
     if acao == ACTION_REJECT_PENDING:
@@ -263,7 +265,8 @@ async def run_commerce_turn(
 
     # --- browse -------------------------------------------------------------
     if acao == ACTION_BROWSE_CATALOG:
-        quantos = BROWSE_PAGE_SIZE
+        from app.business_policy import current_policy
+        quantos = current_policy().catalog_browse_limit
         produtos, ok = await _browse(execute, quantos)
         if not ok:
             return CommerceTurnOutcome(outcome=OUTCOME_PROVIDER_UNAVAILABLE, action=acao)
