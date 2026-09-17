@@ -29,7 +29,7 @@ def test_social_memory_is_isolated_by_user_and_channel():
     instagram_b = IncomingMessage(channel="instagram", sender_key="instagram:456")
     facebook_same_external_id = IncomingMessage(channel="facebook", sender_key="facebook:123")
 
-    router._remember_product(instagram_a, {"id": "product-a", "name": "Relógio A"})
+    router._remember_product(instagram_a, {"id": "product-a", "name": "produto A"})
 
     assert router._remembered_product(instagram_a)["id"] == "product-a"
     assert router._remembered_product(instagram_b) is None
@@ -58,25 +58,25 @@ async def test_phone_less_social_conversation_reloads_commerce_state(monkeypatch
         seen_states.append(state)
         if incoming.text.startswith("Quero"):
             return AgentResult(
-                reply_text="1. Tissot A\n2. Tissot B",
+                reply_text="1. MarcaA A\n2. MarcaA B",
                 intent="commerce",
                 commercial_data={
                     "products": [
-                        {"id": "A", "name": "Tissot A", "url": "https://loja.example/a"},
-                        {"id": "B", "name": "Tissot B", "url": "https://loja.example/b"},
+                        {"id": "A", "name": "MarcaA A", "url": "https://loja.example/a"},
+                        {"id": "B", "name": "MarcaA B", "url": "https://loja.example/b"},
                     ]
                 },
                 response_metadata={"domain": "commerce", "presented_products": True},
             )
         if incoming.text == "Gostei do segundo":
             return AgentResult(
-                reply_text="Você escolheu o Tissot B.",
+                reply_text="Você escolheu o MarcaA B.",
                 intent="commerce",
                 response_metadata={
                     "domain": "commerce",
                     "active_product": {
                         "product_id": "B",
-                        "name": "Tissot B",
+                        "name": "MarcaA B",
                         "url": "https://loja.example/b",
                     },
                 },
@@ -87,7 +87,7 @@ async def test_phone_less_social_conversation_reloads_commerce_state(monkeypatch
     monkeypatch.setattr(pipeline, "generate_agent_reply_async", generate)
 
     for inbound_id, text in enumerate(
-        ("Quero um relógio Tissot até 5 mil", "Gostei do segundo", "Me manda o link"),
+        ("Quero um produto MarcaA até 5 mil", "Gostei do segundo", "Me manda o link"),
         start=1,
     ):
         incoming = IncomingMessage(

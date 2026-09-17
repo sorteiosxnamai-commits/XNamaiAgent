@@ -32,19 +32,19 @@ def test_cross_tenant_product_rejected():
         "_factual_source": "tray_live",
         "_revalidated": True,
     }
-    assert grounded_evidence_from_product(product, expected_tenant_id="newstore") == []
+    assert grounded_evidence_from_product(product, expected_tenant_id="xnamai") == []
 
 
 def test_stale_index_price_omitted_from_grounded():
     product = {
         "id": "1",
-        "tenant_id": "newstore",
+        "tenant_id": "xnamai",
         "price": 99,
-        "name": "Watch",
+        "name": "product",
         "_factual_source": "catalog_index",
         "_revalidated": False,
     }
-    rows = grounded_evidence_from_product(product, tenant_id="newstore")
+    rows = grounded_evidence_from_product(product, tenant_id="xnamai")
     fields = {r.field for r in rows}
     assert "price" not in fields
     assert "name" in fields or not rows  # name may map to product kind
@@ -54,7 +54,7 @@ def test_authorize_strips_unauthorized_price():
     products = [
         {
             "id": "1",
-            "tenant_id": "newstore",
+            "tenant_id": "xnamai",
             "price": 50,
             "name": "A",
             "_factual_source": "catalog_cache",
@@ -62,7 +62,7 @@ def test_authorize_strips_unauthorized_price():
         }
     ]
     authorized, evidence = authorize_products_for_responder(
-        products, tenant_id="newstore"
+        products, tenant_id="xnamai"
     )
     assert authorized
     assert "price" not in authorized[0]

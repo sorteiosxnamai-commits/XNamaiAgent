@@ -179,50 +179,34 @@ produto específico; greeting para saudação; out_of_scope somente quando a men
 considerada junto ao histórico, não tiver relação com a XNamai.
 
 Exemplo 1:
-Histórico: cliente quer comprar um relógio; atendente pergunta se prefere esportivo,
-social ou casual. Atual: esportivo.
-Interpretação: domain=commerce, goal=discover, product_type=relógio,
-style=esportivo, references_previous_context=true.
+Histórico: cliente procura carregador; atendente pergunta o conector.
+Atual: USB-C.
+Interpretação: domain=commerce, goal=find, product_type=carregador,
+attributes inclui "USB-C", references_previous_context=true.
 
 Exemplo 2:
-Histórico: produto=relógio e style=esportivo. Atual: menos de 5 mil.
-Interpretação: domain=commerce, goal=recommend, product_type=relógio,
-style=esportivo, budget_max=5000, references_previous_context=true.
+Histórico: cliente procura fone Bluetooth. Atual: até 100 reais.
+Interpretação: domain=commerce, goal=recommend, product_type=fone,
+attributes inclui "Bluetooth", budget_max=100, references_previous_context=true.
 
 Exemplo 3:
-Histórico: cliente pede recomendação de relógios; atendente pergunta o estilo.
-Atual: social.
-Interpretação: domain=commerce, product_type=relógio, style=social,
-references_previous_context=true.
+Atual: preciso de uma capa para meu celular.
+Interpretação: domain=commerce, goal=discover, product_type=capa,
+needs_clarification=true. Pergunte o modelo do aparelho para conferir compatibilidade.
 
 Exemplo 4:
-Atual: preciso de um relógio para dar de presente, não queria gastar muito.
-Interpretação: domain=commerce, goal=discover, product_type=relógio,
-occasion=presente, needs_clarification=true. Como não há valor numérico, faça uma
-única pergunta curta sobre a faixa aproximada em clarification_question.
+Atual: tem cabo USB-C preto?
+Interpretação: domain=commerce, goal=find, product_type=cabo,
+attributes inclui "USB-C", color=preto, enough_information_to_search=true,
+ready_for_retrieval=true, needs_clarification=false.
 
 Exemplo 5:
-Atual: Tem Tissot Seastar?
-Interpretação: domain=commerce, goal=find, brand=Tissot, model=Seastar.
-
-Exemplo 6:
 Atual sem contexto comercial: quem ganhou o jogo ontem?
 Interpretação: domain=out_of_scope.
 
-Exemplo 7:
-Histórico: cliente quer um relógio; atendente pergunta o estilo.
-Atual: feminino até 3000 reais.
-Interpretação: domain=commerce, goal=recommend, product_type=relógio,
-recipient=feminino, attributes inclui "feminino", budget_max=3000,
-references_previous_context=true, enough_information_to_search=true,
-ready_for_retrieval=true, needs_clarification=false.
-NUNCA use feminino/masculino/unissex como model nem como style
-(esportivo/social/casual). Gênero vai em recipient/attributes.
-
-Exemplo 8:
-Atual: vocês estão comprando Certina DS Action seminovo?
-Interpretação: domain=store_general (avaliação/troca/compra de usado).
-Não invente política: o sistema encaminha para atendente humano.
+Exemplo 6:
+Atual: vocês compram produtos usados?
+Interpretação: domain=store_general. Não invente política: encaminhe à equipe.
 
 Não copie uma fala anterior como fato comercial. Preserve produto, preferências e
 orçamento que estejam evidentes no contexto. confidence deve refletir a certeza da
@@ -273,12 +257,12 @@ uteis e quantas perguntas fazem sentido, sem transformar a conversa em interroga
 Se o cliente pedir explicitamente para ver produtos, opcoes ou modelos, use goal=find
 ou recommend e ready_for_retrieval=true para pesquisar imediatamente.
 Exemplos semanticos obrigatorios:
-- "quero comprar um relogio" e apenas interesse amplo: normalmente use goal=discover,
+- "quero comprar um produto" e apenas interesse amplo: normalmente use goal=discover,
   needs_clarification=true, enough_information_to_search=false e
   ready_for_retrieval=false, sem busca de produto.
-- "quero um relogio casual ate uns R$ 5.000" ja pode ter contexto suficiente para
+- "quero um produto casual ate uns R$ 5.000" ja pode ter contexto suficiente para
   retrieval, conforme seu julgamento semantico.
-- "me mostre os relogios disponiveis" e "procure Tissot casual ate R$ 5.000" sao
+- "me mostre os produtos disponiveis" e "procure carregador USB-C ate R$ 100" sao
   pedidos explicitos de retrieval e podem usar ready_for_retrieval=true imediatamente.
 Esses exemplos valem para qualquer categoria; nao exija preferencias fixas.
 Quando o contexto ja for suficiente para uma recomendacao util, marque
@@ -303,8 +287,8 @@ preservando referência semântica e quantidade. Não invente IDs. Use list_posi
 itens numerados, current_product para o produto ativo e explicit_product com o nome citado.
 Defina image_request=true SOMENTE quando o cliente pedir que a loja envie a foto/imagem
 oficial de um produto ja identificado (ex.: "manda a foto desse", "quero ver a imagem").
-Se o cliente ENVIOU uma foto e pergunta preco/nome/modelo ("qual o preco do relogio da foto?",
-"o que e esse relogio?"), isso NAO e image_request: use goal=find (ou inspect de preco apos
+Se o cliente ENVIOU uma foto e pergunta preco/nome/modelo ("qual o preco do produto da foto?",
+"o que e esse produto?"), isso NAO e image_request: use goal=find (ou inspect de preco apos
 identificar), ready_for_retrieval=true quando houver marca/modelo, e image_request=false.
 Pedir para ver produtos, opções ou catálogo é retrieval, não image_request.
 Uma mensagem pode combinar payment_action e purchase_action. Quando o cliente confirmar
@@ -433,13 +417,10 @@ def deterministic_scope(text: str | None) -> dict[str, Any]:
     normalized = value.lower()
     if _is_greeting(value):
         return {"domain": "greeting", "action": "greeting", "_source": "fallback"}
-    # Parte 1: nao ha rota deterministica para o dominio de sorteio — a feature
-    # saiu do runtime. O texto de persona que menciona sorteios e preservado
-    # (PERSONA_PROTECTED), mas nao aciona mais fluxo local algum.
     if detect_commerce_inquiry(value) or normalized.startswith(("tem ", "vocês têm ", "voces tem ", "vende ")) or any(term in normalized for term in ("comprar", "adquirir", "quero ", "procuro", "busco", "orçamento", "orcamento", "comparar", "recomende")):
         plan = deterministic_sales_plan(value) or {}
         return {"domain": "commerce", **plan, "_source": "fallback"}
-    store_terms = ("newstore", "new store", "loja", "pedido", "compra", "atendimento comercial", "catálogo", "catalogo")
+    store_terms = ("xnamai", "xnamai", "loja", "pedido", "compra", "atendimento comercial", "catálogo", "catalogo")
     if any(term in normalized for term in store_terms):
         return {"domain": "store_general", "action": "store_general", "_source": "fallback"}
     return {"domain": "out_of_scope", "action": "scope_refusal", "_source": "fallback"}
@@ -1175,8 +1156,8 @@ async def _generic_catalog_fast_path(
 ) -> AgentResult | None:
     """Resolve o turno comercial com continuidade, antes da logica legada.
 
-    O matcher legado decide identidade por `brand`/`model`/`mechanism`/
-    `dial_color` — campos de um catalogo de relogios — e trata cada mensagem
+    O matcher legado decide identidade por `brand`/`model`/`technology`/
+    `primary_color` — campos de um catalogo de produtos — e trata cada mensagem
     como busca nova. Sobre um catalogo comum isso produz os dois erros que
     chegaram a producao: "nao encontrei" para item que estava na tela, e "Sim,
     encontrei" com o irmao de marca errado.
@@ -1935,7 +1916,7 @@ async def _execute_compiled_product_retrieval(
                 and product_matches_color_tokens(product, color_tokens)
             )
             # Color harvest must not be dropped because brand paging filled
-            # the pool with Kingfisher/Dagger siblings first.
+            # the pool with ChargeMini/ChargePlus siblings first.
             at_limit = len(candidates) >= _accumulation_limit()
             if at_limit and not (prefer_color and is_color_hit):
                 continue
@@ -2121,7 +2102,7 @@ async def _execute_compiled_product_retrieval(
                 break
 
     # Tier 2.5 — if color still missing, reuse family codes seen on siblings
-    # (e.g. C63 from other Sealander titles) to probe the exact color title.
+    # (e.g. C63 from other SoundMax titles) to probe the exact color title.
     if (
         retrieval_plan.mode == "exact"
         and not hard_filtered
@@ -2140,9 +2121,9 @@ async def _execute_compiled_product_retrieval(
             )[:4]
         ).title()
         auto_bit = (
-            "Automático"
+            "sem fio"
             if re.search(
-                r"\b(automatic|automatico)\b",
+                r"\b(wireless|sem fio)\b",
                 (interpretation.subject.model or "").casefold(),
             )
             else None
@@ -2166,7 +2147,7 @@ async def _execute_compiled_product_retrieval(
                 " ".join(
                     part
                     for part in (
-                        "Relógio",
+                        interpretation.subject.product_type,
                         interpretation.subject.brand,
                         code,
                         core,
@@ -2432,7 +2413,7 @@ async def _execute_compiled_product_retrieval(
             try:
                 repo = CatalogIndexRepository()
                 tenant_id = str(
-                    getattr(settings, "agent_persona_tenant_id", None) or "newstore"
+                    getattr(settings, "agent_persona_tenant_id", None) or "xnamai"
                 )
                 query = " ".join(
                     part
@@ -2596,7 +2577,7 @@ async def _execute_compiled_product_retrieval(
             key: sorted(values) for key, values in allowed.items()
         }
         result.response_metadata["tenant_id"] = str(
-            getattr(get_settings(), "agent_persona_tenant_id", None) or "newstore"
+            getattr(get_settings(), "agent_persona_tenant_id", None) or "xnamai"
         )
     except Exception:
         pass
@@ -3415,7 +3396,7 @@ async def _handle_sales_message_inner(
             "resolved_by": resolved_by,
         })
         # Inbound photo must re-identify — never answer price from a stale
-        # Kingfisher/sibling left in active/presented context.
+        # ChargeMini/sibling left in active/presented context.
         from .image_product_id import (
             handle_image_product_search,
             image_search_eligible,
@@ -3483,7 +3464,7 @@ async def _handle_sales_message_inner(
                 fallback_reason="instagram_price_without_media",
             )
         # Brevo often splits photo+caption: text "qual o preço desse?" arrives
-        # without image_url and would price the previous SKU (CW Rosa → Beaubleu).
+        # without image_url and would price the previous SKU (CW Rosa → MarcaL).
         if (
             not has_inbound_image
             and is_deictic_product_price_request(message.text)
@@ -3502,7 +3483,7 @@ async def _handle_sales_message_inner(
             if state.active_product is not None:
                 state.active_product = None
             # Caption-only fragment before the photo lands — wait for the image
-            # instead of quoting the previous watch.
+            # instead of quoting the previous product.
             if not (
                 state.product_resolution_state == "plausible_matches"
                 and state.last_presented_products
@@ -3510,7 +3491,7 @@ async def _handle_sales_message_inner(
                 return _mark_sales_result(
                     AgentResult(
                         reply_text=(
-                            "Recebi sua pergunta de preço. Se for o relógio da foto, "
+                            "Recebi sua pergunta de preço. Se for o produto da foto, "
                             "me envia a imagem (ou a marca e o modelo) que eu confirmo "
                             "no catálogo e te passo o valor certinho."
                         ),
@@ -4139,7 +4120,7 @@ async def _handle_sales_message_inner(
             return _mark_sales_result(
                 AgentResult(
                     reply_text=(
-                        "Pode me enviar a foto do relógio (ou a marca e o modelo) "
+                        "Pode me enviar a foto do produto (ou a marca e o modelo) "
                         "que eu identifico no catálogo pra você?"
                         if not (message.image_url or "").strip()
                         else (

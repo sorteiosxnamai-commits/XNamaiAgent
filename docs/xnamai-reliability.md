@@ -1,6 +1,6 @@
 # Melhorias de confiabilidade e atendimento da Xnamai
 
-Implementação de 16/09/2026, a partir da comparação com o NsAgent. Mantém o catálogo genérico, o provider Mercos e a identidade da Xnamai.
+Implementação de 16/09/2026, a partir da comparação com o XNamaiAgent. Mantém o catálogo genérico, o provider Mercos e a identidade da Xnamai.
 
 ## Entrega e recuperação
 
@@ -64,7 +64,7 @@ Use a API administrativa existente, autenticada com `ADMIN_API_TOKEN`:
 2. Crie uma nova versão preservando suas instruções e metadados, acrescentando os controles desejados.
 3. Revise a versão e publique pelo endpoint `/activate`. O endpoint `/rollback` restaura a versão anterior selecionada.
 
-Os caminhos são `/api/admin/agents/{tenant_id}/personas`; passe também o `persona_key` existente quando aplicável. Use os valores de `AGENT_PERSONA_TENANT_ID` e `AGENT_PERSONA_KEY` do deployment. Os defaults legados não foram renomeados para evitar perder uma persona já cadastrada. `COMMERCE_TENANT_ID` continua separado.
+Os caminhos são `/api/admin/agents/{tenant_id}/personas`; passe também o `persona_key` existente quando aplicável. Use os valores de `AGENT_PERSONA_TENANT_ID` e `AGENT_PERSONA_KEY` do deployment. Os defaults atuais são `xnamai` e `xnamai_commercial`. Revise as variáveis do deployment e publique a persona Xnamai ao atualizar instalações existentes. `COMMERCE_TENANT_ID` continua separado.
 
 ## Conhecimento documental
 

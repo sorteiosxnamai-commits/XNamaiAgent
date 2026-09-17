@@ -530,10 +530,15 @@ def validate_factual_response(
     }
     text = result.reply_text or ""
 
+    # Public entry points are institutional facts; product/payment URLs still
+    # require current tool evidence. Do not trust every path on these domains.
+    from .site_knowledge import SITE_URL, STORE_URL
+    institutional_urls = {SITE_URL, STORE_URL}
+
     for raw_url in _URL_RE.findall(text):
         url = _clean_url(raw_url)
         report.checked_claims += 1
-        if url in pack.trusted_urls or _trusted_domain(url, domains):
+        if url in institutional_urls or url in pack.trusted_urls or _trusted_domain(url, domains):
             report.supported_claims.append(
                 FactClaim(kind="url", claim=url, reason="url_supported")
             )
@@ -787,7 +792,7 @@ def apply_factual_validation(
         tenant_id = str(
             (result.response_metadata or {}).get("tenant_id")
             or getattr(decision, "tenant_id", None)
-            or "newstore"
+            or "xnamai"
         )
         authorized, grounded = authorize_products_for_responder(
             [p for p in products if isinstance(p, dict)],

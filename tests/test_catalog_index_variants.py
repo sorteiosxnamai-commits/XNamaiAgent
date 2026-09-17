@@ -17,8 +17,8 @@ def test_make_catalog_item_key_stable():
 
 def test_to_canonical_item_sets_variant_key():
     item = to_canonical_item(
-        {"id": "1", "variant_id": "v-a", "name": "Relogio Azul", "price": 10},
-        tenant_id="newstore",
+        {"id": "1", "variant_id": "v-a", "name": "produto Azul", "price": 10},
+        tenant_id="xnamai",
     )
     assert item is not None
     assert item.catalog_item_key == "variant:v-a"
@@ -26,7 +26,7 @@ def test_to_canonical_item_sets_variant_key():
 
 def test_to_canonical_item_product_key_without_variant():
     item = to_canonical_item(
-        {"id": "1", "name": "Relogio", "price": 10},
+        {"id": "1", "name": "produto", "price": 10},
         tenant_id="t1",
     )
     assert item is not None
@@ -44,7 +44,7 @@ def test_three_variants_get_distinct_keys():
     keys = {
         to_canonical_item(
             {"id": "p1", "variant_id": vid, "name": f"V {vid}"},
-            tenant_id="newstore",
+            tenant_id="xnamai",
         ).catalog_item_key
         for vid in ("v1", "v2", "v3")
     }

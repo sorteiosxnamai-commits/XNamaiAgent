@@ -183,7 +183,7 @@ class CatalogIndexRepository:
         *,
         tenant_id: str,
         brand: str | None = None,
-        mechanism: str | None = None,
+        technology: str | None = None,
         gender: str | None = None,
         max_price: float | None = None,
         limit: int = 30,
@@ -203,9 +203,9 @@ class CatalogIndexRepository:
         if brand:
             clauses.append("lower(coalesce(brand, '')) = lower(%(brand)s)")
             params["brand"] = str(brand).strip()
-        if mechanism:
-            clauses.append("lower(coalesce(mechanism, '')) LIKE lower(%(mechanism)s)")
-            params["mechanism"] = f"%{str(mechanism).strip()}%"
+        if technology:
+            clauses.append("lower(coalesce(payload->>'technology', '')) LIKE lower(%(technology)s)")
+            params["technology"] = f"%{str(technology).strip()}%"
         if gender:
             clauses.append("lower(coalesce(gender, '')) LIKE lower(%(gender)s)")
             params["gender"] = f"%{str(gender).strip()}%"

@@ -26,9 +26,9 @@ def test_source_hash_stable_for_url_only():
 
 def test_build_caption_prefers_explicit_caption():
     fingerprint = VisualProductFingerprint(
-        brand="Certina",
-        model="PH2000M",
-        caption="Certina PH2000M branco caixa redonda pulseira titânio",
+        brand="MarcaC",
+        model="PB20000",
+        caption="MarcaC PB20000 branco caixa redonda acessório titânio",
     )
     assert "branco" in build_caption_from_fingerprint(fingerprint)
 
@@ -43,7 +43,7 @@ def test_search_visual_neighbors_filters_by_max_distance(monkeypatch):
             "brand": "A",
             "model": "M1",
             "reference": None,
-            "name": "Watch A",
+            "name": "product A",
             "visual_caption": "caption a",
             "distance": 0.2,
         },
@@ -53,7 +53,7 @@ def test_search_visual_neighbors_filters_by_max_distance(monkeypatch):
             "brand": "B",
             "model": "M2",
             "reference": None,
-            "name": "Watch B",
+            "name": "product B",
             "visual_caption": "caption b",
             "distance": 0.9,
         },
@@ -85,11 +85,11 @@ async def test_index_product_image_skips_unchanged_source_hash(monkeypatch):
 
     product = {
         "id": "9001",
-        "brand": "Certina",
-        "name": "Relógio Certina",
-        "primary_image_url": "https://cdn.example/certina.jpg",
+        "brand": "MarcaC",
+        "name": "produto MarcaC",
+        "primary_image_url": "https://cdn.example/marcac.jpg",
     }
-    image_url = "https://cdn.example/certina.jpg"
+    image_url = "https://cdn.example/marcac.jpg"
     expected_hash = source_hash_for_image(image_url)
 
     monkeypatch.setattr(module, "official_product_image", lambda p: image_url)
@@ -115,16 +115,16 @@ async def test_index_product_image_upserts_when_hash_changes(monkeypatch):
 
     product = {
         "id": "9001",
-        "brand": "Certina",
-        "model": "PH2000M",
-        "name": "Relógio Certina PH2000M",
-        "primary_image_url": "https://cdn.example/certina.jpg",
+        "brand": "MarcaC",
+        "model": "PB20000",
+        "name": "produto MarcaC PB20000",
+        "primary_image_url": "https://cdn.example/marcac.jpg",
     }
     fingerprint = VisualProductFingerprint(
-        brand="Certina",
-        model="PH2000M",
-        dial_color="branco",
-        caption="Certina PH2000M mostrador branco caixa redonda",
+        brand="MarcaC",
+        model="PB20000",
+        primary_color="branco",
+        caption="MarcaC PB20000 produto branco caixa redonda",
     )
     upserts: list[dict] = []
 
@@ -132,7 +132,7 @@ async def test_index_product_image_upserts_when_hash_changes(monkeypatch):
         return fingerprint, "new-hash-abc"
 
     async def fake_embed(text):
-        assert "Certina" in text
+        assert "MarcaC" in text
         return [0.01] * 8
 
     def fake_upsert(**kwargs):
@@ -141,7 +141,7 @@ async def test_index_product_image_upserts_when_hash_changes(monkeypatch):
     monkeypatch.setattr(
         module,
         "official_product_image",
-        lambda p: "https://cdn.example/certina.jpg",
+        lambda p: "https://cdn.example/marcac.jpg",
     )
     monkeypatch.setattr(module, "get_indexed_source_hash", lambda pid: "old-hash")
     monkeypatch.setattr(module, "fingerprint_image_url", fake_fingerprint)
@@ -171,7 +171,7 @@ async def test_run_product_image_index_batch_respects_batch_size(monkeypatch):
         products = [
             {
                 "id": str(start + idx),
-                "name": f"Watch {start + idx}",
+                "name": f"product {start + idx}",
                 "primary_image_url": f"https://cdn/{start + idx}.jpg",
             }
             for idx in range(limit)
@@ -215,7 +215,7 @@ async def test_handle_image_visual_fallback_on_low_confidence(monkeypatch):
 
     async def fake_identify(msg):
         return ImageProductIdentification(
-            is_watch=True,
+            is_product=True,
             brand=None,
             model=None,
             confidence=0.15,
@@ -226,11 +226,11 @@ async def test_handle_image_visual_fallback_on_low_confidence(monkeypatch):
         from app.models import AgentResult
 
         return AgentResult(
-            reply_text="Pela foto, estes parecem os mais próximos no catálogo:\n1. Watch X",
+            reply_text="Pela foto, estes parecem os mais próximos no catálogo:\n1. product X",
             intent="commerce",
             safety_reason="visual_nearest_neighbor",
             commercial_data={
-                "products": [{"id": "42", "name": "Watch X", "brand": "X"}]
+                "products": [{"id": "42", "name": "product X", "brand": "X"}]
             },
             response_metadata={"visual_search": True, "visual_trigger": trigger},
         )
@@ -267,11 +267,11 @@ async def test_handle_image_visual_fallback_when_text_not_found(monkeypatch):
         text="[Imagem recebida via WhatsApp]",
         input_modality="image",
         attachment_type="image",
-        image_url="https://example.com/watch.jpg",
+        image_url="https://example.com/product.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Certina",
+        is_product=True,
+        brand="MarcaC",
         model="Modelo Inventado XYZ",
         confidence=0.9,
     )
@@ -290,11 +290,11 @@ async def test_handle_image_visual_fallback_when_text_not_found(monkeypatch):
     async def fake_visual(msg, *, identified, trigger):
         assert trigger == "product_not_found"
         return AgentResult(
-            reply_text="Pela foto, estes parecem os mais próximos no catálogo:\n1. Certina PH2000M",
+            reply_text="Pela foto, estes parecem os mais próximos no catálogo:\n1. MarcaC PB20000",
             intent="commerce",
             safety_reason="visual_nearest_neighbor",
             commercial_data={
-                "products": [{"id": "9001", "name": "Certina PH2000M"}]
+                "products": [{"id": "9001", "name": "MarcaC PB20000"}]
             },
             response_metadata={"visual_search": True},
         )

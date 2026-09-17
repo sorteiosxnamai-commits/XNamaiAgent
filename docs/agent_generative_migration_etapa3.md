@@ -25,7 +25,7 @@ Fluxo com flag on:
 
 1. Structured output → `TurnUnderstanding` (modelo fast)
 2. `sanitize_turn_understanding` (zera claimed IDs)
-3. `apply_clarification_policy` (Casio≤500 → busca; “quero esse” sem ref → clarifica)
+3. `apply_clarification_policy` (MarcaE≤500 → busca; “quero esse” sem ref → clarifica)
 4. `turn_understanding_to_sales` → pipeline existente
 5. `normalize_sales_interpretation`
 

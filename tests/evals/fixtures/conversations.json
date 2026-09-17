@@ -48,7 +48,7 @@
     {
       "id": "product_search_001",
       "category": "product_search",
-      "input": "tem relógio tissot?",
+      "input": "tem produto marcaa?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -72,7 +72,7 @@
     {
       "id": "exact_model_001",
       "category": "exact_model",
-      "input": "quero Tissot Seastar 1000",
+      "input": "quero MarcaA ChargeMax 1000",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -96,7 +96,7 @@
     {
       "id": "exact_color_001",
       "category": "exact_color",
-      "input": "Seastar rosa",
+      "input": "ChargeMax rosa",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -168,7 +168,7 @@
     {
       "id": "category_001",
       "category": "category",
-      "input": "relógios femininos",
+      "input": "produtos femininos",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -192,7 +192,7 @@
     {
       "id": "budget_001",
       "category": "budget",
-      "input": "relógio até 2000",
+      "input": "produto até 2000",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -216,7 +216,7 @@
     {
       "id": "compare_001",
       "category": "compare",
-      "input": "compara seastar e prc 200",
+      "input": "compara ChargeMax e prc 200",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -240,7 +240,7 @@
     {
       "id": "similar_001",
       "category": "similar",
-      "input": "algo parecido com seastar",
+      "input": "algo parecido com ChargeMax",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -264,7 +264,7 @@
     {
       "id": "out_of_stock_001",
       "category": "out_of_stock",
-      "input": "tem o seastar preto?",
+      "input": "tem o ChargeMax preto?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -289,7 +289,7 @@
     {
       "id": "price_001",
       "category": "price",
-      "input": "quanto custa o seastar?",
+      "input": "quanto custa o ChargeMax?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -337,7 +337,7 @@
     {
       "id": "variant_001",
       "category": "variant",
-      "input": "versão com pulseira de aço",
+      "input": "versão com acessório de aço",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -593,7 +593,7 @@
     {
       "id": "audio_001",
       "category": "audio",
-      "input": "quero o seastar",
+      "input": "quero o ChargeMax",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -617,7 +617,7 @@
     {
       "id": "tray_error_001",
       "category": "tray_error",
-      "input": "tem seastar?",
+      "input": "tem ChargeMax?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -641,7 +641,7 @@
     {
       "id": "timeout_001",
       "category": "timeout",
-      "input": "busca hamilton khaki",
+      "input": "busca marcab Power",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -761,7 +761,7 @@
     {
       "id": "product_search_002",
       "category": "product_search",
-      "input": "tem orient bambino?",
+      "input": "tem marcaq powerdock?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -784,7 +784,7 @@
     {
       "id": "product_search_003",
       "category": "product_search",
-      "input": "tem hamilton khaki field?",
+      "input": "tem marcab Power Mini?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -807,7 +807,7 @@
     {
       "id": "exact_model_004",
       "category": "exact_model",
-      "input": "Citizen Tsuyosa",
+      "input": "MarcaG AudioMini",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -830,7 +830,7 @@
     {
       "id": "exact_color_005",
       "category": "exact_color",
-      "input": "tissot prc 200 azul",
+      "input": "marcaa prc 200 azul",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},

@@ -30,7 +30,7 @@ def _settings(**overrides):
         "ycloud_whatsapp_from": BUSINESS_NUMBER,
         "ycloud_waba_id": "",
         "ycloud_base_url": "https://api.ycloud.com/v2",
-        "agent_persona_tenant_id": "newstore",
+        "agent_persona_tenant_id": "xnamai",
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -52,7 +52,7 @@ def _inbound_payload(**overrides) -> dict:
         "customerProfile": {"name": "Maria"},
         "to": BUSINESS_NUMBER,
         "type": "text",
-        "text": {"body": "quero ver os relogios"},
+        "text": {"body": "quero ver os produtos"},
     }
     message.update(overrides)
     return {
@@ -176,7 +176,7 @@ def test_inbound_text_message_is_normalized():
     assert incoming.provider == "ycloud"
     assert incoming.channel == "whatsapp"
     assert incoming.message_id == "ycloud-msg-1"
-    assert incoming.text == "quero ver os relogios"
+    assert incoming.text == "quero ver os produtos"
     assert incoming.sender_phone == "5541999998888"
     assert incoming.sender_name == "Maria"
     assert incoming.input_modality == "text"
@@ -255,7 +255,7 @@ def test_inbound_to_configured_business_number_resolves_tenant():
     )
 
     assert resolution.ok is True
-    assert resolution.tenant_id == "newstore"
+    assert resolution.tenant_id == "xnamai"
     assert resolution.source == "business_number"
 
 

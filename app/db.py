@@ -453,7 +453,7 @@ def ensure_tables() -> None:
                 ON public.ai_catalog_cache (expires_at);
 
                 CREATE TABLE IF NOT EXISTS public.ai_catalog_index (
-                    tenant_id text NOT NULL DEFAULT 'newstore',
+                    tenant_id text NOT NULL DEFAULT 'xnamai',
                     catalog_item_key text NOT NULL DEFAULT '',
                     product_id text NOT NULL,
                     variant_id text NULL,
@@ -466,12 +466,7 @@ def ensure_tables() -> None:
                     title_normalized text NOT NULL DEFAULT '',
                     category text NULL,
                     gender text NULL,
-                    mechanism text NULL,
-                    case_size text NULL,
-                    dial_color text NULL,
-                    strap_color text NULL,
                     material text NULL,
-                    strap_type text NULL,
                     colors_normalized jsonb NOT NULL DEFAULT '[]'::jsonb,
                     aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
                     price numeric NULL,

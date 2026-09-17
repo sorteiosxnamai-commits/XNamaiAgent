@@ -12,22 +12,22 @@ from app.sales_agent import (
 
 def test_catalog_ranking_prefers_exact_model():
     plan = {
-        "subject": {"brand": "Tissot", "model": "Seastar"},
+        "subject": {"brand": "MarcaA", "model": "ChargeMax"},
         "constraints": {},
     }
     ranked = rank_candidates(
         [
-            {"name": "Relógio Tissot PRC 200", "brand": "Tissot", "current_price": "1000"},
+            {"name": "produto MarcaA PRC 200", "brand": "MarcaA", "current_price": "1000"},
             {
-                "name": "Relógio Tissot Seastar 1000",
-                "brand": "Tissot",
-                "model": "Seastar",
+                "name": "produto MarcaA ChargeMax 1000",
+                "brand": "MarcaA",
+                "model": "ChargeMax",
                 "current_price": "1990",
             },
         ],
         plan,
     )
-    assert ranked[0]["model"] == "Seastar"
+    assert ranked[0]["model"] == "ChargeMax"
     assert score_candidate(ranked[0], plan) > 0
     assert sales_rank_candidates is rank_candidates
     assert sales_score_candidate is score_candidate

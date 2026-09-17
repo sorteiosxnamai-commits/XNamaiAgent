@@ -16,7 +16,7 @@ from openai_test_utils import install_fake_openai_client
 def _interpretation(
     *,
     goal: str = "recommend",
-    product_type: str | None = "relógio",
+    product_type: str | None = "fone",
     brand: str | None = None,
     model: str | None = None,
     reference: str | None = None,
@@ -50,16 +50,16 @@ def test_compiler_uses_product_type_as_name_and_never_as_brand():
     )
 
     assert plan.mode == "recommendation"
-    assert plan.requests[0].name == "relógio"
+    assert plan.requests[0].name == "fone"
     assert plan.requests[0].brand is None
 
 
 def test_compiler_preserves_only_explicit_brand():
-    plan = ProductRetrievalCompiler.compile(_interpretation(brand="Tissot"))
+    plan = ProductRetrievalCompiler.compile(_interpretation(brand="MarcaA"))
 
-    assert plan.requests[0].name == "relógio"
-    assert plan.requests[0].brand == "Tissot"
-    assert all(request.brand != "relógio" for request in plan.requests)
+    assert plan.requests[0].name == "fone"
+    assert plan.requests[0].brand == "MarcaA"
+    assert all(request.brand != "fone" for request in plan.requests)
 
 
 def test_semantic_style_never_becomes_name_or_brand():
@@ -68,7 +68,7 @@ def test_semantic_style_never_becomes_name_or_brand():
     )
 
     arguments = plan.requests[0].tool_arguments()
-    assert arguments["name"] == "relógio"
+    assert arguments["name"] == "fone"
     assert "brand" not in arguments
     assert "esportivo" not in arguments.values()
 
@@ -77,9 +77,9 @@ def test_specific_query_keeps_brand_and_model_separate_without_combined_name():
     plan = ProductRetrievalCompiler.compile(
         _interpretation(
             goal="find",
-            product_type="relógio",
-            brand="Hamilton",
-            model="Murph",
+            product_type="fone",
+            brand="MarcaB",
+            model="ChargePlus",
         )
     )
 
@@ -94,9 +94,9 @@ def test_specific_query_keeps_brand_and_model_separate_without_combined_name():
         for request in plan.requests
         if request.strategy == "exact_model_with_brand"
     )
-    assert model_probe.name == "Murph"
-    assert model_probe.brand == "Hamilton"
-    assert all(request.name != "Hamilton Murph" for request in plan.requests)
+    assert model_probe.name == "ChargePlus"
+    assert model_probe.brand == "MarcaB"
+    assert all(request.name != "MarcaB ChargePlus" for request in plan.requests)
 
 
 def test_long_model_title_matches_short_tray_model_field():
@@ -108,36 +108,36 @@ def test_long_model_title_matches_short_tray_model_field():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="C63 Sealander Automático Rosa",
+        brand="MarcaF",
+        model="C63 SoundMax sem fio Rosa",
     )
     products = [
         {
             "id": "9991",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
+            "brand": "MarcaF",
+            "model": "soundmax",
             "name": (
-                "Relógio Christopher Ward C63 Sealander Automático Rosa "
+                "fone MarcaF C63 SoundMax sem fio Rosa "
                 "C63-36ADA4-S00P0-B0 36 mm"
             ),
             "reference": "C63-36ADA4-S00P0-B0",
         },
         {
             "id": "9992",
-            "brand": "Christopher Ward",
+            "brand": "MarcaF",
             "model": "C60",
-            "name": "Relógio Christopher Ward C60 Trident Pro 600",
+            "name": "fone MarcaF C60 AudioPlus 600",
         },
     ]
 
     assert significant_model_tokens(interpretation.subject.model) == (
         "c63",
-        "sealander",
+        "soundmax",
         "rosa",
     )
     assert required_model_tokens(interpretation.subject.model) == (
         "c63",
-        "sealander",
+        "soundmax",
     )
     matches = exact_specific_product_matches(products, interpretation)
     assert [product["id"] for product in matches] == ["9991"]
@@ -148,7 +148,7 @@ def test_long_model_title_matches_short_tray_model_field():
     assert "exact_model_code" in strategies
     assert any(
         request.name
-        and request.name.startswith("Relógio Christopher Ward")
+        and request.name.startswith("fone MarcaF")
         and "Rosa" in request.name
         for request in plan.requests
         if request.name
@@ -165,38 +165,38 @@ def test_vision_color_phrase_is_not_treated_as_product_reference():
         required_model_tokens,
     )
 
-    assert is_plausible_product_reference("rosa claro (mostrador)") is False
-    assert effective_product_reference("rosa claro (mostrador)") is None
+    assert is_plausible_product_reference("rosa claro (produto)") is False
+    assert effective_product_reference("rosa claro (produto)") is None
     assert is_plausible_product_reference("C63-36ADA4-S00P0-B0") is True
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic rosa claro (mostrador)",
-        reference="rosa claro (mostrador)",
-        preferences={"color": "rosa claro (mostrador)"},
+        brand="MarcaF",
+        model="SoundMax wireless rosa claro (produto)",
+        reference="rosa claro (produto)",
+        preferences={"color": "rosa claro (produto)"},
     )
     products = [
         {
             "id": "8975",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
+            "brand": "MarcaF",
+            "model": "soundmax",
             "name": (
-                "Relógio Christopher Ward C63 Sealander Automático Rosa "
+                "fone MarcaF C63 SoundMax sem fio Rosa "
                 "C63-36ADA4-S00P0-B0 36 mm"
             ),
             "reference": "C63-36ADA4-S00P0-B0",
         },
         {
             "id": "8977",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Azul",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax sem fio Azul",
             "reference": "C63-36ADA4-S00B0-B0",
         },
     ]
 
-    assert "mostrador" not in required_model_tokens(interpretation.subject.model)
+    assert "produto" not in required_model_tokens(interpretation.subject.model)
     assert "claro" not in required_model_tokens(interpretation.subject.model)
     matches = exact_specific_product_matches(products, interpretation)
     assert "8975" in [product["id"] for product in matches]
@@ -209,28 +209,28 @@ def test_vision_color_phrase_is_not_treated_as_product_reference():
 
 
 @pytest.mark.asyncio
-async def test_color_preference_narrows_ambiguous_sealander_matches():
+async def test_color_preference_narrows_ambiguous_soundmax_matches():
     from app.product_retrieval import match_specific_products
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        brand="MarcaF",
+        model="SoundMax wireless",
         preferences={"color": "rosa"},
     )
     products = [
         {
             "id": "8975",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Rosa",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax sem fio Rosa",
             "reference": "C63-36ADA4-S00P0-B0",
         },
         {
             "id": "8977",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander GMT Automático Azul 39 mm",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax com fio sem fio Azul 39 mm",
             "reference": "C63-39AGM3-S00B4-B1",
         },
     ]
@@ -240,44 +240,44 @@ async def test_color_preference_narrows_ambiguous_sealander_matches():
     assert [product["id"] for product in resolution.products] == ["8975"]
 
 
-def test_catalog_match_tokens_drops_strap_accessories_for_beaubleu():
+def test_catalog_match_tokens_drops_accessory_accessories_for_marcal():
     from app.product_retrieval import catalog_match_tokens, preference_color_tokens
 
     interpretation = _interpretation(
         goal="find",
-        brand="Beaubleu",
-        model="Branco Prata Pulseira Bege",
-        preferences={"color": "branco prata pulseira bege"},
+        brand="MarcaL",
+        model="Branco Prata acessório Bege",
+        preferences={"color": "branco prata acessório bege"},
     )
     colors = preference_color_tokens(interpretation)
     tokens = catalog_match_tokens(interpretation)
     assert colors == ("branco",)
-    assert "beaubleu" in tokens
+    assert "marcal" in tokens
     assert "branco" in tokens
-    assert "pulseira" not in tokens
+    assert "acessório" not in tokens
     assert "bege" not in tokens
     assert "prata" not in tokens
 
 
-def test_catalog_match_tokens_keeps_model_line_without_strap():
+def test_catalog_match_tokens_keeps_model_line_without_accessory():
     from app.product_retrieval import catalog_match_tokens, preference_color_tokens
 
     interpretation = _interpretation(
         goal="find",
-        brand="Beaubleu",
-        model="Ecce Lys Automático Branco Prata Pulseira Bege",
+        brand="MarcaL",
+        model="Sound Mini sem fio Branco Prata acessório Bege",
         preferences={"color": "branco"},
     )
     assert preference_color_tokens(interpretation) == ("branco",)
     tokens = catalog_match_tokens(interpretation)
-    assert "ecce" in tokens
-    assert "lys" in tokens
+    assert "sound" in tokens
+    assert "mini" in tokens
     assert "bege" not in tokens
-    assert "pulseira" not in tokens
+    assert "acessório" not in tokens
 
 
 @pytest.mark.asyncio
-async def test_color_mismatch_does_not_substitute_other_automatic_colors(monkeypatch):
+async def test_color_mismatch_does_not_substitute_other_wireless_colors(monkeypatch):
     from app.product_retrieval import (
         ProductRetrievalCompiler,
         catalog_match_tokens,
@@ -287,7 +287,7 @@ async def test_color_mismatch_does_not_substitute_other_automatic_colors(monkeyp
         normalize_pt_catalog_query,
     )
 
-    assert "Automático" in normalize_pt_catalog_query("Sealander Automatic")
+    assert "sem fio" in normalize_pt_catalog_query("SoundMax wireless")
     monkeypatch.setattr(
         "app.product_retrieval.get_settings",
         lambda: SimpleNamespace(openai_api_key="", openai_model="gpt-4.1-mini"),
@@ -295,28 +295,28 @@ async def test_color_mismatch_does_not_substitute_other_automatic_colors(monkeyp
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic rosa claro",
+        brand="MarcaF",
+        model="SoundMax wireless rosa claro",
         preferences={"color": "rosa claro"},
     )
     products = [
         {
             "id": "8975",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander GMT Automático Azul 39 mm",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax com fio sem fio Azul 39 mm",
         },
         {
             "id": "8977",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander GMT Automático Verde 39 mm",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax com fio sem fio Verde 39 mm",
         },
         {
             "id": "auto-blue",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Azul 36 mm",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax sem fio Azul 36 mm",
         },
     ]
     assert exact_specific_product_matches(products, interpretation) == []
@@ -325,14 +325,14 @@ async def test_color_mismatch_does_not_substitute_other_automatic_colors(monkeyp
     assert resolution.products == ()
     assert infer_family_codes_from_candidates(products, interpretation) == ("C63",)
     tokens = catalog_match_tokens(interpretation)
-    assert "sealander" in tokens
+    assert "soundmax" in tokens
     assert "rosa" in tokens
     assert "claro" not in tokens
 
     plan = ProductRetrievalCompiler.compile(interpretation)
     strategies = [request.strategy for request in plan.requests]
     assert "token_and_search" in strategies
-    assert "exact_color_core" in strategies or "exact_color_automatic" in strategies
+    assert "exact_color_core" in strategies or "exact_color_wireless" in strategies
     assert "category_candidates" not in strategies
     assert "brand_candidates" in strategies
     assert plan.discovery_max_pages >= 5
@@ -347,7 +347,7 @@ async def test_color_mismatch_does_not_substitute_other_automatic_colors(monkeyp
         if request.name
     )
     assert any(
-        request.name and "Automático" in request.name
+        request.name and "sem fio" in request.name
         for request in plan.requests
         if request.name
     )
@@ -370,26 +370,26 @@ async def test_color_mismatch_does_not_substitute_other_automatic_colors(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_local_color_aliases_match_pink_dial_for_rosa(monkeypatch):
-    """'rosa' matches catalog 'Pink Dial' without needing GPT."""
+async def test_local_color_aliases_match_pink_color_for_rosa(monkeypatch):
+    """'rosa' matches catalog 'Pink primary' without needing GPT."""
     from app.product_retrieval import match_specific_products
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        brand="MarcaF",
+        model="SoundMax wireless",
         preferences={"color": "rosa"},
     )
     products = [
         {
             "id": "12295",
-            "brand": "Christopher Ward",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Kingfisher",
+            "brand": "MarcaF",
+            "name": "fone MarcaF C63 SoundMax sem fio ChargeMini",
         },
         {
             "id": "pink-sku",
-            "brand": "Christopher Ward",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Pink Dial 36 mm",
+            "brand": "MarcaF",
+            "name": "fone MarcaF C63 SoundMax sem fio Pink primary 36 mm",
         },
     ]
 
@@ -409,31 +409,31 @@ async def test_color_mismatch_soft_confirm_does_not_list_wrong_colors():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        brand="MarcaF",
+        model="SoundMax wireless",
         preferences={"color": "rosa"},
     )
     products = [
         {
             "id": "auto-blue",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Azul 36 mm",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax sem fio Azul 36 mm",
         },
         {
-            "id": "kingfisher",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
+            "id": "ChargeMini",
+            "brand": "MarcaF",
+            "model": "soundmax",
             "name": (
-                "Relógio Christopher Ward C63 Sealander Automático Kingfisher "
+                "fone MarcaF C63 SoundMax sem fio ChargeMini "
                 "C63-39ADA3S00B10-B0"
             ),
         },
         {
             "id": "8975",
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": "Relógio Christopher Ward C63 Sealander GMT Automático Azul 39 mm",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": "fone MarcaF C63 SoundMax com fio sem fio Azul 39 mm",
         },
     ]
     soft = soft_confirm_candidates(products, interpretation)
@@ -445,23 +445,23 @@ def test_infer_family_codes_prefers_c63_not_reference_fragments():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        brand="MarcaF",
+        model="SoundMax wireless",
         preferences={"color": "rosa"},
     )
     products = [
         {
             "id": "1",
-            "brand": "Christopher Ward",
+            "brand": "MarcaF",
             "name": (
-                "Relógio Christopher Ward C63 Sealander Automático Kingfisher "
+                "fone MarcaF C63 SoundMax sem fio ChargeMini "
                 "C63-39ADA3S00B10-B0"
             ),
         },
         {
             "id": "2",
-            "brand": "Christopher Ward",
-            "name": "Relógio Christopher Ward C63 Sealander GMT Automático Azul 39AGM3",
+            "brand": "MarcaF",
+            "name": "fone MarcaF C63 SoundMax com fio sem fio Azul 39AGM3",
         },
     ]
     assert infer_family_codes_from_candidates(products, interpretation) == ("C63",)
@@ -473,7 +473,7 @@ def test_compact_product_lines_omit_long_payment_dump():
     products = [
         {
             "id": "1",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Rosa",
+            "name": "fone MarcaF C63 SoundMax sem fio Rosa",
             "reference": "C63-36ADA4-S00P0-B0",
             "current_price": 13004.99,
             "payment_option_details": {
@@ -493,7 +493,7 @@ def test_compact_product_lines_omit_long_payment_dump():
 
 
 @pytest.mark.asyncio
-async def test_keyword_match_finds_pink_sealander_beyond_first_twenty():
+async def test_keyword_match_finds_pink_soundmax_beyond_first_twenty():
     from app.product_retrieval import (
         score_catalog_candidates,
         match_specific_products,
@@ -502,25 +502,25 @@ async def test_keyword_match_finds_pink_sealander_beyond_first_twenty():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        brand="MarcaF",
+        model="SoundMax wireless",
         preferences={"color": "rosa claro"},
     )
     filler = [
         {
             "id": str(index),
-            "brand": "Christopher Ward",
-            "model": "Sealander",
-            "name": f"Relógio Christopher Ward C63 Sealander GMT Automático Azul {index}",
+            "brand": "MarcaF",
+            "model": "soundmax",
+            "name": f"fone MarcaF C63 SoundMax com fio sem fio Azul {index}",
         }
         for index in range(30)
     ]
     pink = {
         "id": "pink",
-        "brand": "Christopher Ward",
-        "model": "Sealander",
+        "brand": "MarcaF",
+        "model": "soundmax",
         "name": (
-            "Relógio Christopher Ward C63 Sealander Automático Rosa "
+            "fone MarcaF C63 SoundMax sem fio Rosa "
             "C63-36ADA4-S00P0-B0 36 mm"
         ),
         "reference": "C63-36ADA4-S00P0-B0",
@@ -547,7 +547,7 @@ async def test_keyword_match_finds_pink_sealander_beyond_first_twenty():
     assert "token_and_search" in [request.strategy for request in plan.requests]
     # Without C63 in the Vision model, probes stay generic; matching is local.
     assert any(
-        request.name and "Sealander" in request.name and "Rosa" in request.name
+        request.name and "soundmax" in request.name.casefold() and "Rosa" in request.name
         for request in plan.requests
         if request.name
     )
@@ -559,25 +559,25 @@ async def test_score_rejects_single_token_accessory_match():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Rolex",
+        brand="MarcaH",
         model="Explorer",
     )
     products = [
         {
-            "id": "strap",
-            "brand": "Rolex",
+            "id": "accessory",
+            "brand": "MarcaH",
             "model": "",
-            "name": "Pulseira Explorer Strap Couro",
+            "name": "acessório Explorer accessory Couro",
         },
         {
-            "id": "watch",
-            "brand": "Rolex",
+            "id": "product",
+            "brand": "MarcaH",
             "model": "Explorer",
-            "name": "Relógio Rolex Explorer 36 mm",
+            "name": "fone MarcaH Explorer 36 mm",
         },
     ]
     hits = score_catalog_candidates(products, interpretation, require_color=False)
-    assert [product["id"] for product in hits] == ["watch"]
+    assert [product["id"] for product in hits] == ["product"]
 
 
 def test_exact_progress_matches_requires_requested_color():
@@ -585,29 +585,29 @@ def test_exact_progress_matches_requires_requested_color():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        brand="MarcaF",
+        model="SoundMax wireless",
         preferences={"color": "rosa claro"},
     )
     pink = {
         "id": "pink",
-        "brand": "Christopher Ward",
-        "model": "Sealander",
-        "name": "Relógio Christopher Ward C63 Sealander Automático Rosa 36 mm",
+        "brand": "MarcaF",
+        "model": "soundmax",
+        "name": "fone MarcaF C63 SoundMax sem fio Rosa 36 mm",
     }
-    blue_gmt = {
+    blue_wired = {
         "id": "8975",
-        "brand": "Christopher Ward",
-        "model": "Sealander",
-        "name": "Relógio Christopher Ward C63 Sealander GMT Automático Azul 39 mm",
+        "brand": "MarcaF",
+        "model": "soundmax",
+        "name": "fone MarcaF C63 SoundMax com fio sem fio Azul 39 mm",
     }
-    assert [product["id"] for product in exact_progress_matches([pink, blue_gmt], interpretation)] == [
+    assert [product["id"] for product in exact_progress_matches([pink, blue_wired], interpretation)] == [
         "pink"
     ]
-    assert exact_progress_matches([blue_gmt], interpretation) == []
+    assert exact_progress_matches([blue_wired], interpretation) == []
 
 
-def test_certina_title_without_relogio_prefix_still_matches():
+def test_marcac_title_without_produto_prefix_still_matches():
     from app.product_retrieval import (
         exact_specific_product_matches,
         extract_model_codes,
@@ -616,37 +616,37 @@ def test_certina_title_without_relogio_prefix_still_matches():
 
     interpretation = _interpretation(
         goal="find",
-        brand="Certina",
-        model="DS Super PH2000M Automático Branco Titânio",
+        brand="MarcaC",
+        model="DS Super PB20000 sem fio Branco Titânio",
     )
     products = [
         {
-            "id": "certina-1",
-            "brand": "Certina",
-            "model": "DS Super PH2000M",
+            "id": "marcac-1",
+            "brand": "MarcaC",
+            "model": "DS Super PB20000",
             "name": (
-                "Relógio Certina DS Super PH2000M Automático Branco Titânio "
+                "fone MarcaC DS Super PB20000 sem fio Branco Titânio "
                 "C050.607.44.011.02"
             ),
             "reference": "C050.607.44.011.02",
         }
     ]
 
-    assert "PH2000M" in extract_model_codes(interpretation.subject.model)
+    assert "PB20000" in extract_model_codes(interpretation.subject.model)
     assert required_model_tokens(interpretation.subject.model) == (
         "ds",
         "super",
-        "ph2000m",
+        "pb20000",
     )
     matches = exact_specific_product_matches(products, interpretation)
-    assert [product["id"] for product in matches] == ["certina-1"]
+    assert [product["id"] for product in matches] == ["marcac-1"]
 
     plan = ProductRetrievalCompiler.compile(interpretation)
     names = [request.name for request in plan.requests if request.name]
     assert any(
-        name and name.startswith("Relógio Certina") for name in names
+        name and name.startswith("fone MarcaC") for name in names
     )
-    assert "PH2000M" in names
+    assert "PB20000" in names
 
 
 def test_budget_is_applied_after_retrieval_using_effective_price():
@@ -677,10 +677,10 @@ async def test_candidate_pool_is_twenty_and_customer_result_is_three(monkeypatch
             return {"categories": []}
         if name == "get_product":
             product_id = arguments["product_id"]
-            return {"id": product_id, "name": f"Relógio {product_id}", "current_price": 1000 + int(product_id)}
+            return {"id": product_id, "name": f"fone {product_id}", "current_price": 1000 + int(product_id)}
         return {
             "products": [
-                {"id": str(index), "name": f"Relógio {index}", "current_price": 1000 + index}
+                {"id": str(index), "name": f"fone {index}", "current_price": 1000 + index}
                 for index in range(20)
             ]
         }
@@ -693,7 +693,7 @@ async def test_candidate_pool_is_twenty_and_customer_result_is_three(monkeypatch
     result = await sales_agent._execute_compiled_product_retrieval(_interpretation())
 
     search_calls = [call for call in calls if call[0] == "search_products"]
-    assert search_calls == [("search_products", {"name": "relógio", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
+    assert search_calls == [("search_products", {"name": "fone", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
     assert len(result.commercial_data["products"]) == 3
 
 
@@ -768,7 +768,7 @@ async def test_ready_broad_request_retrieves_without_new_clarification(
     )
 
     search_call = next(call for call in calls if call[0] == "search_products")
-    assert search_call[1]["name"] == "relógio"
+    assert search_call[1]["name"] == "fone"
     assert "brand" not in search_call[1]
     assert result.safety_reason != "commerce_clarification"
     assert result.safety_reason != "product_not_found"
@@ -787,8 +787,8 @@ async def test_exact_missing_product_keeps_product_not_found(monkeypatch):
         _interpretation(
             goal="find",
             product_type=None,
-            brand="Tissot",
-            model="Seastar XYZ",
+            brand="MarcaA",
+            model="ChargeMax XYZ",
             ready=False,
         )
     )
@@ -801,7 +801,7 @@ async def test_exact_missing_product_keeps_product_not_found(monkeypatch):
 def test_product_upon_request_is_unavailable_regardless_of_available_flags(upon_request_value):
     product = {
         "id": "123",
-        "name": "Relógio sob consulta",
+        "name": "fone sob consulta",
         "available": 1,
         "available_in_store": 1,
         "upon_request": upon_request_value,
@@ -815,7 +815,7 @@ def test_product_upon_request_is_unavailable_regardless_of_available_flags(upon_
 def test_product_upon_request_in_settings_is_unavailable():
     product = {
         "id": "123",
-        "name": "Relógio sob consulta",
+        "name": "fone sob consulta",
         "available": 1,
         "available_in_store": 1,
         "ProductSettings": {
@@ -832,7 +832,7 @@ def test_product_upon_request_in_settings_is_unavailable():
 def test_product_with_upon_request_false_or_absent_respects_availability_flags(upon_request_value):
     product = {
         "id": "123",
-        "name": "Relógio disponível",
+        "name": "fone disponível",
         "available": 1,
         "upon_request": upon_request_value,
     }
@@ -845,7 +845,7 @@ def test_product_with_upon_request_false_or_absent_respects_availability_flags(u
 def test_product_with_zero_stock_and_available_flag_is_still_available():
     product = {
         "id": "123",
-        "name": "Relógio por encomenda",
+        "name": "fone por encomenda",
         "available": 1,
         "available_in_store": 0,
         "stock": 0,

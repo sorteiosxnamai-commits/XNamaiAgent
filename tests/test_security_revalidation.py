@@ -25,7 +25,7 @@ def test_fixed_safety_policy_blocks_prompt_and_secret_leak_instructions():
 
 def test_blocked_topics_still_detected():
     assert detect_blocked_request("quero comprar número da sorte") is not None
-    assert detect_blocked_request("tem tissot seastar?") is None
+    assert detect_blocked_request("tem marcaa ChargeMax?") is None
 
 
 def test_repo_env_example_has_no_live_secrets():

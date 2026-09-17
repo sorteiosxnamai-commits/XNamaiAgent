@@ -23,7 +23,7 @@ class InMemoryPersonaStore:
     def install(self, monkeypatch) -> "InMemoryPersonaStore":
         store = self
 
-        def get_active_persona(tenant_id="newstore", persona_key="newstore_commercial"):
+        def get_active_persona(tenant_id="xnamai", persona_key="xnamai_commercial"):
             from app.persona_models import PersonaVersion
 
             for row in store.personas:
@@ -35,7 +35,7 @@ class InMemoryPersonaStore:
                     return PersonaVersion.model_validate(row)
             return None
 
-        def list_persona_versions(tenant_id="newstore", persona_key="newstore_commercial"):
+        def list_persona_versions(tenant_id="xnamai", persona_key="xnamai_commercial"):
             from app.persona_models import PersonaVersion
 
             rows = [
@@ -46,7 +46,7 @@ class InMemoryPersonaStore:
             rows.sort(key=lambda item: item["version"], reverse=True)
             return [PersonaVersion.model_validate(row) for row in rows]
 
-        def get_persona_version(persona_id, *, tenant_id="newstore"):
+        def get_persona_version(persona_id, *, tenant_id="xnamai"):
             from app.persona_models import PersonaVersion
 
             for row in store.personas:
@@ -57,9 +57,9 @@ class InMemoryPersonaStore:
         def create_persona_version(
             *,
             instructions,
-            name="NewStore Commercial",
-            tenant_id="newstore",
-            persona_key="newstore_commercial",
+            name="XNamai Commercial",
+            tenant_id="xnamai",
+            persona_key="xnamai_commercial",
             source="user",
             created_by=None,
             status="draft",
@@ -97,7 +97,7 @@ class InMemoryPersonaStore:
             return PersonaVersion.model_validate(row)
 
         def activate_persona_version(
-            persona_id, *, tenant_id="newstore", activated_by=None
+            persona_id, *, tenant_id="xnamai", activated_by=None
         ):
             from app.persona_models import PersonaVersion
 
@@ -124,7 +124,7 @@ class InMemoryPersonaStore:
             target["archived_at"] = None
             return PersonaVersion.model_validate(target)
 
-        def archive_persona_version(persona_id, *, tenant_id="newstore"):
+        def archive_persona_version(persona_id, *, tenant_id="xnamai"):
             from app.persona_models import PersonaVersion
 
             for row in store.personas:
@@ -135,7 +135,7 @@ class InMemoryPersonaStore:
             raise ValueError("persona_not_found")
 
         def rollback_persona_version(
-            persona_id, *, tenant_id="newstore", activated_by=None
+            persona_id, *, tenant_id="xnamai", activated_by=None
         ):
             return activate_persona_version(
                 persona_id, tenant_id=tenant_id, activated_by=activated_by
@@ -182,7 +182,7 @@ class InMemoryPersonaStore:
         }
         modules = [repo, compiler, admin]
         try:
-            import scripts.seed_newstore_persona as seed
+            import scripts.seed_xnamai_persona as seed
 
             modules.append(seed)
         except Exception:

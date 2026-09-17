@@ -1,4 +1,4 @@
-# Etapa 4 — Busca híbrida de relógios
+# Etapa 4 — Busca híbrida de produtos
 
 ## Diagnóstico
 

@@ -175,7 +175,7 @@ async def test_explicit_purchase_item_and_payment_execute_both_actions(monkeypat
     state = _state(
         active_product=None,
         last_presented_products=[
-            {"position": 1, "product_id": "T1", "name": "Tissot Chronograph"},
+            {"position": 1, "product_id": "T1", "name": "MarcaA bluetooth"},
         ],
     )
 
@@ -189,7 +189,7 @@ async def test_explicit_purchase_item_and_payment_execute_both_actions(monkeypat
             purchase_items=[
                 {
                     "reference_type": "explicit_product",
-                    "explicit_product_name": "Tissot Chronograph",
+                    "explicit_product_name": "MarcaA bluetooth",
                     "quantity": 1,
                 }
             ],

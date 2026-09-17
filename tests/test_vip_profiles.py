@@ -1,8 +1,3 @@
-# NOTA (correcao da Parte 1): os testes que afirmavam "nao configurado" para
-# URLs, contatos, tabela de credito e registro VIP foram removidos. Aquele
-# comportamento era uma alteracao NAO AUTORIZADA de persona, revertida para o
-# baseline 201bd16. O rebranding e tarefa separada.
-
 """Regras genéricas de perfil VIP — sem registro de marca configurado.
 
 Os perfis legados (pessoas da marca anterior) foram removidos do runtime na
@@ -21,7 +16,7 @@ from app.vip_profiles import (
 )
 
 _PROFILE = VipProfile(
-    phone_suffix="21969544700",
+    phone_suffix="11999999999",
     full_name="Cliente Exemplo",
     title="Diretor",
     nicknames=("Chefe", "Doutor"),
@@ -37,8 +32,8 @@ def test_suffix_matching_rule_is_preserved(monkeypatch):
     """A regra de casamento por sufixo E.164 é genérica e continua valendo."""
     monkeypatch.setattr("app.vip_profiles.VIP_PROFILES", (_PROFILE,))
 
-    assert get_vip_profile("21969544700") is _PROFILE
-    assert get_vip_profile("+55 21 96954-4700") is _PROFILE
+    assert get_vip_profile("11999999999") is _PROFILE
+    assert get_vip_profile("+55 11 99999-9999") is _PROFILE
     assert get_vip_profile("85999498149") is None
 
 

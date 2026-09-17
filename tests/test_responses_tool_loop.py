@@ -51,13 +51,13 @@ async def test_chat_tool_loop_preserves_tool_call_id_and_returns_text():
                     id="call_abc",
                     function=SimpleNamespace(
                         name="search_products",
-                        arguments='{"query":"tissot"}',
+                        arguments='{"query":"marcaa"}',
                     ),
                     model_dump=lambda: {
                         "id": "call_abc",
                         "function": {
                             "name": "search_products",
-                            "arguments": '{"query":"tissot"}',
+                            "arguments": '{"query":"marcaa"}',
                         },
                     },
                 )
@@ -97,12 +97,12 @@ async def test_chat_tool_loop_preserves_tool_call_id_and_returns_text():
         model="gpt-4.1-mini",
         tools=CHAT_TOOLS,
         execute_tool=execute,
-        messages=[{"role": "user", "content": "tem tissot?"}],
+        messages=[{"role": "user", "content": "tem marcaa?"}],
         max_rounds=3,
     )
     assert result.text == "Achei opções."
     assert result.call_ids == ["call_abc"]
-    assert calls == [("search_products", {"query": "tissot"})]
+    assert calls == [("search_products", {"query": "marcaa"})]
     assert result.limit_reached is False
 
 
@@ -172,7 +172,7 @@ async def test_responses_tool_loop_preserves_call_id(monkeypatch):
                             type="function_call",
                             call_id="call_resp_1",
                             name="search_products",
-                            arguments='{"query":"prx"}',
+                            arguments='{"query":"PBX"}',
                         )
                     ],
                     usage=SimpleNamespace(input_tokens=1, output_tokens=1),
@@ -186,12 +186,12 @@ async def test_responses_tool_loop_preserves_call_id(monkeypatch):
             )
             return SimpleNamespace(
                 status="completed",
-                output_text="PRX encontrado.",
+                output_text="PBX encontrado.",
                 output=[
                     SimpleNamespace(
                         type="message",
                         content=[
-                            SimpleNamespace(type="output_text", text="PRX encontrado.")
+                            SimpleNamespace(type="output_text", text="PBX encontrado.")
                         ],
                     )
                 ],
@@ -208,10 +208,10 @@ async def test_responses_tool_loop_preserves_call_id(monkeypatch):
         tools=CHAT_TOOLS,
         execute_tool=execute,
         instructions="ajuda comercial",
-        input_items="tem prx?",
+        input_items="tem PBX?",
         max_rounds=3,
         parallel_tool_calls=False,
     )
-    assert result.text == "PRX encontrado."
+    assert result.text == "PBX encontrado."
     assert result.call_ids == ["call_resp_1"]
     assert create_kwargs[0]["parallel_tool_calls"] is False

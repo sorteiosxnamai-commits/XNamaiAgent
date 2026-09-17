@@ -1,4 +1,4 @@
-# NSAgentForSorteios v6 — technical correction report
+# XNamaiAgent v6 — technical correction report
 
 Incremental architectural fixes (packaging → fact authority → catalog index →
 LLM budget → Responses controls → evals → rollout). Models

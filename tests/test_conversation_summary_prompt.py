@@ -14,18 +14,18 @@ def test_summary_injected_when_flag_enabled(monkeypatch):
             agent_contact_memory_in_prompt_enabled=False,
             agent_memory_auto_apply_enabled=False,
             agent_conversation_summary_in_prompt_enabled=True,
-            agent_persona_tenant_id="newstore",
+            agent_persona_tenant_id="xnamai",
             agent_max_active_contact_memories=20,
             agent_max_contact_memory_chars=3000,
         ),
     )
 
     def fake_get(*, tenant_id, conversation_key):
-        assert tenant_id == "newstore"
+        assert tenant_id == "xnamai"
         assert conversation_key == "conv-1"
         return {
-            "current_goal": "buscar Tissot",
-            "summary": "goal=buscar Tissot",
+            "current_goal": "buscar MarcaA",
+            "summary": "goal=buscar MarcaA",
             "open_questions": ["cor?"],
             "resolved_points": ["marca"],
             "user_corrections": [],
@@ -48,7 +48,7 @@ def test_summary_injected_when_flag_enabled(monkeypatch):
     assert "fallback contract" in out
     assert "<conversation_summary>" in out
     assert "NÃO use como fonte de preço" in out
-    assert "buscar Tissot" in out
+    assert "buscar MarcaA" in out
 
 
 def test_summary_not_injected_when_flag_off(monkeypatch):
@@ -60,7 +60,7 @@ def test_summary_not_injected_when_flag_off(monkeypatch):
             agent_contact_memory_in_prompt_enabled=False,
             agent_memory_auto_apply_enabled=False,
             agent_conversation_summary_in_prompt_enabled=False,
-            agent_persona_tenant_id="newstore",
+            agent_persona_tenant_id="xnamai",
         ),
     )
 

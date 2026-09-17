@@ -14,7 +14,7 @@ def _base(**kwargs) -> SalesInterpretation:
     data = {
         "domain": "commerce",
         "goal": "discover",
-        "subject": {"product_type": "relógio"},
+        "subject": {"product_type": "produto"},
         "preferences": {},
         "information_needed": ["catalog"],
         "references_previous_context": True,
@@ -35,7 +35,7 @@ def test_detect_gender_from_feminino_ate_3000():
 
 def test_normalize_moves_gender_off_model_and_enables_recommendation():
     interpretation = _base(
-        subject={"product_type": "relógio", "model": "feminino"},
+        subject={"product_type": "produto", "model": "feminino"},
         preferences={"style": "feminino", "budget_max": 3000},
     )
     normalized = normalize_sales_interpretation(
@@ -58,10 +58,10 @@ def test_normalize_moves_gender_off_model_and_enables_recommendation():
 
 def test_gender_only_label_never_exact():
     assert is_gender_only_label("feminino") is True
-    assert is_gender_only_label("Seastar") is False
+    assert is_gender_only_label("ChargeMax") is False
 
     interpretation = _base(
-        subject={"product_type": "relógio", "model": "feminino"},
+        subject={"product_type": "produto", "model": "feminino"},
         preferences={"budget_max": 3000},
         needs_clarification=False,
     )

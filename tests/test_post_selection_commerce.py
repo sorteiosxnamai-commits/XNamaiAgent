@@ -311,12 +311,12 @@ async def test_inbound_photo_with_image_request_identifies_product(monkeypatch):
     async def fake_image_search(message):
         assert message.image_url
         return AgentResult(
-            reply_text="Encontrei o Christopher Ward Sealander.",
+            reply_text="Encontrei o MarcaF SoundMax.",
             intent="commerce",
             safety_reason=None,
             commercial_data={
                 "products": [
-                    {"id": "cw-1", "name": "Christopher Ward C63 Sealander"}
+                    {"id": "cw-1", "name": "MarcaF C63 SoundMax"}
                 ]
             },
             response_metadata={"image_search": True, "used_commerce_provider": True},
@@ -338,10 +338,10 @@ async def test_inbound_photo_with_image_request_identifies_product(monkeypatch):
 
     result = await sales_agent.handle_sales_message(
         IncomingMessage(
-            text="qual o preço do relogio da foto?",
+            text="qual o preço do produto da foto?",
             input_modality="text_with_image",
             attachment_type="image",
-            image_url="https://cdn.example.com/sealander.jpg",
+            image_url="https://cdn.example.com/SoundMax.jpg",
         ),
         {},
         {},
@@ -354,7 +354,7 @@ async def test_inbound_photo_with_image_request_identifies_product(monkeypatch):
     )
 
     assert result is not None
-    assert "Sealander" in result.reply_text
+    assert "SoundMax" in result.reply_text
     assert "antes de consultar a imagem" not in result.reply_text.casefold()
     assert result.commercial_data["products"][0]["id"] == "cw-1"
 
@@ -377,14 +377,14 @@ async def test_price_on_plausible_matches_asks_which_not_kingfisher(monkeypatch)
             {
                 "position": 1,
                 "product_id": "12295",
-                "name": "Christopher Ward C63 Sealander Kingfisher",
-                "brand": "Christopher Ward",
+                "name": "MarcaF C63 SoundMax ChargeMini",
+                "brand": "MarcaF",
             },
             {
                 "position": 2,
                 "product_id": "12296",
-                "name": "Christopher Ward C63 Sealander Dagger",
-                "brand": "Christopher Ward",
+                "name": "MarcaF C63 SoundMax ChargePlus",
+                "brand": "MarcaF",
             },
         ],
     )
@@ -405,7 +405,7 @@ async def test_price_on_plausible_matches_asks_which_not_kingfisher(monkeypatch)
     assert result.response_metadata.get("fallback_reason") == (
         "plausible_matches_price_blocked"
     ) or result.safety_reason == "exact_product_ambiguous_brand"
-    assert "Kingfisher" not in (result.reply_text or "") or "qual você quer" in (
+    assert "ChargeMini" not in (result.reply_text or "") or "qual você quer" in (
         result.reply_text or ""
     ).casefold()
     assert "qual você quer" in (result.reply_text or "").casefold()
@@ -414,7 +414,7 @@ async def test_price_on_plausible_matches_asks_which_not_kingfisher(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_deictic_price_without_image_ignores_stale_active(monkeypatch):
-    """Caption-only 'qual o preço desse?' must not quote the previous watch."""
+    """Caption-only 'qual o preço desse?' must not quote the previous product."""
     from app import sales_agent
 
     monkeypatch.setattr(
@@ -428,8 +428,8 @@ async def test_deictic_price_without_image_ignores_stale_active(monkeypatch):
         product_resolution_state="found_available",
         active_product={
             "product_id": "15716",
-            "name": "Relógio Christopher Ward C63 Sealander Automático Rosa",
-            "brand": "Christopher Ward",
+            "name": "produto MarcaF C63 SoundMax sem fio Rosa",
+            "brand": "MarcaF",
         },
     )
 
@@ -450,7 +450,7 @@ async def test_deictic_price_without_image_ignores_stale_active(monkeypatch):
         "deictic_price_without_image"
     )
     assert "15716" not in (result.reply_text or "")
-    assert "Sealander" not in (result.reply_text or "")
+    assert "SoundMax" not in (result.reply_text or "")
     assert "foto" in (result.reply_text or "").casefold()
 
 
@@ -465,7 +465,7 @@ async def test_inbound_image_ignores_stale_kingfisher_context(monkeypatch):
             reply_text="Pela foto, o Rosa C63-36ADA4.",
             intent="commerce",
             commercial_data={
-                "products": [{"id": "rosa-1", "name": "Sealander Rosa"}],
+                "products": [{"id": "rosa-1", "name": "SoundMax Rosa"}],
             },
             response_metadata={
                 "used_commerce_provider": True,
@@ -491,8 +491,8 @@ async def test_inbound_image_ignores_stale_kingfisher_context(monkeypatch):
         active_domain="commerce",
         active_product={
             "product_id": "12295",
-            "name": "Kingfisher",
-            "brand": "Christopher Ward",
+            "name": "ChargeMini",
+            "brand": "MarcaF",
         },
         product_resolution_state="found_available",
     )
@@ -516,7 +516,7 @@ async def test_inbound_image_ignores_stale_kingfisher_context(monkeypatch):
 
     assert result is not None
     assert "Rosa" in result.reply_text
-    assert "Kingfisher" not in result.reply_text
+    assert "ChargeMini" not in result.reply_text
 
 
 @pytest.mark.asyncio

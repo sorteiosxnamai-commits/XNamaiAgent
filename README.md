@@ -4,7 +4,7 @@ Agente Python/FastAPI com catálogo Mercos, continuidade de produtos e carrinho 
 
 O fluxo Mercos prepara a revisão do pedido; `create_order` continua desabilitado. Preço e estoque dependem da fonte comercial disponível.
 
-Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-reliability.md) e o [comparativo com NsAgent](docs/audits/2026-09-15/comparacao-xnamai-nsagent.md).
+Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-reliability.md).
 
 > Este projeto não inclui credenciais reais. Configure tudo em Environment Variables na Vercel.
 
@@ -51,7 +51,11 @@ AGENT_DB_PERSONA_ENABLED=true        # tom/identidade do banco; fallback = contr
 Sem persona ativa/ falha de DB → usa contrato operacional em código + `<fixed_safety_policy>`.
 Persona **não** pode embutir preço/estoque/link de checkout voláteis.
 
-Os identificadores legados `newstore` / `newstore_commercial` podem continuar no cadastro existente de persona. Não os altere sem migrar o cadastro; o tenant comercial é configurado separadamente em `COMMERCE_TENANT_ID` (default `xnamai`). Novas personas usam o nome de exibição `XNamai Comercial`.
+A persona usa `AGENT_PERSONA_TENANT_ID=xnamai` e `AGENT_PERSONA_KEY=xnamai_commercial`. O tenant comercial é independente: `COMMERCE_TENANT_ID=xnamai`.
+
+A identidade está em `persona_xnamai.txt`. Para cadastrar em um ambiente configurado, execute `python scripts/seed_xnamai_persona.py`. O seed preserva personas existentes; revise e ative a versão correta pelo admin quando já houver uma persona cadastrada. Configurações e personas publicadas precisam ser atualizadas no ambiente de implantação para refletir esta versão.
+
+Canais oficiais: [site institucional](https://www.xnamai.com/) e [catálogo e pedidos](https://xnamai.meuspedidos.com.br/).
 
 Admin (Bearer `ADMIN_API_TOKEN`):
 

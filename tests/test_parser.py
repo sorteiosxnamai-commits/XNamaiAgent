@@ -53,13 +53,13 @@ def test_fragment_uses_latest_visitor_message_and_its_message_id():
         "messages": [
             {"type": "visitor", "id": "old", "text": "Mensagem antiga"},
             {"type": "agent", "id": "agent-1", "text": "Resposta anterior"},
-            {"type": "visitor", "messageId": "new", "text": "Tem Tissot?"},
+            {"type": "visitor", "messageId": "new", "text": "Tem MarcaA?"},
         ],
         "visitor": {"id": "visitor-1", "attributes": {"SMS": "5511999999999"}},
     }
     incoming = parse_brevo_whatsapp_payload(payload)
     assert incoming.message_id == "new"
-    assert incoming.text == "Tem Tissot?"
+    assert incoming.text == "Tem MarcaA?"
     assert inbound_skip_reason(payload) is None
 
 
@@ -79,13 +79,13 @@ def test_fragment_selects_latest_timestamp_even_when_array_is_reversed():
         "eventName": "conversationFragment",
         "conversationId": "conv-1",
         "messages": [
-            {"type": "visitor", "id": "new", "createdAt": "2026-07-22T12:00:02Z", "text": "Tem Tissot Seastar?"},
+            {"type": "visitor", "id": "new", "createdAt": "2026-07-22T12:00:02Z", "text": "Tem MarcaA ChargeMax?"},
             {"type": "visitor", "id": "old", "createdAt": "2026-07-22T12:00:01Z", "text": "saldo do João"},
         ],
     }
     incoming = parse_brevo_whatsapp_payload(payload)
     assert incoming.message_id == "new"
-    assert incoming.text == "Tem Tissot Seastar?"
+    assert incoming.text == "Tem MarcaA ChargeMax?"
     assert inbound_skip_reason(payload) is None
 
 
@@ -94,7 +94,7 @@ def test_fragment_does_not_replace_selected_visitor_text_with_payload_text():
         "eventName": "conversationFragment",
         "messages": [
             {"type": "visitor", "id": "new", "createdAt": "2026-07-22T12:00:02Z", "text": "oi"},
-            {"type": "visitor", "id": "old", "createdAt": "2026-07-22T12:00:01Z", "text": "Tem Tissot?"},
+            {"type": "visitor", "id": "old", "createdAt": "2026-07-22T12:00:01Z", "text": "Tem MarcaA?"},
         ],
         "text": "saldo do João",
     }

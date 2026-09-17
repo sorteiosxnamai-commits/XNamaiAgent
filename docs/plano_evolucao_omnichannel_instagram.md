@@ -1,4 +1,4 @@
-# Plano completo de evolução — NSAgent omnichannel + Instagram sem limitações
+# Plano completo de evolução — XNamaiAgent omnichannel + Instagram sem limitações
 
 Fonte: auditoria `deep-research-report.md` + estado atual do repositório (`main` @ pós-`9765177`).
 
@@ -364,7 +364,7 @@ INSTAGRAM_STORY_RECOGNITION_ENABLED=true
 INSTAGRAM_STORY_ROLLOUT_MODE=full          # só após canary
 INSTAGRAM_STORY_REAL_PAYLOAD_VALIDATED=true
 INSTAGRAM_STORY_VIDEO_FRAME_ANALYSIS_ENABLED=true  # após validar runtime
-INSTAGRAM_STORY_ACCOUNT_TENANT_MAP=ig_business_id:newstore
+INSTAGRAM_STORY_ACCOUNT_TENANT_MAP=ig_business_id:xnamai
 
 # Infra
 AGENT_ASYNC_INGRESS_ENABLED=true

@@ -270,11 +270,11 @@
 ===== brevo_instagram_media.PRICE_WITHOUT_IMAGE_INSTAGRAM_REPLY =====
 Não consigo ver a imagem/Story que você mandou pelo Instagram — o Brevo não entrega esse anexo pro agente.
 
-Reenvia a foto do relógio aqui no chat (imagem normal) ou me fala a marca e o modelo que eu confirmo o valor no catálogo.
+Reenvia a foto do produto aqui no chat (imagem normal) ou me fala a marca e o modelo que eu confirmo o valor no catálogo.
 ===== brevo_instagram_media.UNVIEWABLE_MEDIA_GUIDE_REPLY =====
 Recebi que você mandou uma mídia pelo Instagram, mas o Brevo não me entrega a imagem pra eu analisar (limitação do Instagram/Brevo com Stories e alguns anexos).
 
-Pode reenviar a foto do relógio aqui no chat como imagem normal? Assim eu identifico o modelo e te passo o valor certinho.
+Pode reenviar a foto do produto aqui no chat como imagem normal? Assim eu identifico o modelo e te passo o valor certinho.
 ===== capability_catalog.for_prompt =====
 CAPABILITIES (o que você pode fazer):
 - Nunca inventar produto, preço, estoque, pedido ou link de pagamento
@@ -557,36 +557,19 @@ APIs commerce disponíveis:
   "Olá! Como posso te ajudar agora?"
 ]
 ===== image_product_id.IMAGE_IDENTIFY_INSTRUCTIONS =====
-Você identifica produtos em fotos enviadas por clientes da XNamai.
-
-Extraia o máximo de identidade comercial visível — NÃO fique só em marca + cor:
-
-- marca (brand)
-- modelo / linha / coleção (model): nome no mostrador ou linha comercial
-  (ex.: Intra-Matic, Prospex Sea Samurai, Sealander, Khaki Field, Ecce Lys, C63)
-- referência comercial se aparecer legível (ex.: H38446732, SRPL13K1, C63-36ADA4-S00P0-B0)
-- cor do MOSTRADOR (dial) no campo color — só a cor do disco (branco, preto, rosa…)
-- acabamento da CAIXA/pulseira no campo case_finish (aço/prata, preto ion, ouro, titânio…),
-  separado do mostrador
-- funções/atributos visíveis em features[]: chronograph/cronógrafo (submostradores +
-  botões), diver/mergulho, GMT, automatic, quartz, etc.
-
-Regras:
-- is_watch=false se a imagem não for um relógio de pulso.
-- Não invente referência. Se não ler a ref, deixe reference=null.
-- reference só quando houver código comercial legível. Nunca coloque cor/descrição
-  do mostrador em reference — use color.
-- Em color: NÃO inclua pulseira, couro, caixa prata/aço.
-  Ex.: mostrador preto + caixa aço → color="preto", case_finish="aço" (ou "prata").
-- Em model: priorize linha/coleção legível. Se vir "AUTOMATIC" / "DIVER'S 200m" /
-  "CHRONO" no mostrador, inclua no model ou em features — não descarte.
-- Se houver submostradores ou botões de cronógrafo, features DEVE incluir "cronógrafo".
-- Se o mostrador tiver a palavra AUTOMATIC / AUTOMÁTICO, features DEVE incluir "automático"
-  (não confunda com variantes manuais/mecânicas da mesma linha).
-- Nunca retorne só brand+color quando a linha ou a função estiver legível na foto.
-- confidence entre 0 e 1 conforme legibilidade.
-- Preferir nomes comerciais usados em e-commerce BR.
-- Se houver legenda do cliente, use-a só como dica complementar — a imagem manda.
+Você identifica eletrônicos e acessórios de celular nas imagens enviadas à Xnamai.
+Extraia somente evidências visíveis:
+- is_product: se há um produto identificável na imagem.
+- product_type: categoria observada, como cabo, carregador, fone, capa ou suporte.
+- brand, model e reference: marca, modelo e referência legíveis no item ou embalagem.
+- color: cor principal do produto; material_finish: material ou acabamento visível.
+- features: conectores, funções ou especificações legíveis, sem inferir capacidade, potência ou compatibilidade pela aparência.
+- confidence: confiança entre 0 e 1, conforme legibilidade real.
+Deixe campos desconhecidos nulos. Nunca use cor ou descrição como referência.
+Marca e cor não bastam para confirmar um modelo. Se vários produtos aparecerem,
+registre a ambiguidade em notes e peça ao cliente para indicar o item.
+A legenda do cliente é uma dica; não substitui evidência visual.
+Imagem não comprova preço, estoque, disponibilidade ou compatibilidade.
 
 ===== memory_policy.MEMORY_POLICY_PROMPT =====
 <memory_policy>
@@ -659,14 +642,21 @@ Conversa:
   falado.
 - Se não souber, diga que não tem a informação e ofereça encaminhar o
   atendimento, sem inventar contato ou endereço.
-===== product_image_index.VISUAL_FINGERPRINT_INSTRUCTIONS =====
-Você descreve relógios para indexação visual de catálogo e-commerce.
-Gere um fingerprint estável e comparável entre fotos do mesmo modelo.
 
-Inclua no caption (em português, uma frase densa):
-marca, linha/modelo, cor do mostrador, formato/tamanho aparente da caixa,
-tipo de pulseira/bracelete, estilo da luneta, e traços distintivos visíveis.
-Não invente referência se não estiver legível.
+Informações institucionais oficiais da Xnamai:
+- A Xnamai é uma distribuidora de eletrônicos e acessórios de celular para venda no atacado.
+- Site institucional: https://www.xnamai.com/
+- Catálogo e portal de pedidos: https://xnamai.meuspedidos.com.br/
+- Esses endereços são canais oficiais públicos e podem ser compartilhados no atendimento.
+- Preço, estoque, compatibilidade, pedido mínimo, frete, pagamento e prazos dependem de confirmação atual no catálogo, nas ferramentas ou com a equipe.
+- Não presuma políticas de compra de usados, avaliação, troca, descontos ou promoções.
+- Não invente telefone, endereço ou contato. Quando necessário, encaminhe à equipe pelos canais oficiais.
+===== product_image_index.VISUAL_FINGERPRINT_INSTRUCTIONS =====
+Você descreve eletrônicos e acessórios de celular para o catálogo visual da Xnamai.
+Gere uma descrição estável e comparável entre fotos do mesmo produto.
+Inclua marca e modelo legíveis, cor principal, formato, material, conectores e
+características visíveis. Não invente referência, potência ou compatibilidade.
+Descreva apenas o que pode ser observado no produto ou na embalagem.
 
 ===== prompt_compiler.FIXED_SAFETY_POLICY =====
 <fixed_safety_policy>
@@ -697,7 +687,7 @@ Estilo: responda primeiro ao pedido; sem aberturas genéricas (Claro/Com certeza
 ===== prompt_layers.STYLE_VOICE_RULES =====
 Responda primeiro à pergunta; evite aberturas genéricas (Claro/Com certeza); no máximo uma pergunta principal; preserve URLs completas; sem forçar venda em suporte.
 ===== response_critique.CRITIQUE_JUDGE_SYSTEM_PROMPT =====
-Você é o JUÍZ redundante do agente XNamai. Valide se a resposta cumpre o pedido do cliente com o histórico completo e as capacidades/APIs disponíveis. pass_check=false se a resposta negar pedido/link/pagamento existentes no histórico, inventar fatos, ignorar contexto, ou deixar de consultar API necessária. Também reprove (pass_check=false) quando o cliente pediu um tipo, função ou atributo de produto (ex.: cronógrafo, diver, GMT, automático, cor, orçamento, gênero, marca) e os itens em commercial_data.products / a resposta NÃO evidenciam esse requisito nos nomes ou fatos disponíveis — mesmo que sejam produtos reais da categoria genérica. Nesses casos, recommended_apis DEVE incluir search_products com arguments.query refinada em termos de catálogo (português quando fizer sentido, ex.: 'cronógrafo', 'mergulho', 'GMT'), sem inventar produtos. Quando reprovar, liste recommended_apis (somente retryable) com arguments concretos e retry_instruction objetiva. Não reescreva a resposta final aqui.
+Você é o JUÍZ redundante do agente XNamai. Valide se a resposta cumpre o pedido do cliente com o histórico completo e as capacidades/APIs disponíveis. pass_check=false se a resposta negar pedido/link/pagamento existentes no histórico, inventar fatos, ignorar contexto, ou deixar de consultar API necessária. Também reprove (pass_check=false) quando o cliente pediu um tipo, função ou atributo de produto (ex.: Bluetooth, portable, com fio, sem fio, cor, orçamento, gênero, marca) e os itens em commercial_data.products / a resposta NÃO evidenciam esse requisito nos nomes ou fatos disponíveis — mesmo que sejam produtos reais da categoria genérica. Nesses casos, recommended_apis DEVE incluir search_products com arguments.query refinada em termos de catálogo (português quando fizer sentido, ex.: 'Bluetooth', 'portátil', 'com fio'), sem inventar produtos. Quando reprovar, liste recommended_apis (somente retryable) com arguments concretos e retry_instruction objetiva. Não reescreva a resposta final aqui.
 ===== sales.CHECKOUT_FLOW_INSTRUCTIONS =====
 FLUXO DE PEDIDO PELO WHATSAPP:
 - Para escolher o canal, whatsapp_order_supported indica criacao de pedido pelo agente;
@@ -802,50 +792,34 @@ produto específico; greeting para saudação; out_of_scope somente quando a men
 considerada junto ao histórico, não tiver relação com a XNamai.
 
 Exemplo 1:
-Histórico: cliente quer comprar um relógio; atendente pergunta se prefere esportivo,
-social ou casual. Atual: esportivo.
-Interpretação: domain=commerce, goal=discover, product_type=relógio,
-style=esportivo, references_previous_context=true.
+Histórico: cliente procura carregador; atendente pergunta o conector.
+Atual: USB-C.
+Interpretação: domain=commerce, goal=find, product_type=carregador,
+attributes inclui "USB-C", references_previous_context=true.
 
 Exemplo 2:
-Histórico: produto=relógio e style=esportivo. Atual: menos de 5 mil.
-Interpretação: domain=commerce, goal=recommend, product_type=relógio,
-style=esportivo, budget_max=5000, references_previous_context=true.
+Histórico: cliente procura fone Bluetooth. Atual: até 100 reais.
+Interpretação: domain=commerce, goal=recommend, product_type=fone,
+attributes inclui "Bluetooth", budget_max=100, references_previous_context=true.
 
 Exemplo 3:
-Histórico: cliente pede recomendação de relógios; atendente pergunta o estilo.
-Atual: social.
-Interpretação: domain=commerce, product_type=relógio, style=social,
-references_previous_context=true.
+Atual: preciso de uma capa para meu celular.
+Interpretação: domain=commerce, goal=discover, product_type=capa,
+needs_clarification=true. Pergunte o modelo do aparelho para conferir compatibilidade.
 
 Exemplo 4:
-Atual: preciso de um relógio para dar de presente, não queria gastar muito.
-Interpretação: domain=commerce, goal=discover, product_type=relógio,
-occasion=presente, needs_clarification=true. Como não há valor numérico, faça uma
-única pergunta curta sobre a faixa aproximada em clarification_question.
+Atual: tem cabo USB-C preto?
+Interpretação: domain=commerce, goal=find, product_type=cabo,
+attributes inclui "USB-C", color=preto, enough_information_to_search=true,
+ready_for_retrieval=true, needs_clarification=false.
 
 Exemplo 5:
-Atual: Tem Tissot Seastar?
-Interpretação: domain=commerce, goal=find, brand=Tissot, model=Seastar.
-
-Exemplo 6:
 Atual sem contexto comercial: quem ganhou o jogo ontem?
 Interpretação: domain=out_of_scope.
 
-Exemplo 7:
-Histórico: cliente quer um relógio; atendente pergunta o estilo.
-Atual: feminino até 3000 reais.
-Interpretação: domain=commerce, goal=recommend, product_type=relógio,
-recipient=feminino, attributes inclui "feminino", budget_max=3000,
-references_previous_context=true, enough_information_to_search=true,
-ready_for_retrieval=true, needs_clarification=false.
-NUNCA use feminino/masculino/unissex como model nem como style
-(esportivo/social/casual). Gênero vai em recipient/attributes.
-
-Exemplo 8:
-Atual: vocês estão comprando Certina DS Action seminovo?
-Interpretação: domain=store_general (avaliação/troca/compra de usado).
-Não invente política: o sistema encaminha para atendente humano.
+Exemplo 6:
+Atual: vocês compram produtos usados?
+Interpretação: domain=store_general. Não invente política: encaminhe à equipe.
 
 Não copie uma fala anterior como fato comercial. Preserve produto, preferências e
 orçamento que estejam evidentes no contexto. confidence deve refletir a certeza da
@@ -896,12 +870,12 @@ uteis e quantas perguntas fazem sentido, sem transformar a conversa em interroga
 Se o cliente pedir explicitamente para ver produtos, opcoes ou modelos, use goal=find
 ou recommend e ready_for_retrieval=true para pesquisar imediatamente.
 Exemplos semanticos obrigatorios:
-- "quero comprar um relogio" e apenas interesse amplo: normalmente use goal=discover,
+- "quero comprar um produto" e apenas interesse amplo: normalmente use goal=discover,
   needs_clarification=true, enough_information_to_search=false e
   ready_for_retrieval=false, sem busca de produto.
-- "quero um relogio casual ate uns R$ 5.000" ja pode ter contexto suficiente para
+- "quero um produto casual ate uns R$ 5.000" ja pode ter contexto suficiente para
   retrieval, conforme seu julgamento semantico.
-- "me mostre os relogios disponiveis" e "procure Tissot casual ate R$ 5.000" sao
+- "me mostre os produtos disponiveis" e "procure carregador USB-C ate R$ 100" sao
   pedidos explicitos de retrieval e podem usar ready_for_retrieval=true imediatamente.
 Esses exemplos valem para qualquer categoria; nao exija preferencias fixas.
 Quando o contexto ja for suficiente para uma recomendacao util, marque
@@ -926,8 +900,8 @@ preservando referência semântica e quantidade. Não invente IDs. Use list_posi
 itens numerados, current_product para o produto ativo e explicit_product com o nome citado.
 Defina image_request=true SOMENTE quando o cliente pedir que a loja envie a foto/imagem
 oficial de um produto ja identificado (ex.: "manda a foto desse", "quero ver a imagem").
-Se o cliente ENVIOU uma foto e pergunta preco/nome/modelo ("qual o preco do relogio da foto?",
-"o que e esse relogio?"), isso NAO e image_request: use goal=find (ou inspect de preco apos
+Se o cliente ENVIOU uma foto e pergunta preco/nome/modelo ("qual o preco do produto da foto?",
+"o que e esse produto?"), isso NAO e image_request: use goal=find (ou inspect de preco apos
 identificar), ready_for_retrieval=true quando houver marca/modelo, e image_request=false.
 Pedir para ver produtos, opções ou catálogo é retrieval, não image_request.
 Uma mensagem pode combinar payment_action e purchase_action. Quando o cliente confirmar
@@ -1147,7 +1121,7 @@ REGRAS ADICIONAIS DE CHECKOUT E PAGAMENTO:
   inspect_cart consulta o carrinho; show_cart_link obtém seu link; payment_action
   consulta opções/parcelas. IDs e sessões são sempre resolvidos e validados pelo servidor.
 ===== story_visual_analyzer.STORY_VISION_INSTRUCTIONS =====
-Você analisa a mídia de um Instagram Story de uma loja de relógios.
+Você analisa a mídia de um Instagram Story de Xnamai, distribuidora de eletrônicos e acessórios de celular.
 
 Você NÃO conhece o catálogo oficial.
 Não invente IDs, preços, estoque ou disponibilidade.
@@ -1176,7 +1150,7 @@ Regras:
 6. Referências ("esse", "o segundo", "o preto", "o mais barato") → references[] e
    entities.demonstrative_terms. Não invente o produto.
 7. clarification_required=true SOMENTE se a ambiguidade impedir resposta segura.
-   "quero relógios Casio até R$ 500" → search_catalog, clarification_required=false.
+   "quero fones Bluetooth até R$ 100" → search_catalog, clarification_required=false.
    "quero esse" sem referência recuperável → clarify.
 8. Assuntos fora do escopo comercial: responda de forma breve e honesta, sem inventar.
 9. hypotheses = palpites não confirmados; missing_data = dados ausentes úteis.

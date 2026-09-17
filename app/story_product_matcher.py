@@ -262,8 +262,8 @@ async def match_story_to_catalog(
             *analysis.visible_brands[:2],
             *analysis.model_hypotheses[:2],
             *analysis.visible_references[:1],
-            *analysis.dial_colors[:1],
-            *analysis.strap_colors[:1],
+            *analysis.primary_colors[:1],
+            *analysis.secondary_colors[:1],
             analysis.visual_description[:180],
         ]
         caption = " ".join(str(x) for x in caption_bits if x).strip()
@@ -285,9 +285,9 @@ async def match_story_to_catalog(
                     elif nb_brand:
                         conflicts.append("brand_conflict")
                 color_score = 0.0
-                if analysis.dial_colors:
+                if analysis.primary_colors:
                     caption_l = _fold(neighbor.get("visual_caption") or neighbor.get("name"))
-                    if any(_fold(c) in caption_l for c in analysis.dial_colors):
+                    if any(_fold(c) in caption_l for c in analysis.primary_colors):
                         color_score = 0.5
                 _add_scored(
                     {
@@ -329,7 +329,7 @@ async def match_story_to_catalog(
             *analysis.visible_brands[:1],
             *analysis.model_hypotheses[:1],
             *analysis.visible_references[:1],
-            *analysis.dial_colors[:1],
+            *analysis.primary_colors[:1],
         ]
         query = " ".join(str(x) for x in query_bits if x).strip()
         if query:

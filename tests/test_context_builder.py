@@ -23,8 +23,8 @@ def test_surviving_intents_are_only_the_generic_ones():
 
 def test_commerce_questions_are_classified_as_commerce():
     for text in (
-        "Vocês têm Tissot Seastar?",
-        "Tem estoque desse relógio?",
+        "Vocês têm MarcaA ChargeMax?",
+        "Tem estoque desse produto?",
         "Quanto custa?",
         "Quanto fica no Pix?",
     ):
@@ -47,7 +47,7 @@ def test_human_support_request_is_preserved():
 
 def test_facts_never_carry_an_account_lookup():
     facts = gather_customer_facts(
-        IncomingMessage(sender_phone="5511999999999", text="Vocês têm Tissot Seastar?"),
+        IncomingMessage(sender_phone="5511999999999", text="Vocês têm MarcaA ChargeMax?"),
         {"found": True, "name": "Cliente"},
     )
     assert facts["primary_intent"] == "commerce"

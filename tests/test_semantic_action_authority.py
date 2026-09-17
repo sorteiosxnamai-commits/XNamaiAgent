@@ -56,7 +56,7 @@ def test_structured_generic_purchase_is_discovery_without_cart_action():
 
     interpretation = _interpretation(
         goal="discover",
-        subject={"product_type": "relógio"},
+        subject={"product_type": "produto"},
         ready_for_retrieval=True,
         enough_information_to_search=True,
         purchase_action=None,
@@ -84,12 +84,12 @@ async def test_broad_purchase_interest_continues_without_catalog_or_cart(monkeyp
     monkeypatch.setattr(sales_agent, "get_settings", _settings)
 
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="quero comprar um relógio"),
+        IncomingMessage(text="quero comprar um produto"),
         {},
         {},
         _interpretation(
             goal="buy",
-            subject={"product_type": "relógio"},
+            subject={"product_type": "produto"},
             needs_clarification=True,
         ),
         commerce_state=CommerceConversationState(active_domain="commerce"),
@@ -109,19 +109,19 @@ async def test_explicit_product_request_allows_catalog_search(monkeypatch):
 
     async def retrieve(interpretation):
         calls.append(("search_products", interpretation.subject.model_dump()))
-        return _catalog_result("TISSOT-1")
+        return _catalog_result("MARCAA-1")
 
     monkeypatch.setattr(sales_agent, "_execute_compiled_product_retrieval", retrieve)
     monkeypatch.setattr(sales_agent, "_sales_response_with_openai", _no_responder)
     monkeypatch.setattr(sales_agent, "get_settings", _settings)
 
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="me mostre relógios Tissot esportivos"),
+        IncomingMessage(text="me mostre produtos MarcaA esportivos"),
         {},
         {},
         _interpretation(
             goal="find",
-            subject={"product_type": "relógio", "brand": "Tissot"},
+            subject={"product_type": "produto", "brand": "MarcaA"},
             preferences={"style": "esportivo"},
             enough_information_to_search=True,
             ready_for_retrieval=True,
@@ -131,7 +131,7 @@ async def test_explicit_product_request_allows_catalog_search(monkeypatch):
 
     assert result is not None
     assert [name for name, _ in calls] == ["search_products"]
-    assert result.commercial_data["products"][0]["id"] == "TISSOT-1"
+    assert result.commercial_data["products"][0]["id"] == "MARCAA-1"
 
 
 def test_active_product_requires_explicit_structured_reference():
@@ -177,7 +177,7 @@ async def test_invalid_create_cart_without_structured_target_never_posts(monkeyp
         {},
         _interpretation(
             goal="buy",
-            subject={"product_type": "relógio"},
+            subject={"product_type": "produto"},
             purchase_action="create_cart",
             ready_for_retrieval=True,
         ),
@@ -220,7 +220,7 @@ async def test_pending_action_without_persisted_target_does_not_use_active_produ
         {},
         _interpretation(
             goal="find",
-            subject={"product_type": "relógio", "model": "Novo"},
+            subject={"product_type": "produto", "model": "Novo"},
             confirmation="confirm",
             ready_for_retrieval=True,
         ),
@@ -242,13 +242,13 @@ async def test_complete_pipeline_keeps_current_semantics_above_old_state(monkeyp
         _interpretation(domain="greeting", goal=None),
         _interpretation(
             goal="discover",
-            subject={"product_type": "relógio"},
+            subject={"product_type": "produto"},
             ready_for_retrieval=True,
             enough_information_to_search=True,
         ),
         _interpretation(
             goal="find",
-            subject={"product_type": "relógio", "brand": "Marca Alfa"},
+            subject={"product_type": "produto", "brand": "Marca Alfa"},
             ready_for_retrieval=True,
             enough_information_to_search=True,
         ),
@@ -266,7 +266,7 @@ async def test_complete_pipeline_keeps_current_semantics_above_old_state(monkeyp
         ),
         _interpretation(
             goal="find",
-            subject={"product_type": "relógio", "model": "Coleção Nova"},
+            subject={"product_type": "produto", "model": "Coleção Nova"},
             ready_for_retrieval=True,
             enough_information_to_search=True,
             confirmation="none",

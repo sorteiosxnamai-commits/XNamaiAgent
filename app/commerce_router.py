@@ -5,6 +5,7 @@ from typing import Any
 
 from .models import AgentResult, IncomingMessage
 from .commerce.tools import execute_tool
+from .product_vocabulary import mentions_product_category
 
 
 COMMERCE_UNAVAILABLE = "N\u00e3o consegui consultar as informa\u00e7\u00f5es da loja neste momento. Tente novamente em instantes."
@@ -62,8 +63,8 @@ def extract_product_query(text: str | None) -> str:
 def _is_follow_up_without_product(query: str) -> bool:
     normalized = query.lower().strip()
     return not normalized or normalized in {
-        "desse relogio", "desse relógio", "desse produto", "deste produto",
-        "dele", "dela", "esse produto", "esse relogio", "esse relógio",
+        "desse produto", "desse produto", "desse produto", "deste produto",
+        "dele", "dela", "esse produto", "esse produto", "esse produto",
     } or normalized in {"estoque", "disponibilidade", "disponivel", "pix", "no pix", "e no pix", "quanto fica", "quanto fica no pix", "parcelamento", "parcelar", "promocao"}
 
 
@@ -77,8 +78,8 @@ def is_deictic_product_price_request(text: str | None) -> bool:
         "na foto",
         "dessa foto",
         "nessa foto",
-        "do relogio da foto",
-        "do relógio da foto",
+        "do produto da foto",
+        "do produto da foto",
         "da imagem",
     )
     this_markers = (
@@ -86,11 +87,11 @@ def is_deictic_product_price_request(text: str | None) -> bool:
         "dessa",
         "deste",
         "desta",
-        "esse relogio",
-        "esse relógio",
         "esse produto",
-        "este relogio",
-        "este relógio",
+        "esse produto",
+        "esse produto",
+        "este produto",
+        "este produto",
         "este produto",
     )
     return any(marker in normalized for marker in photo_markers + this_markers)
@@ -116,7 +117,7 @@ def resolve_commerce_action(text: str | None) -> str | None:
         )
     ):
         return "product_price"
-    if any(term in normalized for term in ("tem ", "vocês têm", "voces tem", "vende", "produto", "relógio", "relogio", "marca", "modelo", "sku", "ean")):
+    if mentions_product_category(text) or any(term in normalized for term in ("tem ", "vocês têm", "voces tem", "vende", "produto", "marca", "modelo", "sku", "ean")):
         return "product_search"
     return None
 

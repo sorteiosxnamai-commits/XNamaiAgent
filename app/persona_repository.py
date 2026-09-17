@@ -11,8 +11,8 @@ from .persona_models import PersonaVersion
 from .turn_cache import cached_turn_read, invalidates_turn_reads
 
 
-DEFAULT_TENANT_ID = "newstore"
-DEFAULT_PERSONA_KEY = "newstore_commercial"
+DEFAULT_TENANT_ID = "xnamai"
+DEFAULT_PERSONA_KEY = "xnamai_commercial"
 
 
 def hash_instructions(instructions: str) -> str:

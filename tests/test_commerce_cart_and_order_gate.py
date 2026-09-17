@@ -254,7 +254,7 @@ def test_changing_a_quantity_changes_the_fingerprint():
 
 
 def test_the_fingerprint_carries_no_timestamp():
-    """Com relogio dentro, o mesmo pedido teria digital nova a cada segundo —
+    """Com produto dentro, o mesmo pedido teria digital nova a cada segundo —
     e a idempotencia que ela existe para sustentar iria junto."""
     import inspect
 

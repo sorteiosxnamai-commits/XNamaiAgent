@@ -352,7 +352,7 @@ def trailing_position(text: str, state) -> tuple[int, object] | None:
 
     Por isso a regra exige as tres coisas juntas — sufixo numerico, posicao
     existente na lista, e forte sobreposicao dos termos com o item de la. Sem a
-    terceira, qualquer "s23" ou "watch5" viraria selecao silenciosa do item
+    terceira, qualquer "s23" ou "phone5" viraria selecao silenciosa do item
     errado, com preco e estoque de outro produto.
     """
     lista = list(getattr(state, "last_presented_products", None) or [])

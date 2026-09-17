@@ -18,14 +18,14 @@ def test_detects_brevo_unviewable_english_placeholder():
 
 def test_rejects_normal_visitor_text():
     assert is_brevo_unviewable_media_text("valor") is False
-    assert is_brevo_unviewable_media_text("quero esse relógio") is False
+    assert is_brevo_unviewable_media_text("quero esse produto") is False
 
 
 def test_bare_price_requests():
     assert is_bare_price_request("valor") is True
     assert is_bare_price_request("Valor") is True
     assert is_bare_price_request("qual o preço") is True
-    assert is_bare_price_request("quanto custa o kingfisher") is False
+    assert is_bare_price_request("quanto custa o ChargeMini") is False
 
 
 def test_should_guide_instagram_price_without_media():
@@ -35,7 +35,7 @@ def test_should_guide_instagram_price_without_media():
     with_image = IncomingMessage(
         channel="instagram",
         text="valor",
-        image_url="https://cdn.example/watch.jpg",
+        image_url="https://cdn.example/product.jpg",
         attachment_type="image",
     )
     assert should_guide_instagram_price_without_media(with_image) is False

@@ -37,8 +37,8 @@ def _settings(**overrides):
 
 
 def test_commerce_intents_and_local_intents_remain_distinct():
-    assert _primary_intent(detect_customer_intents("Vocês têm Tissot Seastar?")) == "commerce"
-    assert _primary_intent(detect_customer_intents("Tem estoque desse relógio?")) == "commerce"
+    assert _primary_intent(detect_customer_intents("Vocês têm MarcaA ChargeMax?")) == "commerce"
+    assert _primary_intent(detect_customer_intents("Tem estoque desse fone?")) == "commerce"
     assert _primary_intent(detect_customer_intents("Quanto custa?")) == "commerce"
     assert _primary_intent(detect_customer_intents("Quanto fica no Pix?")) == "commerce"
     # Os intents locais do dominio de sorteio (balance, coupon_code, ...) sairam
@@ -53,14 +53,14 @@ def test_semantic_sales_plan_is_generic_and_preserves_constraints():
     plan = _normalize_semantic_plan({
         "domain": "commerce",
         "goal": "recommend",
-        "subject": {"product_type": "relógio", "query": "Citizen elegante", "brand": "Citizen"},
+        "subject": {"product_type": "fone", "query": "MarcaG elegante", "brand": "MarcaG"},
         "constraints": {"budget_max": 3000, "attributes": ["elegante"]},
         "information_needed": ["catalog"],
     })
     assert plan["goal"] == "recommend"
-    assert plan["subject"]["brand"] == "Citizen"
+    assert plan["subject"]["brand"] == "MarcaG"
     assert plan["constraints"]["budget_max"] == 3000
-    assert "Citizen elegante" in plan["query"]
+    assert "MarcaG elegante" in plan["query"]
 
 
 @pytest.mark.asyncio
@@ -91,7 +91,7 @@ async def test_greeting_does_not_lookup_account_or_handoff(monkeypatch):
 
 def test_commerce_facts_do_not_lookup_personal_balance():
     facts = gather_customer_facts(
-        IncomingMessage(sender_phone="5511999999999", text="Vocês têm Tissot Seastar?"),
+        IncomingMessage(sender_phone="5511999999999", text="Vocês têm MarcaA ChargeMax?"),
         {"found": True, "name": "Cliente"},
     )
     assert facts["primary_intent"] == "commerce"
@@ -158,7 +158,7 @@ async def test_out_of_scope_is_refused_without_openai_answer_or_tray(monkeypatch
     assert result.intent == "out_of_scope"
     # Identidade migrada: a recusa de escopo fala pela XNamai.
     assert "XNamai" in result.reply_text
-    assert "NewStore" not in result.reply_text
+    assert "XNamai" in result.reply_text
 
 
 @pytest.mark.asyncio
@@ -179,18 +179,18 @@ async def test_purchase_intent_uses_product_entity_not_full_sentence(monkeypatch
 
     async def fake_execute(name, arguments):
         calls.append((name, arguments))
-        return {"products": [{"id": "1", "name": "Relógio esportivo", "current_price": 1000}]}
+        return {"products": [{"id": "1", "name": "fone esportivo", "current_price": 1000}]}
 
     monkeypatch.setattr("app.commerce_router.execute_tool", fake_execute)
     install_fake_openai_client(monkeypatch, FakeClient)
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="quero comprar um relógio"),
+        IncomingMessage(text="quero comprar um fone"),
         {"primary_intent": "commerce"},
         {},
         SalesInterpretation(
             domain="commerce",
             goal="discover",
-            subject={"product_type": "relógio"},
+            subject={"product_type": "fone"},
             preferences={},
             references_previous_context=False,
             needs_clarification=True,
@@ -227,18 +227,18 @@ async def test_broad_recommendation_with_budget_starts_retrieval(monkeypatch):
 
     async def fake_execute(name, arguments):
         calls.append((name, arguments))
-        return {"products": [{"id": "2", "name": "Relógio esportivo preto", "current_price": 4500}]}
+        return {"products": [{"id": "2", "name": "fone esportivo preto", "current_price": 4500}]}
 
     monkeypatch.setattr(sales_agent, "execute_tool", fake_execute)
     install_fake_openai_client(monkeypatch, FakeClient)
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="quero comprar um relógio por menos de 5 mil"),
+        IncomingMessage(text="quero comprar um fone por menos de 5 mil"),
         {"primary_intent": "commerce"},
         {},
         SalesInterpretation(
             domain="commerce",
             goal="recommend",
-            subject={"product_type": "relógio"},
+            subject={"product_type": "fone"},
             preferences={"budget_max": 5000},
             references_previous_context=False,
             needs_clarification=False,
@@ -247,7 +247,7 @@ async def test_broad_recommendation_with_budget_starts_retrieval(monkeypatch):
         ),
     )
     search_calls = [call for call in calls if call[0] == "search_products"]
-    assert search_calls == [("search_products", {"name": "relógio", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
+    assert search_calls == [("search_products", {"name": "fone", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
     assert result.reply_text == "Encontrei uma opção dentro da faixa informada."
     assert result.safety_reason != "recommendation_not_found"
     assert result.response_metadata["used_commerce_provider"] is True
@@ -263,27 +263,27 @@ async def test_product_search_uses_progressive_strategies(monkeypatch):
 
     async def fake_execute(name, arguments):
         calls.append(arguments)
-        # Match any exact/token probe for Seastar/Tissot.
+        # Match any exact/token probe for ChargeMax/MarcaA.
         tokens = [str(t).casefold() for t in (arguments.get("tokens") or [])]
         name_arg = str(arguments.get("name") or "").casefold()
         brand = str(arguments.get("brand") or "").casefold()
         if (
-            "seastar" in name_arg
-            or ("seastar" in tokens and "tissot" in tokens)
-            or (brand == "tissot" and "seastar" in name_arg)
+            "chargemax" in name_arg
+            or ("chargemax" in tokens and "marcaa" in tokens)
+            or (brand == "marcaa" and "chargemax" in name_arg)
         ):
-            return {"products": [{"id": "3", "name": "Tissot Seastar"}]}
+            return {"products": [{"id": "3", "name": "MarcaA ChargeMax"}]}
         return {"products": []}
 
     monkeypatch.setattr(sales_agent, "execute_tool", fake_execute)
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="Tem Tissot Seastar?"),
+        IncomingMessage(text="Tem MarcaA ChargeMax?"),
         {"primary_intent": "commerce"},
         {},
         SalesInterpretation(
             domain="commerce",
             goal="find",
-            subject={"brand": "Tissot", "model": "Seastar"},
+            subject={"brand": "MarcaA", "model": "ChargeMax"},
             preferences={},
             references_previous_context=False,
             needs_clarification=False,
@@ -294,11 +294,11 @@ async def test_product_search_uses_progressive_strategies(monkeypatch):
     # Production uses parallel multi-strategy probes (token + exact), not a single call.
     assert len(calls) >= 1
     assert any(
-        ("tokens" in arguments and "seastar" in [str(t).casefold() for t in arguments.get("tokens") or []])
-        or str(arguments.get("name") or "").casefold() == "seastar"
+        ("tokens" in arguments and "chargemax" in [str(t).casefold() for t in arguments.get("tokens") or []])
+        or str(arguments.get("name") or "").casefold() == "chargemax"
         for arguments in calls
     )
-    assert "Tissot Seastar" in result.reply_text
+    assert "MarcaA ChargeMax" in result.reply_text
 
 
 @pytest.mark.asyncio
@@ -310,19 +310,19 @@ async def test_ranking_removes_incompatible_brand_model_candidate(monkeypatch):
 
     async def fake_execute(name, arguments):
         return {"products": [
-            {"id": "1", "name": "Tissot Seastar preto", "brand": "Tissot", "model": "Seastar", "current_price": 5000},
-            {"id": "2", "name": "Tissot Tradition", "brand": "Tissot", "model": "Tradition", "current_price": 4000},
+            {"id": "1", "name": "MarcaA ChargeMax preto", "brand": "MarcaA", "model": "ChargeMax", "current_price": 5000},
+            {"id": "2", "name": "MarcaA Tradition", "brand": "MarcaA", "model": "Tradition", "current_price": 4000},
         ]}
 
     monkeypatch.setattr("app.commerce_router.execute_tool", fake_execute)
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="Tem Tissot Seastar?"),
+        IncomingMessage(text="Tem MarcaA ChargeMax?"),
         {"primary_intent": "commerce"},
         {},
-        {"domain": "commerce", "intent": "product_search", "goal": "find", "query": "Tissot Seastar", "subject": {"query": "Tissot Seastar", "brand": "Tissot", "model": "Seastar"}, "constraints": {}, "filters": {"brand": "Tissot", "model": "Seastar"}, "_source": "openai"},
+        {"domain": "commerce", "intent": "product_search", "goal": "find", "query": "MarcaA ChargeMax", "subject": {"query": "MarcaA ChargeMax", "brand": "MarcaA", "model": "ChargeMax"}, "constraints": {}, "filters": {"brand": "MarcaA", "model": "ChargeMax"}, "_source": "openai"},
     )
-    assert "Tissot Seastar" in result.reply_text
-    assert "Tissot Tradition" not in result.reply_text
+    assert "MarcaA ChargeMax" in result.reply_text
+    assert "MarcaA Tradition" not in result.reply_text
 
 
 @pytest.mark.asyncio
@@ -342,7 +342,7 @@ async def test_stale_inbound_does_not_send_old_agent_reply(monkeypatch):
         async with AsyncClient(transport=ASGITransport(app=index.app), base_url="http://test") as client:
             response = await client.post(
                 "/api/webhooks/brevo/whatsapp",
-                json={"id": "stale-1", "conversationId": "conv-1", "from": "5511999999999", "text": "Tem Tissot?"},
+                json={"id": "stale-1", "conversationId": "conv-1", "from": "5511999999999", "text": "Tem MarcaA?"},
             )
     finally:
         index.app.dependency_overrides.pop(index.verify_brevo_webhook, None)

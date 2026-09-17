@@ -25,8 +25,8 @@ def _settings():
         agent_debug_store_compiled_prompt=False,
         agent_max_recent_turns=8,
         openai_api_mode="chat_completions",
-        agent_persona_tenant_id="newstore",
-        agent_persona_key="newstore_commercial",
+        agent_persona_tenant_id="xnamai",
+        agent_persona_key="xnamai_commercial",
     )
 
 
@@ -43,8 +43,8 @@ def client(monkeypatch):
 
 def test_admin_create_activate_list(client):
     created = client.post(
-        "/api/admin/agents/newstore/personas",
-        json={"name": "NS", "instructions": "persona admin\n", "created_by": "tester"},
+        "/api/admin/agents/xnamai/personas",
+        json={"name": "Xnamai", "instructions": "persona admin\n", "created_by": "tester"},
     )
     assert created.status_code == 200
     body = created.json()
@@ -53,16 +53,16 @@ def test_admin_create_activate_list(client):
     assert body["persona"]["status"] == "draft"
 
     activated = client.post(
-        f"/api/admin/agents/newstore/personas/{persona_id}/activate"
+        f"/api/admin/agents/xnamai/personas/{persona_id}/activate"
     )
     assert activated.status_code == 200
     assert activated.json()["persona"]["status"] == "active"
 
-    listed = client.get("/api/admin/agents/newstore/personas")
+    listed = client.get("/api/admin/agents/xnamai/personas")
     assert listed.status_code == 200
     assert len(listed.json()["items"]) == 1
 
-    active = client.get("/api/admin/agents/newstore/personas/active")
+    active = client.get("/api/admin/agents/xnamai/personas/active")
     assert active.status_code == 200
     assert active.json()["persona"]["id"] == persona_id
 
@@ -73,11 +73,11 @@ def test_admin_archive_and_rollback(client):
     repo.activate_persona_version(v1.id)
     repo.activate_persona_version(v2.id)
 
-    archived = client.post(f"/api/admin/agents/newstore/personas/{v2.id}/archive")
+    archived = client.post(f"/api/admin/agents/xnamai/personas/{v2.id}/archive")
     assert archived.status_code == 200
     assert archived.json()["persona"]["status"] == "archived"
 
-    rolled = client.post(f"/api/admin/agents/newstore/personas/{v1.id}/rollback")
+    rolled = client.post(f"/api/admin/agents/xnamai/personas/{v1.id}/rollback")
     assert rolled.status_code == 200
     assert rolled.json()["persona"]["status"] == "active"
     assert rolled.json()["persona"]["id"] == v1.id
@@ -87,7 +87,7 @@ def test_admin_prompt_preview(client):
     created = repo.create_persona_version(instructions="PREVIEW_PERSONA\n", name="P")
     repo.activate_persona_version(created.id)
     preview = client.get(
-        "/api/admin/agents/newstore/prompt-preview",
+        "/api/admin/agents/xnamai/prompt-preview",
         params={"channel": "instagram", "sender_key": "instagram:secret123", "text": "oi"},
     )
     assert preview.status_code == 200

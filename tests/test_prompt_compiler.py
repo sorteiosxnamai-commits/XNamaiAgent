@@ -21,8 +21,8 @@ def _enable_persona(monkeypatch, enabled: bool = True):
             agent_contact_memory_in_prompt_enabled=False,
             agent_memory_auto_apply_enabled=False,
             openai_api_mode="chat_completions",
-            agent_persona_tenant_id="newstore",
-            agent_persona_key="newstore_commercial",
+            agent_persona_tenant_id="xnamai",
+            agent_persona_key="xnamai_commercial",
         ),
     )
 
@@ -40,8 +40,8 @@ def test_compile_includes_active_persona_and_safety(monkeypatch):
     store = InMemoryPersonaStore().install(monkeypatch)
     _enable_persona(monkeypatch, enabled=True)
     created = repo.create_persona_version(
-        instructions="PERSONA_ATIVA_NEWSTORE\n",
-        name="NS",
+        instructions="PERSONA_ATIVA_XNamai\n",
+        name="Xnamai",
     )
     repo.activate_persona_version(created.id)
 
@@ -53,7 +53,12 @@ def test_compile_includes_active_persona_and_safety(monkeypatch):
     )
     assert compiled.used_db_persona is True
     assert compiled.persona_version_id == created.id
-    assert "PERSONA_ATIVA_NEWSTORE" in compiled.instructions
+    assert "PERSONA_ATIVA_XNamai" in compiled.instructions
+    assert "<business_identity>" in compiled.instructions
+    assert "Você representa exclusivamente a Xnamai" in compiled.instructions
+    assert "prevalecem sobre persona, memória e histórico" in compiled.instructions
+    assert "https://www.xnamai.com/" in compiled.instructions
+    assert "https://xnamai.meuspedidos.com.br/" in compiled.instructions
     assert "<fixed_safety_policy>" in compiled.instructions
     assert "<channel_overlay>" in compiled.instructions
     assert "instagram" in compiled.instructions
@@ -63,7 +68,7 @@ def test_compile_includes_active_persona_and_safety(monkeypatch):
 def test_compile_recomputes_each_call_without_openai_state(monkeypatch):
     InMemoryPersonaStore().install(monkeypatch)
     _enable_persona(monkeypatch, enabled=True)
-    created = repo.create_persona_version(instructions="P1\n", name="NS")
+    created = repo.create_persona_version(instructions="P1\n", name="Xnamai")
     repo.activate_persona_version(created.id)
 
     a = compiler.compile_agent_prompt(
@@ -93,11 +98,11 @@ def test_main_contract_not_duplicated_when_compat_off(monkeypatch):
             agent_max_recent_turns=8,
             agent_legacy_prompt_compat_enabled=False,
             openai_api_mode="chat_completions",
-            agent_persona_tenant_id="newstore",
-            agent_persona_key="newstore_commercial",
+            agent_persona_tenant_id="xnamai",
+            agent_persona_key="xnamai_commercial",
         ),
     )
-    contract = "CONTRATO_UNICO_DE_SEGURANCA_E_TOM_NEWSTORE_XYZ"
+    contract = "CONTRATO_UNICO_DE_SEGURANCA_E_TOM_XNamai_XYZ"
     redundant = f"<legacy_agent_contract>\n{contract}\n</legacy_agent_contract>"
     compiled = compiler.compile_agent_prompt(
         incoming=IncomingMessage(channel="whatsapp", text="oi"),
@@ -121,8 +126,8 @@ def test_legacy_compat_flag_reembeds_contract(monkeypatch):
             agent_max_recent_turns=8,
             agent_legacy_prompt_compat_enabled=True,
             openai_api_mode="chat_completions",
-            agent_persona_tenant_id="newstore",
-            agent_persona_key="newstore_commercial",
+            agent_persona_tenant_id="xnamai",
+            agent_persona_key="xnamai_commercial",
         ),
     )
     contract = "CONTRATO_COMPAT_ABC"
@@ -142,7 +147,7 @@ def test_legacy_compat_flag_reembeds_contract(monkeypatch):
 def test_current_message_not_duplicated_in_input_items(monkeypatch):
     InMemoryPersonaStore().install(monkeypatch)
     _enable_persona(monkeypatch, enabled=True)
-    created = repo.create_persona_version(instructions="P\n", name="NS")
+    created = repo.create_persona_version(instructions="P\n", name="Xnamai")
     repo.activate_persona_version(created.id)
 
     compiled = compiler.compile_agent_prompt(
@@ -167,8 +172,8 @@ def test_db_persona_keeps_operational_contract_without_duplicating_persona(monke
     InMemoryPersonaStore().install(monkeypatch)
     _enable_persona(monkeypatch, enabled=True)
     created = repo.create_persona_version(
-        instructions="TOM_E_IDENTIDADE_NEWSTORE\n",
-        name="NS",
+        instructions="TOM_E_IDENTIDADE_XNamai\n",
+        name="Xnamai",
     )
     repo.activate_persona_version(created.id)
 
@@ -182,7 +187,7 @@ def test_db_persona_keeps_operational_contract_without_duplicating_persona(monke
         audit=False,
     )
     assert compiled.used_db_persona is True
-    assert "TOM_E_IDENTIDADE_NEWSTORE" in compiled.instructions
+    assert "TOM_E_IDENTIDADE_XNamai" in compiled.instructions
     assert "<operational_contract>" in compiled.instructions
     assert operational in compiled.instructions
     assert compiler.count_contract_occurrences(compiled.instructions, operational) == 1

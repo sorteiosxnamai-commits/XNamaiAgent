@@ -1,26 +1,6 @@
-"""A superficie de prompt so muda quando alguem decide que ela deve mudar.
+"""Snapshot dos prompts após a atualização autorizada da identidade Xnamai.
 
-Referencia: ``tests/fixtures/prompt_surface_baseline_xnamai.txt``, capturado
-pelo mesmo renderizador usado aqui (``tests/prompt_surface.py``).
-
-Historico da baseline
----------------------
-Ate a migracao de identidade, a referencia era o commit ``201bd16`` e o objetivo
-era provar que a neutralizacao comercial NAO havia mexido na persona. Isso foi
-cumprido: o system prompt voltou byte a byte ao original.
-
-A baseline mudou de propósito UMA vez, na migracao NewStore -> XNamai, que foi
-pedida explicitamente. O agente passou a se apresentar como assistente da
-XNamai, e o conhecimento institucional da marca legada deixou de ser injetado.
-
-Por que renderizar em vez de comparar arquivos: ``openai_agent.py`` ja ficou
-textualmente quase intacto enquanto o system prompt que ele monta encolhia 59%,
-porque o conteudo vinha de outro modulo. Um teste de arquivo nao veria isso.
-Este ve.
-
-Rebaselinar e um ato deliberado: exige editar este arquivo e regravar o fixture
-no mesmo commit da mudanca de identidade, para que a revisao veja as duas coisas
-juntas. Alteracao de prompt que chegue aqui por acidente continua reprovando.
+Mudanças de comportamento exigem revisão e atualização deliberada do fixture.
 """
 
 from __future__ import annotations

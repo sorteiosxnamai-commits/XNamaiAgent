@@ -22,7 +22,7 @@ def _cart(*, variant=True, multiple=False):
         "variant_id": "123" if variant else None,
         "quantity": 1,
         "unit_price": "4699.99",
-        "name": "Relogio",
+        "name": "produto",
     }]
     if multiple:
         items.append({
@@ -424,12 +424,12 @@ async def test_remove_request_overrides_pending_zipcode_without_local_cart_mutat
     state = _whatsapp_state(
         pending_action="awaiting_shipping_zipcode",
         cart_items=[
-            {"product_id": "803", "variant_id": "123", "quantity": 1, "unit_price": "4699.99", "name": "Citizen"},
-            {"product_id": "804", "variant_id": None, "quantity": 1, "unit_price": "2000.00", "name": "Tissot"},
+            {"product_id": "803", "variant_id": "123", "quantity": 1, "unit_price": "4699.99", "name": "MarcaG"},
+            {"product_id": "804", "variant_id": None, "quantity": 1, "unit_price": "2000.00", "name": "MarcaA"},
         ],
     )
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="tire o primeiro relogio"), {}, {},
+        IncomingMessage(text="tire o primeiro produto"), {}, {},
         _interpretation(purchase_action="remove_cart_item", reference_type="list_position", reference_position=1),
         commerce_state=state,
     )
@@ -457,7 +457,7 @@ async def test_quantity_request_overrides_pending_zipcode(monkeypatch):
             return {"cart_url": "https://loja.example/checkout/SESSION-1", "items": [{
                 "product_id": "803", "variant_id": "123",
                 "quantity": 1 if quantity_updated else 2,
-                "unit_price": "4699.99", "name": "Citizen",
+                "unit_price": "4699.99", "name": "MarcaG",
             }]}
         if tool == "set_cart_item_quantity":
             quantity_updated = True
@@ -470,7 +470,7 @@ async def test_quantity_request_overrides_pending_zipcode(monkeypatch):
         lambda: SimpleNamespace(openai_api_key="", openai_model="gpt-4.1-mini"),
     )
     state = _whatsapp_state(
-        active_product={"product_id": "803", "variant_id": "123", "name": "Citizen"},
+        active_product={"product_id": "803", "variant_id": "123", "name": "MarcaG"},
         cart_items=[{"product_id": "803", "variant_id": "123", "quantity": 2}],
         pending_action="awaiting_shipping_zipcode",
     )
@@ -502,13 +502,13 @@ async def test_quantity_change_requotes_with_saved_zipcode(monkeypatch):
             return {**_cart(), "items": [{
                 "product_id": "803", "variant_id": "123",
                 "quantity": 1 if quantity_updated else 2,
-                "unit_price": "4699.99", "name": "Citizen",
+                "unit_price": "4699.99", "name": "MarcaG",
             }]}
         if tool == "set_cart_item_quantity":
             quantity_updated = True
             return {**_cart(), "items": [{
                 "product_id": "803", "variant_id": "123", "quantity": 1,
-                "unit_price": "4699.99", "name": "Citizen",
+                "unit_price": "4699.99", "name": "MarcaG",
             }]}
         if tool == "quote_shipping":
             return {"success": True, "options": [{
@@ -523,7 +523,7 @@ async def test_quantity_change_requotes_with_saved_zipcode(monkeypatch):
         lambda: SimpleNamespace(openai_api_key="", openai_model="gpt-4.1-mini"),
     )
     state = _ready_state(
-        active_product={"product_id": "803", "variant_id": "123", "name": "Citizen"},
+        active_product={"product_id": "803", "variant_id": "123", "name": "MarcaG"},
         cart_items=[{"product_id": "803", "variant_id": "123", "quantity": 2}],
         shipping_quote_zipcode="86480000",
         checkout_draft={
@@ -554,8 +554,8 @@ async def test_quantity_change_requotes_with_saved_zipcode(monkeypatch):
 async def test_shipping_quote_preserves_factual_names_per_cart_item():
     state = _whatsapp_state(
         cart_items=[
-            {"product_id": "803", "variant_id": "123", "quantity": 1, "name": "Citizen"},
-            {"product_id": "804", "variant_id": None, "quantity": 1, "name": "Tissot"},
+            {"product_id": "803", "variant_id": "123", "quantity": 1, "name": "MarcaG"},
+            {"product_id": "804", "variant_id": None, "quantity": 1, "name": "MarcaA"},
         ],
     )
 
@@ -574,8 +574,8 @@ async def test_shipping_quote_preserves_factual_names_per_cart_item():
     updated = evolve_commerce_state(state, result)
 
     assert [(item.product_id, item.variant_id, item.quantity, item.name) for item in updated.cart_items] == [
-        ("803", "123", 1, "Citizen"),
-        ("804", None, 1, "Tissot"),
+        ("803", "123", 1, "MarcaG"),
+        ("804", None, 1, "MarcaA"),
     ]
 
 
@@ -846,7 +846,7 @@ async def test_payment_change_during_review_reprepares_the_only_confirmable_orde
 
 
 @pytest.mark.asyncio
-async def test_automatic_checkout_reuses_one_cart_snapshot_before_order_review(monkeypatch):
+async def test_wireless_checkout_reuses_one_cart_snapshot_before_order_review(monkeypatch):
     import app.sales_agent as sales_agent
 
     calls = []
@@ -1519,8 +1519,8 @@ async def test_removal_invalidates_state_after_removal(monkeypatch):
 
     state = _ready_state(
         cart_items=[
-            {"product_id": "803", "variant_id": "123", "quantity": 1, "unit_price": "4699.99", "name": "Citizen"},
-            {"product_id": "804", "variant_id": None, "quantity": 1, "unit_price": "2000.00", "name": "Tissot"},
+            {"product_id": "803", "variant_id": "123", "quantity": 1, "unit_price": "4699.99", "name": "MarcaG"},
+            {"product_id": "804", "variant_id": None, "quantity": 1, "unit_price": "2000.00", "name": "MarcaA"},
         ],
     )
 

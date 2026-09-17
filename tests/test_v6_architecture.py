@@ -45,7 +45,7 @@ def test_hybrid_rank_attaches_candidate_trace():
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="recommend",
-        subject=ProductSubject(brand="Seiko", query="Seiko"),
+        subject=ProductSubject(brand="MarcaD", query="MarcaD"),
         preferences=ProductPreferences(),
         references_previous_context=False,
         needs_clarification=False,
@@ -56,15 +56,15 @@ def test_hybrid_rank_attaches_candidate_trace():
     products = [
         {
             "id": "10",
-            "name": "Seiko SRPD51",
-            "brand": "Seiko",
+            "name": "MarcaD SRPD51",
+            "brand": "MarcaD",
             "price": 1500,
             "stock": 2,
             "available": True,
         },
         {
             "id": "11",
-            "name": "Orient Bambino",
+            "name": "MarcaQ PowerDock",
             "brand": "Orient",
             "price": 1200,
             "stock": 1,
@@ -142,13 +142,13 @@ def test_reasoning_effort_skip_reason(monkeypatch):
 
 
 def test_sticky_routing_uses_tenant_and_conversation_hash():
-    a = sticky_routing_key(tenant_id="newstore", conversation_id="conv-1")
-    b = sticky_routing_key(tenant_id="newstore", conversation_id="conv-1")
+    a = sticky_routing_key(tenant_id="xnamai", conversation_id="conv-1")
+    b = sticky_routing_key(tenant_id="xnamai", conversation_id="conv-1")
     c = sticky_routing_key(tenant_id="other", conversation_id="conv-1")
     assert a == b
     assert a != c
     assert "conv-1" not in a
-    assert a.startswith("newstore:")
+    assert a.startswith("xnamai:")
 
 
 def test_rollout_shadow_profile():
@@ -165,7 +165,7 @@ def test_rollout_shadow_profile():
 
 def test_summary_shadow_flags_commercial_divergence():
     delta = ConversationSummaryDelta(
-        current_goal="cliente quer o relógio",
+        current_goal="cliente quer o produto",
         commitments=["estoque confirmado com 5 unidades"],
     )
     codes = compare_summary_delta_to_facts(delta)

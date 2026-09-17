@@ -45,7 +45,7 @@ async def test_agent_loads_hard_cap_but_sends_model_window(monkeypatch):
         return SalesInterpretation(
             domain="commerce",
             goal="find",
-            subject={"brand": "Tissot", "model": "Seastar"},
+            subject={"brand": "MarcaA", "model": "ChargeMax"},
             preferences={},
             references_previous_context=False,
             needs_clarification=False,
@@ -105,7 +105,7 @@ async def test_agent_loads_hard_cap_but_sends_model_window(monkeypatch):
 
     result = await openai_agent.generate_agent_reply_async(
         IncomingMessage(
-            text="Tem Tissot Seastar?",
+            text="Tem MarcaA ChargeMax?",
             conversation_id="c1",
             raw={"inbound_id": 9},
         ),

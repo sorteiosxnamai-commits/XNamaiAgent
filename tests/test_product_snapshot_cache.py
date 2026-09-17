@@ -23,7 +23,7 @@ def test_cache_hit_miss_expiry_and_tenant_isolation():
     snap_a = product_dict_to_snapshot(
         {
             "id": "1",
-            "name": "Seastar",
+            "name": "ChargeMax",
             "current_price": "1990.00",
             "stock": 2,
             "available": True,
@@ -31,7 +31,7 @@ def test_cache_hit_miss_expiry_and_tenant_isolation():
         tenant_id="store-a",
         match_kind="exact",
     )
-    cache.put(snap_a, kind="product", ttl_seconds=0.2, payload={"id": "1", "name": "Seastar"})
+    cache.put(snap_a, kind="product", ttl_seconds=0.2, payload={"id": "1", "name": "ChargeMax"})
     assert cache.get(tenant_id="store-a", kind="product", entity_id="1") is not None
     assert cache.get(tenant_id="store-b", kind="product", entity_id="1") is None
     assert cache.stats()["hits"] == 1
@@ -74,7 +74,7 @@ def test_stale_allowed_for_non_critical_and_forbidden_for_stock_path():
 def test_invalidation_and_exact_vs_similar():
     cache = get_product_snapshot_cache()
     exact = product_dict_to_snapshot(
-        {"id": "2", "name": "Seastar", "model": "Seastar"},
+        {"id": "2", "name": "ChargeMax", "model": "ChargeMax"},
         tenant_id="store",
         match_kind="exact",
     )

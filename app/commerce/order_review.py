@@ -2,10 +2,10 @@
 
 A revisao existe para que o cliente veja exatamente o que sera criado antes de
 qualquer coisa ser criada. Por isso ela e pura: mesmos itens, mesmo resultado,
-sem rede, sem banco, sem relogio.
+sem rede, sem banco, sem produto.
 
 A digital (`order_fingerprint`) serve a idempotencia que vem depois. Ela
-NAO inclui timestamp de proposito: com relogio dentro, o mesmo pedido teria
+NAO inclui timestamp de proposito: com produto dentro, o mesmo pedido teria
 digital nova a cada segundo, e a protecao contra duplicata que ela sustenta iria
 junto — um "confirmo" reenviado pelo WhatsApp criaria o segundo pedido.
 
@@ -107,7 +107,7 @@ def _customer_id(state) -> str | None:
 def order_fingerprint(state, *, payment_condition_id: str | None = None,
                       order_type_id: str | None = None,
                       facts: Any = None) -> str:
-    """Digital estavel do pedido. Sem relogio, sem ordem acidental.
+    """Digital estavel do pedido. Sem produto, sem ordem acidental.
 
     Os itens sao ordenados por id antes do hash: o mesmo pedido montado em outra
     sequencia continua sendo o mesmo pedido, e duas confirmacoes dele nao podem

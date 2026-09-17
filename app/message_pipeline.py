@@ -180,7 +180,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
             load_commerce_conversation_state(**state_lookup)
         )
     # New product photo starts a fresh identification — never price the
-    # previous SKU (e.g. CW Rosa) while Vision runs on a Beaubleu.
+    # previous SKU (e.g. CW Rosa) while Vision runs on a MarcaL.
     if (incoming.image_url or "").strip():
         if commerce_state.active_product is not None:
             log_event(
@@ -498,7 +498,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
                 memory_result = process_agent_memory_proposals(
                     envelope=envelope,
                     tenant_id=str(
-                        getattr(settings, "agent_persona_tenant_id", "newstore")
+                        getattr(settings, "agent_persona_tenant_id", "xnamai")
                     ),
                     conversation_key=(
                         incoming.conversation_id

@@ -25,8 +25,8 @@ def test_classify_preference_misread_empty_catalog():
 
 def test_classify_trade_in_policy_miss():
     row = {
-        "customer_text": "vcs estão comprando Certina seminovo?",
-        "agent_reply": "Não compramos relógios seminovos, apenas vendemos produtos novos.",
+        "customer_text": "vcs estão comprando MarcaC seminovo?",
+        "agent_reply": "Não compramos produtos seminovos, apenas vendemos produtos novos.",
         "handoff_required": False,
         "intent": "commerce",
         "response_metadata": {},
@@ -87,7 +87,7 @@ def test_promote_creates_pending_extension_without_auto_activate(monkeypatch):
     )
 
     ext_id = promote_insights_to_extensions(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         insight_id=7,
         category="policy",
         insight_text="Não recusar trade-in; encaminhar humano.",
@@ -149,7 +149,7 @@ def test_promote_never_auto_approves_even_when_flag_true(monkeypatch):
 
     assert (
         promote_insights_to_extensions(
-            tenant_id="newstore",
+            tenant_id="xnamai",
             insight_id=1,
             category="greeting",
             insight_text="Evitar saudação duplicada.",
@@ -166,7 +166,7 @@ async def test_batch_default_does_not_promote(monkeypatch):
     monkeypatch.setattr(
         "app.attendance_learning.get_settings",
         lambda: SimpleNamespace(
-            agent_persona_tenant_id="newstore",
+            agent_persona_tenant_id="xnamai",
             agent_learning_lookback_hours=2,
             agent_learning_batch_limit=120,
             agent_learning_auto_promote=False,

@@ -13,7 +13,7 @@ from app.channel_profiles import channel_system_hint
 
 def test_full_strips_generic_opener_and_limits_questions():
     text = present_reply_text(
-        "Claro! O Seastar custa R$ 10,00. Quer que eu reserve? Posso preparar o frete também?",
+        "Claro! O ChargeMax custa R$ 10,00. Quer que eu reserve? Posso preparar o frete também?",
         channel="whatsapp",
         intent="commerce",
         mode="full",
@@ -24,7 +24,7 @@ def test_full_strips_generic_opener_and_limits_questions():
 
 def test_thin_preserves_second_commerce_question():
     raw = (
-        "O Seastar custa R$ 10,00. Quer que eu reserve? "
+        "O ChargeMax custa R$ 10,00. Quer que eu reserve? "
         "Posso preparar o frete também?"
     )
     thin = present_reply_text(
@@ -56,14 +56,14 @@ def test_thin_still_zero_questions_on_handoff():
 
 def test_marks_similar_product_and_preserves_url():
     text = present_reply_text(
-        "Achei este modelo. https://www.sorteionewstore.com.br/produto/1",
+        "Achei este modelo. https://xnamai.meuspedidos.com.br/produto/1",
         channel="whatsapp",
         intent="commerce",
         metadata={"match_kind": "similar"},
         mode="thin",
     )
     assert "semelhante" in text.casefold()
-    assert "https://www.sorteionewstore.com.br/produto/1" in text
+    assert "https://xnamai.meuspedidos.com.br/produto/1" in text
 
 
 def test_compose_greeting_handoff_and_long_message(monkeypatch):
@@ -107,7 +107,7 @@ def test_shadow_outbound_is_full_with_thin_preview(monkeypatch):
     get_settings.cache_clear()
     try:
         raw = (
-            "Claro! O Seastar custa R$ 10,00. Quer que eu reserve? "
+            "Claro! O ChargeMax custa R$ 10,00. Quer que eu reserve? "
             "Posso preparar o frete também?"
         )
         result = present_agent_result(

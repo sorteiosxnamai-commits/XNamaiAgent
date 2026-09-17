@@ -1097,12 +1097,12 @@ async def test_cart_removal_by_name():
     state = _state(
         cart_session_id="session",
         cart_items=[
-            {"product_id": "A", "variant_id": None, "quantity": 1, "name": "Citizen Watch"},
-            {"product_id": "B", "variant_id": None, "quantity": 1, "name": "Tissot Watch"},
+            {"product_id": "A", "variant_id": None, "quantity": 1, "name": "MarcaG product"},
+            {"product_id": "B", "variant_id": None, "quantity": 1, "name": "MarcaA product"},
         ],
     )
     interpretation = _interpretation(purchase_action="remove_cart_item")
-    interpretation.subject.model = "Tissot"
+    interpretation.subject.model = "MarcaA"
 
     targets, reason = resolve_cart_item_reference(interpretation, state)
 
@@ -1118,12 +1118,12 @@ async def test_cart_removal_ambiguous_name():
     state = _state(
         cart_session_id="session",
         cart_items=[
-            {"product_id": "A", "variant_id": None, "quantity": 1, "name": "Watch"},
-            {"product_id": "B", "variant_id": None, "quantity": 1, "name": "Watch"},
+            {"product_id": "A", "variant_id": None, "quantity": 1, "name": "product"},
+            {"product_id": "B", "variant_id": None, "quantity": 1, "name": "product"},
         ],
     )
     interpretation = _interpretation(purchase_action="remove_cart_item")
-    interpretation.subject.model = "Watch"
+    interpretation.subject.model = "product"
 
     targets, reason = resolve_cart_item_reference(interpretation, state)
 
@@ -1138,12 +1138,12 @@ async def test_cart_removal_name_not_found():
     state = _state(
         cart_session_id="session",
         cart_items=[
-            {"product_id": "A", "variant_id": None, "quantity": 1, "name": "Citizen"},
-            {"product_id": "B", "variant_id": None, "quantity": 1, "name": "Tissot"},
+            {"product_id": "A", "variant_id": None, "quantity": 1, "name": "MarcaG"},
+            {"product_id": "B", "variant_id": None, "quantity": 1, "name": "MarcaA"},
         ],
     )
     interpretation = _interpretation(purchase_action="remove_cart_item")
-    interpretation.subject.model = "Seiko"
+    interpretation.subject.model = "MarcaD"
 
     targets, reason = resolve_cart_item_reference(interpretation, state)
 

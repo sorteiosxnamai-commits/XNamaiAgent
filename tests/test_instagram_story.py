@@ -138,7 +138,7 @@ def test_common_instagram_dm_without_story_has_no_context():
     payload = {
         "eventName": "conversationFragment",
         "visitor": {"id": "v1", "source": "instagram", "sourceConversationRef": "u1"},
-        "messages": [{"type": "visitor", "id": "m1", "text": "oi, tem Seiko?"}],
+        "messages": [{"type": "visitor", "id": "m1", "text": "oi, tem MarcaD?"}],
     }
     incoming = parse_brevo_conversations_payload(payload)
     assert incoming.channel == "instagram"
@@ -324,10 +324,10 @@ def test_reject_invented_rerank_ids():
 
 def test_validate_link_payload_rejects_missing_and_ignores_price():
     with pytest.raises(ValueError):
-        validate_link_payload({"tenant_id": "newstore"})
+        validate_link_payload({"tenant_id": "xnamai"})
     cleaned = validate_link_payload(
         {
-            "tenant_id": "newstore",
+            "tenant_id": "xnamai",
             "instagram_account_id": "ig1",
             "story_media_id": "s1",
             "product_id": "10",
@@ -355,7 +355,7 @@ def test_story_rollout_off_skips(monkeypatch):
         story_media_id="s1",
         replied_to_story=True,
     )
-    ok, reason = story_rollout_allows(tenant_id="newstore", story=story)
+    ok, reason = story_rollout_allows(tenant_id="xnamai", story=story)
     assert ok is False
     assert reason == "rollout_off"
     get_settings.cache_clear()
@@ -373,7 +373,7 @@ async def test_resolve_story_already_matched_revalidates(monkeypatch):
     get_settings.cache_clear()
 
     assoc = StoryProductAssociation(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         provider="brevo",
         instagram_account_id="ig_biz_fixture",
         story_media_id="story_image_001",
@@ -407,7 +407,7 @@ async def test_resolve_story_already_matched_revalidates(monkeypatch):
         if name == "get_product":
             return {
                 "id": "42",
-                "name": "Seiko SRPD51",
+                "name": "MarcaD SRPD51",
                 "price": 1899.0,
                 "stock": 2,
                 "available": True,
@@ -418,19 +418,19 @@ async def test_resolve_story_already_matched_revalidates(monkeypatch):
     incoming = parse_brevo_conversations_payload(_story_reply_payload())
     result = await service.resolve_story_product_question(
         incoming=incoming,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         execute_tool=fake_tool,
     )
     assert result is not None
     assert result.resolved is True
-    assert result.tenant_id == "newstore"
+    assert result.tenant_id == "xnamai"
     assert result.product_id == "42"
     assert result.product_payload is not None
     assert "1899" in (result.reply_hint or "") or "1.899" in (result.reply_hint or "")
     agent = service.story_result_to_agent_result(result, incoming=incoming)
     assert agent is not None
     assert agent.intent == "commerce"
-    assert agent.response_metadata.get("tenant_id") == "newstore"
+    assert agent.response_metadata.get("tenant_id") == "xnamai"
     get_settings.cache_clear()
 
 
@@ -445,7 +445,7 @@ async def test_shadow_mode_does_not_change_reply(monkeypatch):
     get_settings.cache_clear()
 
     assoc = StoryProductAssociation(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         provider="brevo",
         instagram_account_id="ig_biz_fixture",
         story_media_id="story_image_001",
@@ -468,12 +468,12 @@ async def test_shadow_mode_does_not_change_reply(monkeypatch):
     monkeypatch.setattr(service, "StoryProductRepository", FakeRepo)
 
     async def fake_tool(name, args):
-        return {"id": "42", "name": "Seiko", "price": 10, "available": True}
+        return {"id": "42", "name": "MarcaD", "price": 10, "available": True}
 
     incoming = parse_brevo_conversations_payload(_story_reply_payload())
     result = await service.resolve_story_product_question(
         incoming=incoming,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         execute_tool=fake_tool,
     )
     assert result is not None
@@ -494,14 +494,14 @@ async def test_begin_processing_none_does_not_call_vision(monkeypatch):
     get_settings.cache_clear()
 
     pending = StoryProductAssociation(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         provider="brevo",
         instagram_account_id="ig_biz_fixture",
         story_media_id="story_image_001",
         match_status="pending",
     )
     processing = StoryProductAssociation(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         provider="brevo",
         instagram_account_id="ig_biz_fixture",
         story_media_id="story_image_001",
@@ -530,7 +530,7 @@ async def test_begin_processing_none_does_not_call_vision(monkeypatch):
     incoming = parse_brevo_conversations_payload(_story_reply_payload())
     result = await service.resolve_story_product_question(
         incoming=incoming,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         execute_tool=AsyncMock(),
     )
     assert result is not None
@@ -572,22 +572,22 @@ def test_clarification_uses_real_regions_not_hardcoded():
 
     analysis = StoryVisualUnderstanding(
         multiple_products=True,
-        watch_count=2,
+        product_count=2,
         product_regions=[
-            VisualProductRegion(position="left", label="modelo", dial_color="azul"),
-            VisualProductRegion(position="right", label="modelo", dial_color="preto"),
+            VisualProductRegion(position="left", label="modelo", primary_color="azul"),
+            VisualProductRegion(position="right", label="modelo", primary_color="preto"),
         ],
     )
     options, reply = _clarification_from_regions(analysis)
     assert any("azul" in o for o in options)
     assert any("preto" in o for o in options)
     assert "azul" in reply or "preto" in reply
-    assert "mostrador azul" not in options or True  # real labels from regions
+    assert "produto azul" not in options or True  # real labels from regions
 
 
 def test_visual_understanding_forbids_trusting_advertised_price_as_stock():
     analysis = StoryVisualUnderstanding(
-        visual_description="relógio azul",
+        visual_description="produto azul",
         visible_advertised_price="R$ 1.000",
         product_identity_confidence=0.4,
     )

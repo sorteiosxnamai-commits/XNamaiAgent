@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotent seed for NewStore commercial persona version 1."""
+"""Idempotent seed for XNamai commercial persona version 1."""
 
 from __future__ import annotations
 
@@ -24,9 +24,8 @@ from app.persona_repository import (  # noqa: E402
 
 
 PERSONA_CANDIDATES = (
-    ROOT / "persona NS.txt",
-    ROOT / "persona_NS.txt",
-    ROOT / "assets" / "persona NS.txt",
+    ROOT / "persona_xnamai.txt",
+    ROOT / "assets" / "persona_xnamai.txt",
 )
 
 
@@ -47,7 +46,7 @@ def load_persona_text(path: Path | None = None) -> tuple[Path, str]:
                 normalized += "\n"
             return candidate, normalized
     raise FileNotFoundError(
-        "persona NS.txt não encontrado. Adicione o arquivo na raiz do projeto "
+        "persona_xnamai.txt não encontrado. Adicione o arquivo na raiz do projeto "
         "(conteúdo exato fornecido pelo administrador) e rode o seed novamente."
     )
 
@@ -82,11 +81,11 @@ def seed_persona(
             }
         created = create_persona_version(
             instructions=instructions,
-            name="NewStore Commercial",
+            name="XNamai Commercial",
             tenant_id=tenant_id,
             persona_key=persona_key,
             source="user",
-            created_by="seed_newstore_persona",
+            created_by="seed_xnamai_persona",
             status="draft",
             metadata={"seed_file": path.name},
         )
@@ -102,7 +101,7 @@ def seed_persona(
         activate_persona_version(
             persona.id,
             tenant_id=tenant_id,
-            activated_by="seed_newstore_persona",
+            activated_by="seed_xnamai_persona",
         )
         activated = True
     elif active is not None and active.id != persona.id:
@@ -128,8 +127,8 @@ def seed_persona(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed NewStore persona v1")
-    parser.add_argument("--file", type=Path, default=None, help="Path to persona NS.txt")
+    parser = argparse.ArgumentParser(description="Seed XNamai persona v1")
+    parser.add_argument("--file", type=Path, default=None, help="Path to persona_xnamai.txt")
     parser.add_argument("--no-activate", action="store_true")
     args = parser.parse_args()
     result = seed_persona(persona_path=args.file, activate=not args.no_activate)

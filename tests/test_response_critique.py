@@ -39,7 +39,7 @@ def test_capability_catalog_exposes_the_order_apis_the_critique_loop_needs():
 
 
 def test_capability_catalog_never_auto_retries_a_mutation():
-    """Propriedade de segurança genérica: o loop automático nunca muta estado."""
+    """Propriedade de segurança genérica: o loop sem fio nunca muta estado."""
     from app.commerce.tools import MUTATION_TOOL_NAMES
 
     catalog = build_capability_catalog()
@@ -67,13 +67,13 @@ def test_seed_args_from_active_product_reference():
         state=CommerceConversationState(
             active_product=CommerceProductReference(
                 product_id="9991",
-                name="Relógio Christopher Ward C63 Sealander Automático Rosa",
+                name="produto MarcaF C63 SoundMax sem fio Rosa",
             )
         ),
         result=AgentResult(reply_text="x", intent="commerce"),
     )
     assert seeds["product_id"] == "9991"
-    assert "Sealander" in (seeds["query"] or "")
+    assert "SoundMax" in (seeds["query"] or "")
 
 
 @pytest.mark.asyncio
@@ -93,7 +93,7 @@ async def test_critique_enforce_retries_api_and_regenerates(monkeypatch):
         {
             "role": "assistant",
             "content": (
-                "Use este link: https://www.newstorerj.com.br/loja/pagamento.php"
+                "Use este link: https://xnamai.meuspedidos.com.br/loja/pagamento.php"
                 "?loja=687890&pedido=0CC131B51070AEF"
             ),
         }
@@ -131,7 +131,7 @@ async def test_critique_enforce_retries_api_and_regenerates(monkeypatch):
             "success": True,
             "payment": {
                 "payment_url": (
-                    "https://www.newstorerj.com.br/loja/pagamento.php"
+                    "https://xnamai.meuspedidos.com.br/loja/pagamento.php"
                     "?loja=687890&pedido=0CC131B51070AEF"
                 ),
                 "has_payment": False,
@@ -141,14 +141,14 @@ async def test_critique_enforce_retries_api_and_regenerates(monkeypatch):
     async def fake_regen(**kwargs):
         regenerated = kwargs["result"].model_copy(deep=True)
         regenerated.reply_text = (
-            "Segue o link: https://www.newstorerj.com.br/loja/pagamento.php"
+            "Segue o link: https://xnamai.meuspedidos.com.br/loja/pagamento.php"
             "?loja=687890&pedido=0CC131B51070AEF"
         )
         regenerated.commercial_data = {
             "order_id": "25400",
             "payment": {
                 "payment_url": (
-                    "https://www.newstorerj.com.br/loja/pagamento.php"
+                    "https://xnamai.meuspedidos.com.br/loja/pagamento.php"
                     "?loja=687890&pedido=0CC131B51070AEF"
                 )
             },
@@ -214,7 +214,7 @@ async def test_critique_shadow_does_not_change_reply(monkeypatch):
 
 def test_critique_judge_prompt_requires_catalog_fit():
     prompt = CRITIQUE_JUDGE_SYSTEM_PROMPT.casefold()
-    assert "cronógrafo" in prompt or "cronografo" in prompt
+    assert "Bluetooth" in prompt or "bluetooth" in prompt
     assert "search_products" in prompt
     assert "commercial_data.products" in prompt
 
@@ -225,7 +225,7 @@ def test_apply_search_products_replaces_classic_list():
         intent="commerce",
         commercial_data={
             "products": [
-                {"id": "737", "name": "Bulova Classic Automatic"},
+                {"id": "737", "name": "Bulova Classic wireless"},
                 {"id": "753", "name": "Bulova Classic"},
             ]
         },
@@ -239,19 +239,19 @@ def test_apply_search_products_replaces_classic_list():
                 "products": [
                     {
                         "id": "9001",
-                        "name": "Bulova Marine Star Chronograph",
+                        "name": "Bulova Marine Star bluetooth",
                         "brand": "Bulova",
                     }
                 ]
             }
         },
         commerce_state=state,
-        search_query="cronógrafo",
+        search_query="Bluetooth",
     )
     products = updated.commercial_data["products"]
     assert len(products) == 1
-    assert "Chronograph" in products[0]["name"]
-    assert updated.commercial_data["query"] == "cronógrafo"
+    assert "bluetooth" in products[0]["name"]
+    assert updated.commercial_data["query"] == "Bluetooth"
     assert updated.response_metadata["critique_products_replaced"] is True
     assert state.last_presented_products[0].product_id == "9001"
 
@@ -261,7 +261,7 @@ def test_apply_search_products_empty_clears_wrong_list():
         reply_text="lista errada",
         intent="commerce",
         commercial_data={
-            "products": [{"id": "737", "name": "Bulova Classic Automatic"}],
+            "products": [{"id": "737", "name": "Bulova Classic wireless"}],
             "inventory": {"737": True},
         },
     )
@@ -278,13 +278,13 @@ def test_apply_search_products_empty_clears_wrong_list():
 @pytest.mark.asyncio
 async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monkeypatch):
     _allow_critique_llm_without_risk(monkeypatch)
-    incoming = IncomingMessage(channel="whatsapp", text="quero um chrono")
+    incoming = IncomingMessage(channel="whatsapp", text="quero um bluetooth")
     result = AgentResult(
         reply_text="Separei 3 opções Bulova Classic…",
         intent="commerce",
         commercial_data={
             "products": [
-                {"id": "737", "name": "Bulova Classic Automatic"},
+                {"id": "737", "name": "Bulova Classic wireless"},
                 {"id": "753", "name": "Bulova Classic"},
                 {"id": "783", "name": "Bulova Classic Dress"},
             ]
@@ -298,32 +298,32 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
         calls["judge"] += 1
         products = (kwargs["result"].commercial_data or {}).get("products") or []
         names = " ".join(str(p.get("name") or "") for p in products if isinstance(p, dict))
-        if "Chronograph" not in names and "Cronógrafo" not in names:
+        if "bluetooth" not in names and "Bluetooth" not in names:
             return CritiqueVerdict(
                 score=25,
                 pass_check=False,
                 issues=["catalog_fit_mismatch"],
-                summary="Classic Automatic ≠ cronógrafo",
+                summary="Classic wireless ≠ Bluetooth",
                 recommended_apis=[
                     RecommendedApiCall(
                         name="search_products",
-                        arguments={"query": "cronógrafo", "limit": 5},
-                        reason="refine for chronograph function",
+                        arguments={"query": "Bluetooth", "limit": 5},
+                        reason="refine for bluetooth function",
                     )
                 ],
-                retry_instruction="Buscar cronógrafos e apresentar só itens com evidência",
+                retry_instruction="Buscar fones Bluetooth e apresentar só itens com evidência",
             )
         return CritiqueVerdict(score=95, pass_check=True, issues=[], summary="ok")
 
     async def fake_execute(name, args):
         calls["tools"].append((name, args))
         assert name == "search_products"
-        assert args["query"] == "cronógrafo"
+        assert args["query"] == "Bluetooth"
         return {
             "products": [
                 {
                     "id": "9001",
-                    "name": "Relógio Bulova Marine Star Chronograph",
+                    "name": "produto Bulova Marine Star bluetooth",
                     "brand": "Bulova",
                 }
             ]
@@ -334,10 +334,10 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
             result=kwargs["result"],
             api_facts=kwargs["api_facts"],
             commerce_state=kwargs.get("commerce_state"),
-            search_query="cronógrafo",
+            search_query="Bluetooth",
         )
         swapped.reply_text = (
-            "Encontrei este cronógrafo: Relógio Bulova Marine Star Chronograph"
+            "Encontrei este Bluetooth: produto Bulova Marine Star bluetooth"
         )
         swapped.response_metadata["critique_regenerated"] = True
         return swapped
@@ -358,7 +358,7 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
     assert report.approved is True
     assert calls["tools"][0][0] == "search_products"
     assert final.commercial_data["products"][0]["id"] == "9001"
-    assert "Chronograph" in final.reply_text
+    assert "bluetooth" in final.reply_text
     assert "Classic" not in final.commercial_data["products"][0]["name"]
     assert state.last_presented_products[0].product_id == "9001"
 
@@ -389,12 +389,12 @@ async def test_critique_skips_greeting(monkeypatch):
 async def test_critique_generic_catalog_approves_once(monkeypatch):
     """Regression: attribute-free browse still ships after a single approve."""
     _allow_critique_llm_without_risk(monkeypatch)
-    incoming = IncomingMessage(channel="whatsapp", text="tem relógio?")
+    incoming = IncomingMessage(channel="whatsapp", text="tem produto?")
     result = AgentResult(
         reply_text="Tenho estas opções…",
         intent="commerce",
         commercial_data={
-            "products": [{"id": "1", "name": "Relógio X"}],
+            "products": [{"id": "1", "name": "produto X"}],
         },
     )
     calls = {"judge": 0}
@@ -425,12 +425,12 @@ async def test_critique_risk_gate_skips_llm_on_low_risk(monkeypatch):
     monkeypatch.setenv("AGENT_CRITIQUE_SHADOW_SAMPLE_RATE", "0")
     get_settings.cache_clear()
 
-    incoming = IncomingMessage(channel="whatsapp", text="tem relógio?")
+    incoming = IncomingMessage(channel="whatsapp", text="tem produto?")
     result = AgentResult(
         reply_text="Tenho estas opções…",
         intent="commerce",
         commercial_data={
-            "products": [{"id": "1", "name": "Relógio X"}],
+            "products": [{"id": "1", "name": "produto X"}],
         },
     )
 

@@ -221,7 +221,7 @@ def evaluate_memory_proposal(
     proposal: MemoryProposal,
     inbound: IncomingMessage | None = None,
     current_memories: list[ContactMemory] | None = None,
-    tenant_id: str = "newstore",
+    tenant_id: str = "xnamai",
     sender_key: str | None = None,
 ) -> MemoryPolicyDecision:
     del tenant_id  # reserved for future multi-tenant policy variants

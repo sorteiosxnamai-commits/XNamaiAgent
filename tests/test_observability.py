@@ -29,7 +29,7 @@ def test_summarize_commerce_and_openai_messages():
     state = CommerceConversationState(
         order_id="0CC131B51070AEF",
         pending_action="awaiting_payment",
-        active_product={"product_id": "1", "name": "Seiko"},
+        active_product={"product_id": "1", "name": "MarcaD"},
         checkout_draft={"customer": {"cpf": "07281035918", "name": "Paulo"}},
     )
     summary = summarize_commerce_state(state)
@@ -69,14 +69,14 @@ def test_summarize_history_turns_includes_previews(monkeypatch):
     get_settings.cache_clear()
     try:
         turns = [
-            {"role": "user", "content": "quero um seiko"},
+            {"role": "user", "content": "quero um marcad"},
             {"role": "assistant", "content": "tenho estas opções"},
             {"role": "user", "content": "manda o link"},
         ]
         summarized = summarize_history_turns(turns, max_turns=10)
         assert len(summarized) == 3
         assert summarized[0]["role"] == "user"
-        assert "seiko" in summarized[0]["preview"]
+        assert "marcad" in summarized[0]["preview"]
     finally:
         get_settings.cache_clear()
 

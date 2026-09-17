@@ -8,7 +8,7 @@ from app.capability_catalog import (
 
 def test_catalog_has_no_vendor_name():
     rendered = format_capability_catalog_for_prompt()
-    for vendor in ("Tray", "tray", "NewStore", "newstore"):
+    for vendor in ("Tray", "tray", "XNamai", "xnamai"):
         assert vendor not in rendered
 
 

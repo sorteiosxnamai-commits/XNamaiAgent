@@ -78,7 +78,7 @@ def format_payment_numbers(raw: Any) -> str | None:
     return str(raw)
 
 
-# --- Dominio de sorteio/NewStore fora do runtime (Parte 1) ---
+# --- Dominio de sorteio desativado fora do runtime (Parte 1) ---
 # As funcoes de sorteio (saldo, cupom pessoal, rodadas, pagamentos, numeros,
 # participacoes) e os utilitarios de grade de numeros foram REMOVIDOS junto com
 # a feature: nao havia mais chamador de runtime, so testes da propria feature.

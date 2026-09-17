@@ -143,13 +143,11 @@ def _fold(value: Any) -> str:
 
 _MODEL_STOPWORDS = frozenset(
     {
-        "relogio",
-        "watch",
-        "automatico",
-        "automatic",
-        "quartz",
-        "cronografo",
-        "chronograph",
+        "produto",
+        "product",
+        "sem",
+        "fio",
+        "wireless",
         "mm",
         "com",
         "para",
@@ -183,10 +181,10 @@ _OPTIONAL_MODEL_TOKENS = frozenset(
         "carbono",
         "ceramica",
         "nylon",
-        "pulseira",
-        "mostrador",
-        "dial",
-        "bezel",
+        "acessório",
+        "produto",
+        "primary",
+        "connector",
     }
 )
 # Soft descriptors that must never block a match even for single-token models.
@@ -194,9 +192,9 @@ _DESCRIPTOR_MODEL_TOKENS = frozenset(
     {
         "claro",
         "escuro",
-        "mostrador",
-        "dial",
-        "bezel",
+        "produto",
+        "primary",
+        "connector",
         "face",
         "caixa",
         # Gender never participates in model identity / exact probes.
@@ -216,13 +214,13 @@ _DESCRIPTOR_MODEL_TOKENS = frozenset(
         "man",
     }
 )
-# Strap/case materials from Vision — useful for ranking, never AND-required.
-# Catalog titles usually only carry dial color (Branco/Rosa), not "pulseira bege".
+# accessory/case materials from Vision — useful for ranking, never AND-required.
+# Catalog titles usually only carry primary color (Branco/Rosa), not "acessório bege".
 _ACCESSORY_COLOR_TOKENS = frozenset(
     {
-        "pulseira",
-        "strap",
-        "bracelet",
+        "acessório",
+        "accessory",
+        "accessory",
         "bege",
         "cream",
         "creme",
@@ -241,7 +239,7 @@ _ACCESSORY_COLOR_TOKENS = frozenset(
         "carcasa",
     }
 )
-_DIAL_COLOR_TOKENS = frozenset(
+_PRODUCT_COLOR_TOKENS = frozenset(
     {
         "branco",
         "preto",
@@ -285,8 +283,8 @@ _COLOR_ALIAS_GROUPS: tuple[frozenset[str], ...] = (
 )
 _ACCESSORY_NAME_TOKENS = frozenset(
     {
-        "strap",
-        "pulseira",
+        "accessory",
+        "acessório",
         "caixa",
         "box",
         "kit",
@@ -307,14 +305,14 @@ _REFERENCE_CODE_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-# Alphanumeric model codes with digits: PH2000M, C63, SUB300, etc.
+# Alphanumeric model codes with digits: PB20000, C63, SUB300, etc.
 _MODEL_CODE_RE = re.compile(
     r"\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{3,}\b"
 )
 
 
 def significant_model_tokens(model: str | None) -> tuple[str, ...]:
-    """Core tokens for exact matching — drops filler words like 'automático'."""
+    """Core tokens for exact matching — drops filler words like 'sem fio'."""
     tokens = [
         token
         for token in re.findall(r"[a-z0-9]+", _fold(model))
@@ -334,8 +332,8 @@ def required_model_tokens(model: str | None) -> tuple[str, ...]:
     )
     if len(identity) >= 2 or any(re.search(r"\d", token) for token in identity):
         return identity
-    # For single-word models (Sealander), keep color tokens for ranking/disambiguation
-    # but never require dial descriptors invented by Vision ("claro", "mostrador").
+    # For single-word models (SoundMax), keep color tokens for ranking/disambiguation
+    # but never require primary descriptors invented by Vision ("claro", "produto").
     tightened = tuple(
         token for token in tokens if token not in _DESCRIPTOR_MODEL_TOKENS
     )
@@ -365,8 +363,9 @@ def identity_core_tokens(
 def _rejects_as_accessory(
     product: dict[str, Any],
     identity_tokens: tuple[str, ...],
+    product_type: str | None = None,
 ) -> bool:
-    """Single-token model asks must not match straps/kits."""
+    """Single-token model asks must not match accessories/kits."""
     if len(identity_tokens) != 1:
         return False
     candidate_model = _fold(product.get("model"))
@@ -374,7 +373,8 @@ def _rejects_as_accessory(
     name_tokens = set(re.findall(r"[a-z0-9]+", candidate_name))
     if candidate_model:
         return False
-    return bool(name_tokens & _ACCESSORY_NAME_TOKENS)
+    requested_type_tokens = set(re.findall(r"[a-z0-9]+", _fold(product_type)))
+    return bool(name_tokens & (_ACCESSORY_NAME_TOKENS - requested_type_tokens))
 
 
 def score_catalog_candidates(
@@ -388,7 +388,7 @@ def score_catalog_candidates(
     """Rank catalog rows by brand/model/color keyword overlap in the title."""
     color_tokens = preference_color_tokens(interpretation)
     feature_tokens = preference_feature_tokens(interpretation)
-    case_tokens = preference_case_finish_tokens(interpretation)
+    case_tokens = preference_material_finish_tokens(interpretation)
     identity_tokens = identity_core_tokens(
         interpretation.subject.model,
         color_tokens=color_tokens,
@@ -409,11 +409,11 @@ def score_catalog_candidates(
                 continue
         if identity_tokens and not all(token in text for token in identity_tokens):
             continue
-        if _rejects_as_accessory(product, identity_tokens):
+        if _rejects_as_accessory(product, identity_tokens, interpretation.subject.product_type):
             continue
         if feature_tokens and not product_matches_feature_tokens(product, feature_tokens):
             continue
-        movement_ok = product_compatible_with_requested_movement(
+        movement_ok = product_compatible_with_requested_connectivity(
             product,
             interpretation.subject.model,
             interpretation.preferences.attributes,
@@ -436,16 +436,16 @@ def score_catalog_candidates(
             score += 40
         if case_tokens:
             # Soft: silver/steel case should outrank all-black-case siblings when
-            # dial color alone collides on "preto".
+            # primary color alone collides on "preto".
             if any(token in text for token in case_tokens):
                 score += 15
             elif {"prata", "aco", "steel"} & set(case_tokens) and "preto" in text:
-                # Title says Preto (often dial) but finish asked for steel —
-                # mild penalty vs Samurai/steel-titled siblings.
+                # Title says Preto (often primary) but finish asked for steel —
+                # mild penalty vs SoundPro/steel-titled siblings.
                 score -= 10
         if movement_ok:
             score += 10
-        elif model_excludes_gmt(interpretation.subject.model) and "gmt" in text:
+        elif model_requests_wireless(interpretation.subject.model) and "com fio" in text:
             score -= 5
         if any(
             product.get(key) not in (None, "", 0, "0")
@@ -511,9 +511,7 @@ def normalize_pt_catalog_query(text: str | None) -> str:
     if not value:
         return ""
     replacements = (
-        (r"\bautomatic\b", "Automático"),
-        (r"\bchronograph\b", "Cronógrafo"),
-        (r"\bquartz\b", "Quartz"),
+        (r"\bwireless\b", "sem fio"),
         (r"\bpink\b", "Rosa"),
         (r"\bblue\b", "Azul"),
         (r"\bgreen\b", "Verde"),
@@ -538,7 +536,7 @@ def expand_color_aliases(token: str | None) -> frozenset[str]:
 
 
 def preference_color_tokens(interpretation: SalesInterpretation) -> tuple[str, ...]:
-    """Dial-color tokens only — never strap/case materials from Vision dumps."""
+    """primary-color tokens only — never accessory/case materials from Vision dumps."""
     color = _fold(interpretation.preferences.color)
     if not color:
         # Recover color adjectives embedded in the model string from Vision.
@@ -556,11 +554,11 @@ def preference_color_tokens(interpretation: SalesInterpretation) -> tuple[str, .
         and token not in _DESCRIPTOR_MODEL_TOKENS
         and token not in _ACCESSORY_COLOR_TOKENS
     ]
-    # Prefer known dial hues; if Vision only sent accessories, require nothing.
-    dial = [token for token in raw if token in _DIAL_COLOR_TOKENS]
-    if dial:
-        # One dial hue is enough for AND/require_color (branco, not branco+bege).
-        return (dial[0],)
+    # Prefer known primary hues; if Vision only sent accessories, require nothing.
+    primary = [token for token in raw if token in _PRODUCT_COLOR_TOKENS]
+    if primary:
+        # One primary hue is enough for AND/require_color (branco, not branco+bege).
+        return (primary[0],)
     return ()
 
 
@@ -596,11 +594,11 @@ def catalog_match_tokens(interpretation: SalesInterpretation) -> tuple[str, ...]
     for code in extract_model_codes(subject.model):
         tokens.append(_fold(code))
     tokens.extend(color_tokens)
-    # Keep movement when Vision asked Automatic — helps avoid GMT substitutes.
-    if model_excludes_gmt(subject.model):
-        tokens.append("automatico")
+    # Keep connectivity when Vision asked wireless — helps avoid com fio substitutes.
+    if model_requests_wireless(subject.model):
+        tokens.append("sem fio")
     # Drop ultra-generic fillers that drown AND matches.
-    drop = {"relogio", "watch", "mm"} | _ACCESSORY_COLOR_TOKENS
+    drop = {"produto", "product", "mm"} | _ACCESSORY_COLOR_TOKENS
     cleaned = [
         token
         for token in dict.fromkeys(tokens)
@@ -610,25 +608,23 @@ def catalog_match_tokens(interpretation: SalesInterpretation) -> tuple[str, ...]
 
 
 _FEATURE_SEARCH_ALIASES: dict[str, tuple[str, ...]] = {
-    "cronografo": ("cronografo", "chronograph", "chrono"),
-    "mergulho": ("mergulho", "diver", "divers", "200m"),
-    "gmt": ("gmt",),
+    "bluetooth": ("bluetooth",),
+    "usb-c": ("usb-c", "usb c", "tipo c"),
+    "lightning": ("lightning",),
+    "portatil": ("portatil", "portable"),
+    "com fio": ("com fio", "wired"),
+    "sem fio": ("sem fio", "wireless"),
 }
 
 
 def preference_feature_tokens(interpretation: SalesInterpretation) -> tuple[str, ...]:
-    """Distinctive function tokens from preferences.attributes (photo Vision)."""
+    """Explicit features requested by the customer or read from the image."""
     tokens: list[str] = []
     for item in interpretation.preferences.attributes or []:
         folded = _fold(item)
-        if not folded:
-            continue
-        if "crono" in folded or "chrono" in folded:
-            tokens.append("cronografo")
-        elif "diver" in folded or "mergulho" in folded or "200m" in folded:
-            tokens.append("mergulho")
-        elif folded == "gmt":
-            tokens.append("gmt")
+        for label, aliases in _FEATURE_SEARCH_ALIASES.items():
+            if any(re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", folded) for alias in aliases):
+                tokens.append(label)
     return tuple(dict.fromkeys(tokens))
 
 
@@ -663,10 +659,10 @@ def product_matches_feature_tokens(
     return True
 
 
-def preference_case_finish_tokens(
+def preference_material_finish_tokens(
     interpretation: SalesInterpretation,
 ) -> tuple[str, ...]:
-    """Soft case/bracelet finish cues (never AND-required alone)."""
+    """Soft case/accessory finish cues (never AND-required alone)."""
     material = _fold(interpretation.preferences.material)
     if not material:
         return ()
@@ -701,16 +697,16 @@ def product_matches_color_tokens(
     return True
 
 
-def model_excludes_gmt(model: str | None) -> bool:
+def model_requests_wireless(model: str | None) -> bool:
     folded = _fold(model)
     if not folded:
         return False
-    if "gmt" in folded:
+    if "com fio" in folded:
         return False
-    return "automatic" in folded or "automatico" in folded
+    return "wireless" in folded or "sem fio" in folded
 
 
-def requests_automatic_movement(
+def requests_wireless_connectivity(
     model: str | None,
     attributes: list[str] | None = None,
 ) -> bool:
@@ -721,31 +717,19 @@ def requests_automatic_movement(
             if part
         )
     )
-    return "automatic" in blob or "automatico" in blob
+    return "wireless" in blob or "sem fio" in blob
 
 
-def product_compatible_with_requested_movement(
+def product_compatible_with_requested_connectivity(
     product: dict[str, Any],
     model: str | None,
     attributes: list[str] | None = None,
 ) -> bool:
     text = _product_text(product)
-    wants_auto = requests_automatic_movement(model, attributes)
-    if wants_auto:
-        # Don't substitute GMT siblings for a plain Automatic ask.
-        if "gmt" in text and "gmt" not in _fold(model):
-            return False
-        mechanical = (
-            "mecanico" in text
-            or "mechanical" in text
-            or bool(re.search(r"\bh\s*mecan", text))
-        )
-        has_auto = "automatico" in text or "automatic" in text
-        if mechanical and not has_auto:
-            return False
-    elif model_excludes_gmt(model):
-        return "gmt" not in text
-    return True
+    wants_wireless = requests_wireless_connectivity(model, attributes)
+    has_wireless = any(term in text for term in ("sem fio", "wireless", "bluetooth"))
+    explicitly_wired = bool(re.search(r"\b(com fio|wired)\b", text))
+    return not (wants_wireless and explicitly_wired and not has_wireless)
 
 
 def extract_reference_code(text: str | None) -> str | None:
@@ -910,13 +894,13 @@ class ProductRetrievalCompiler:
             core_query = " ".join(core_tokens[:4]).strip()
             core_label = core_query.title() if core_query else ""
             model_codes = extract_model_codes(pt_model or subject.model)
-            wants_automatic = bool(
-                re.search(r"\b(automatic|automatico)\b", _fold(subject.model))
+            wants_wireless = bool(
+                re.search(r"\b(wireless|sem fio)\b", _fold(subject.model))
             )
-            auto_bit = "Automático" if wants_automatic else None
+            auto_bit = "sem fio" if wants_wireless else None
             color_hue = color_label.title() if color_label else None
             seen_probe_keys: set[str] = set()
-            # Extra slot when dial color is known so short family+color and the
+            # Extra slot when primary color is known so short family+color and the
             # catalog-title probe can both run without dropping brand query.
             tier1_budget = 7 if color_hue else 6
             match_tokens = catalog_match_tokens(interpretation)
@@ -998,7 +982,7 @@ class ProductRetrievalCompiler:
                 )
                 if auto_bit:
                     _add_probe(
-                        "exact_color_automatic",
+                        "exact_color_wireless",
                         name=f"{core_label} {auto_bit} {color_hue}".strip(),
                         brand=subject.brand,
                     )
@@ -1012,7 +996,7 @@ class ProductRetrievalCompiler:
             catalog_title = " ".join(
                 part
                 for part in (
-                    "Relógio",
+                    subject.product_type,
                     subject.brand,
                     core_label or None,
                     auto_bit,
@@ -1055,7 +1039,7 @@ class ProductRetrievalCompiler:
             if subject.product_type:
                 gender_tokens = preference_gender_tokens(interpretation)
                 gender_label = gender_tokens[0] if gender_tokens else None
-                # Prefer gendered catalog query ("relógio feminino") so the provider
+                # Prefer gendered catalog query ("produto feminino") so the provider
                 # surfaces the right segment before soft ranking.
                 primary_name = (
                     f"{subject.product_type} {gender_label}".strip()
@@ -1315,7 +1299,7 @@ def hard_filter_products(
         expected_ean = _fold(hard.get("ean")) or expected_ean
         brand_exclusive = bool(hard.get("brand_exclusive"))
         exact_only = bool(hard.get("exact_only"))
-        hard_color = _fold(hard.get("dial_color"))
+        hard_color = _fold(hard.get("primary_color"))
         hard_material = _fold(hard.get("material"))
         if hard.get("budget_max") is not None:
             preferences = preferences.model_copy(
@@ -1345,7 +1329,7 @@ def hard_filter_products(
             continue
         if expected_ean and _fold(product.get("ean")) != expected_ean:
             continue
-        if not product_compatible_with_requested_movement(
+        if not product_compatible_with_requested_connectivity(
             product,
             subject.model,
             interpretation.preferences.attributes,
@@ -1521,7 +1505,7 @@ def soft_confirm_candidates(
     """Best catalog near-matches to show for 'é esse da foto?' confirmation."""
     color_tokens = preference_color_tokens(interpretation)
     if color_tokens:
-        # Never substitute Kingfisher/Dagger when a dial color was requested.
+        # Never substitute ChargeMini/ChargePlus when a primary color was requested.
         return score_catalog_candidates(
             products,
             interpretation,
@@ -1538,7 +1522,7 @@ def soft_confirm_candidates(
     )
     if identity_hits:
         return identity_hits
-    # Last resort: allow GMT siblings only when nothing movement-compatible exists.
+    # Last resort: allow com fio siblings only when nothing connectivity-compatible exists.
     return score_catalog_candidates(
         products,
         interpretation,
@@ -1581,7 +1565,7 @@ def exact_specific_product_matches(
     )
     matches: list[dict[str, Any]] = []
     for product in candidates:
-        if not product_compatible_with_requested_movement(
+        if not product_compatible_with_requested_connectivity(
             product,
             subject.model,
             interpretation.preferences.attributes,
@@ -1604,8 +1588,8 @@ def exact_specific_product_matches(
             }:
                 matches.append(product)
                 continue
-            # The provider often stores short model ("Sealander") while the customer
-            # asks with style/color words ("C63 Sealander Automático Rosa").
+            # The provider often stores short model ("SoundMax") while the customer
+            # asks with style/color words ("C63 SoundMax sem fio Rosa").
             # Color/material tokens are optional when identity tokens suffice.
             required = required_model_tokens(subject.model)
             text = _product_text(product)
@@ -1622,7 +1606,7 @@ def exact_specific_product_matches(
                 continue
             name_tokens = set(re.findall(r"[a-z0-9]+", candidate_name))
             # Single-token asks ("Explorer") must not match accessories
-            # like "Explorer Strap" when the model field is empty.
+            # like "Explorer accessory" when the model field is empty.
             if not candidate_model and name_tokens & _ACCESSORY_NAME_TOKENS:
                 continue
             if token in candidate_name:
@@ -1683,10 +1667,10 @@ async def match_specific_products(
             match_source="exact",
         )
     if (
-        model_excludes_gmt(interpretation.subject.model)
+        model_requests_wireless(interpretation.subject.model)
         and compatible
         and not any(
-            product_compatible_with_requested_movement(
+            product_compatible_with_requested_connectivity(
                 product,
                 interpretation.subject.model,
                 interpretation.preferences.attributes,
@@ -1734,7 +1718,7 @@ async def match_specific_products(
             "error_type": "OpenAIUnavailable",
             "reason": "color_mismatch" if color_tokens else "openai_unavailable",
         })
-        # Color asked but only other dials in pool — never soft-substitute.
+        # Color asked but only other colors in pool — never soft-substitute.
         if color_tokens:
             return SpecificProductResolution(
                 status="none",
@@ -1775,11 +1759,11 @@ async def match_specific_products(
                     "role": "system",
                     "content": (
                         "Resolva o produto pedido usando SOMENTE itens de CANDIDATES. "
-                        "Normalize nomes em inglês/PT (Automatic→Automático, pink→Rosa) e "
-                        "ignore descritores de tom (claro, escuro, mostrador). "
+                        "Normalize nomes em inglês/PT (wireless→sem fio, pink→Rosa) e "
+                        "ignore descritores de tom (claro, escuro, produto). "
                         "Se PREFERENCES.color existir (ex.: rosa), escolha o título que "
                         "contenha essa cor; NÃO substitua por outra cor da mesma linha "
-                        "(Kingfisher/Dagger/Azul no lugar de Rosa). "
+                        "(ChargeMini/ChargePlus/Azul no lugar de Rosa). "
                         "Use match_status=exact só com um único ID seguro; ambiguous se "
                         "houver 2+ opções da cor/modelo pedidos; none se a cor/modelo "
                         "não estiver na lista. candidate_ids e best_candidate_id devem "
@@ -2109,7 +2093,7 @@ async def rerank_products(
                 {
                     "role": "system",
                     "content": (
-                        "Classifique produtos reais da NewStore conforme as preferências. "
+                        "Classifique produtos reais da XNamai conforme as preferências. "
                         f"Retorne no máximo {selection_limit} IDs presentes em CANDIDATES, "
                         "em ordem de relevância. "
                         "Trate sinônimos de cor (azul=blue, preto=black, branco=white, rosa=pink, "

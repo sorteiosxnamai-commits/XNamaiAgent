@@ -50,10 +50,7 @@ from .order_service import (
 from .payment_service import inspect_order_payment
 from .privacy_scope import is_personal_account_scope
 from .repository import detect_third_party_account_inquiry
-# `site_knowledge` e conhecimento institucional da marca LEGADA. O arquivo
-# continua intocado no repositorio, mas o caminho XNamai nao injeta mais nada
-# dele no prompt: reutiliza-lo como conhecimento atual faria o agente falar em
-# nome de uma empresa que nao e esta.
+from .site_knowledge import build_site_knowledge_text
 from .vip_profiles import build_vip_openai_context, get_vip_profile, pick_vip_nickname
 from .user_preferences import detect_preferred_name_update
 from .commerce.tools import TOOL_SCHEMAS, execute_tool, commerce_tools_available
@@ -107,7 +104,7 @@ Conversa:
   falado.
 - Se não souber, diga que não tem a informação e ofereça encaminhar o
   atendimento, sem inventar contato ou endereço.
-""".strip()
+""".strip() + "\n\n" + build_site_knowledge_text()
 
 STORE_LOOKUP_UNAVAILABLE = "N\u00e3o consegui consultar as informa\u00e7\u00f5es da loja neste momento. Tente novamente em instantes."
 GENERAL_GREETING_FALLBACK = "Ol\u00e1! Como posso ajudar?"
@@ -205,7 +202,7 @@ def _third_party_guardrail(message: IncomingMessage, primary_intent: str) -> Age
     sem rota, sem fonte de dados.
 
     Manter as duas condicoes importa nos dois sentidos: so o detector de
-    terceiro recusaria "voces tem Tissot para o 4899...?" (mais estrito que o
+    terceiro recusaria "voces tem MarcaA para o 4899...?" (mais estrito que o
     baseline); so o escopo pessoal recusaria "qual o meu saldo" (a propria
     conta do cliente).
 

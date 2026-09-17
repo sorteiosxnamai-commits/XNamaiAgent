@@ -123,7 +123,7 @@ def test_the_restriction_never_names_a_vendor():
 
     for caso in ([], ["search_products"], ["search_products", "get_order"]):
         texto = "\n".join(_restrictions_for(caso)).casefold()
-        for marca in ("mercos", "tray", "newstore"):
+        for marca in ("mercos", "tray", "xnamai"):
             assert marca not in texto
 
 

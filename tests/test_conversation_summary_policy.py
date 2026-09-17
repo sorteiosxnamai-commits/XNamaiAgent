@@ -29,7 +29,7 @@ def test_meaningful_summary_deltas_are_applied():
         ConversationSummaryDelta(commitments=["cliente pediu link"])
     )
     assert should_apply_summary_delta(
-        ConversationSummaryDelta(user_corrections=["não é GMT"])
+        ConversationSummaryDelta(user_corrections=["não é com fio"])
     )
     assert should_apply_summary_delta(
         ConversationSummaryDelta(resolved_points=["marca confirmada"])
@@ -49,7 +49,7 @@ def test_meaningful_summary_deltas_are_applied():
 def test_sanitize_rejects_commercial_price_and_stock():
     cleaned, codes = sanitize_summary_delta(
         ConversationSummaryDelta(
-            commitments=["Seastar custa R$ 1990 e tem estoque"],
+            commitments=["ChargeMax custa R$ 1990 e tem estoque"],
             current_goal="fechar",
         )
     )
@@ -73,21 +73,21 @@ def test_sanitize_rejects_sensitive_and_url_only_delta():
 def test_evaluate_keeps_safe_commitment():
     ok, cleaned, codes = evaluate_summary_delta(
         ConversationSummaryDelta(
-            commitments=["cliente prefere Tissot"],
+            commitments=["cliente prefere MarcaA"],
             open_questions=["orçamento?", "cor?"],
         )
     )
     assert ok is True
     assert cleaned is not None
-    assert cleaned.commitments == ["cliente prefere Tissot"]
+    assert cleaned.commitments == ["cliente prefere MarcaA"]
     assert codes == []
 
 
 def test_format_summary_block_is_non_authoritative():
     block = format_conversation_summary_block(
         {
-            "current_goal": "buscar Tissot",
-            "summary": "goal=buscar Tissot",
+            "current_goal": "buscar MarcaA",
+            "summary": "goal=buscar MarcaA",
             "open_questions": ["cor?"],
             "resolved_points": [],
             "user_corrections": [],
@@ -96,4 +96,4 @@ def test_format_summary_block_is_non_authoritative():
     )
     assert "<conversation_summary>" in block
     assert "NÃO use como fonte de preço" in block
-    assert "buscar Tissot" in block
+    assert "buscar MarcaA" in block

@@ -270,7 +270,7 @@ def test_a_trailing_number_is_not_a_position_when_the_text_does_not_match():
             or resolucao.resolved_product.product_id != FKT["id"])
 
 
-@pytest.mark.parametrize("texto", ["quero iphone7", "tem s23?", "tem a54?", "watch5"])
+@pytest.mark.parametrize("texto", ["quero iphone7", "tem s23?", "tem a54?", "phone5"])
 def test_model_numbers_are_not_read_as_positions(texto):
     lista = _lista(OUTROS)
     estado = CommerceConversationState(last_presented_products=lista)

@@ -84,11 +84,11 @@ async def test_real_webhook_flow_persists_and_reloads_context_for_followup(monke
         async def parse(self, **kwargs):
             interpreter_requests.append(kwargs["messages"])
             current_text = kwargs["messages"][-1]["content"]
-            if current_text == "quero comprar um relógio":
+            if current_text == "quero comprar um produto":
                 interpretation = SalesInterpretation(
                     domain="commerce",
                     goal="discover",
-                    subject={"product_type": "relógio"},
+                    subject={"product_type": "produto"},
                     preferences={},
                     references_previous_context=False,
                     needs_clarification=True,
@@ -99,7 +99,7 @@ async def test_real_webhook_flow_persists_and_reloads_context_for_followup(monke
                 interpretation = SalesInterpretation(
                     domain="commerce",
                     goal="discover",
-                    subject={"product_type": "relógio"},
+                    subject={"product_type": "produto"},
                     preferences={"style": "esportivo"},
                     references_previous_context=True,
                     needs_clarification=True,
@@ -138,7 +138,7 @@ async def test_real_webhook_flow_persists_and_reloads_context_for_followup(monke
     monkeypatch.setattr(sales_agent, "get_settings", lambda: _settings())
     install_fake_openai_client(monkeypatch, FakeOpenAI)
     async def fake_execute(name, arguments):
-        return {"products": [{"id": "1", "name": "Relógio esportivo", "style": "esportivo"}]}
+        return {"products": [{"id": "1", "name": "produto esportivo", "style": "esportivo"}]}
 
     monkeypatch.setattr(sales_agent, "execute_tool", fake_execute)
 
@@ -151,7 +151,7 @@ async def test_real_webhook_flow_persists_and_reloads_context_for_followup(monke
                     "eventName": "conversationFragment",
                     "conversationId": "conversation-1",
                     "visitor": {"id": "visitor-1", "attributes": {"SMS": "5511999999999"}},
-                    "messages": [{"id": "message-1", "type": "visitor", "text": "quero comprar um relógio", "createdAt": "2026-07-22T10:00:00Z"}],
+                    "messages": [{"id": "message-1", "type": "visitor", "text": "quero comprar um produto", "createdAt": "2026-07-22T10:00:00Z"}],
                 },
             )
             second = await client.post(
@@ -174,7 +174,7 @@ async def test_real_webhook_flow_persists_and_reloads_context_for_followup(monke
     assert state["responses"][1]["reply_text"] != sales_agent.OUT_OF_SCOPE_REPLY
     second_messages = interpreter_requests[1]
     assert second_messages[2:] == [
-        {"role": "user", "content": "quero comprar um relógio"},
+        {"role": "user", "content": "quero comprar um produto"},
         {"role": "assistant", "content": "Você prefere um estilo mais esportivo, social ou casual?"},
         {"role": "user", "content": "esportivo"},
     ]
@@ -196,7 +196,7 @@ async def test_valid_commerce_interpretation_reaches_openai_sales_responder(monk
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="find",
-        subject={"brand": "Tissot", "model": "Seastar"},
+        subject={"brand": "MarcaA", "model": "ChargeMax"},
         preferences={},
         references_previous_context=False,
         needs_clarification=False,
@@ -210,12 +210,12 @@ async def test_valid_commerce_interpretation_reaches_openai_sales_responder(monk
 
     async def fake_execute(name, arguments):
         tool_calls.append((name, arguments))
-        return {"products": [{"id": "1", "name": "Tissot Seastar", "brand": "Tissot", "model": "Seastar", "current_price": 4999}]}
+        return {"products": [{"id": "1", "name": "MarcaA ChargeMax", "brand": "MarcaA", "model": "ChargeMax", "current_price": 4999}]}
 
     class FakeCompletions:
         async def create(self, **kwargs):
             return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="Encontrei um Tissot Seastar que combina com o que você procura."))]
+                choices=[SimpleNamespace(message=SimpleNamespace(content="Encontrei um MarcaA ChargeMax que combina com o que você procura."))]
             )
 
     class FakeOpenAI:
@@ -238,15 +238,15 @@ async def test_valid_commerce_interpretation_reaches_openai_sales_responder(monk
     )
 
     result = await openai_agent.generate_agent_reply_async(
-        IncomingMessage(text="Tem Tissot Seastar?"),
+        IncomingMessage(text="Tem MarcaA ChargeMax?"),
         {},
     )
 
-    assert result.reply_text == "Encontrei um Tissot Seastar que combina com o que você procura."
+    assert result.reply_text == "Encontrei um MarcaA ChargeMax que combina com o que você procura."
     search_calls = [call for call in tool_calls if call[0] == "search_products"]
     assert search_calls
     assert any(
-        call[1].get("name") == "Seastar" and call[1].get("brand") == "Tissot"
+        call[1].get("name") == "ChargeMax" and call[1].get("brand") == "MarcaA"
         for call in search_calls
     )
     assert ("get_product", {"product_id": "1"}) in tool_calls
@@ -262,7 +262,7 @@ async def test_valid_commerce_domain_is_not_overridden_by_a_local_classifier(mon
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="find",
-        subject={"product_type": "relógio"},
+        subject={"product_type": "produto"},
         preferences={},
         information_needed=["catalog"],
         references_previous_context=False,
@@ -289,7 +289,7 @@ async def test_valid_commerce_domain_is_not_overridden_by_a_local_classifier(mon
     # ser estrutural, e as asserts abaixo continuam provando o resultado.
 
     result = await openai_agent.generate_agent_reply_async(
-        IncomingMessage(text="Como funciona esse relógio?"),
+        IncomingMessage(text="Como funciona esse produto?"),
         {},
     )
 

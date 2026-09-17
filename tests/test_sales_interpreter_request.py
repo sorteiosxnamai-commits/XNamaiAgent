@@ -30,7 +30,7 @@ def _interpretation() -> SalesInterpretation:
     return SalesInterpretation(
         domain="commerce",
         goal="discover",
-        subject={"product_type": "relógio"},
+        subject={"product_type": "produto"},
         preferences={"style": "esportivo"},
         references_previous_context=True,
         needs_clarification=False,
@@ -103,7 +103,7 @@ async def test_interpreter_request_uses_gpt_4_1_mini_and_normalized_messages(mon
     result = await sales_agent.interpret_message(
         IncomingMessage(text="  esportivo  "),
         recent_turns=[
-            {"role": "user", "content": " quero comprar um relógio ", "metadata": {"ignored": True}},
+            {"role": "user", "content": " quero comprar um produto ", "metadata": {"ignored": True}},
             {"role": "assistant", "content": "   "},
             {"role": "tool", "content": "invalid role"},
             {"role": "assistant", "content": None},
@@ -141,7 +141,7 @@ async def test_interpreter_request_uses_gpt_4_1_mini_and_normalized_messages(mon
                 + format_capability_catalog_for_prompt()
             ),
         },
-        {"role": "user", "content": "quero comprar um relógio"},
+        {"role": "user", "content": "quero comprar um produto"},
         {"role": "user", "content": "esportivo"},
     ]
 

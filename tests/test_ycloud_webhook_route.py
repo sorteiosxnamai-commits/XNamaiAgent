@@ -31,7 +31,7 @@ def ycloud_env(monkeypatch):
     monkeypatch.setenv("YCLOUD_API_KEY", "route-test-key")
     monkeypatch.setenv("YCLOUD_WHATSAPP_FROM", BUSINESS_NUMBER)
     monkeypatch.setenv("YCLOUD_WABA_ID", "")
-    monkeypatch.setenv("AGENT_PERSONA_TENANT_ID", "newstore")
+    monkeypatch.setenv("AGENT_PERSONA_TENANT_ID", "xnamai")
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setenv("DRY_RUN", "true")

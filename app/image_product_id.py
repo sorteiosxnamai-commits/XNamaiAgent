@@ -15,55 +15,39 @@ from .turn_runtime import LLMCallBudgetExceeded
 
 
 IMAGE_IDENTIFY_INSTRUCTIONS = """\
-Você identifica produtos em fotos enviadas por clientes da XNamai.
-
-Extraia o máximo de identidade comercial visível — NÃO fique só em marca + cor:
-
-- marca (brand)
-- modelo / linha / coleção (model): nome no mostrador ou linha comercial
-  (ex.: Intra-Matic, Prospex Sea Samurai, Sealander, Khaki Field, Ecce Lys, C63)
-- referência comercial se aparecer legível (ex.: H38446732, SRPL13K1, C63-36ADA4-S00P0-B0)
-- cor do MOSTRADOR (dial) no campo color — só a cor do disco (branco, preto, rosa…)
-- acabamento da CAIXA/pulseira no campo case_finish (aço/prata, preto ion, ouro, titânio…),
-  separado do mostrador
-- funções/atributos visíveis em features[]: chronograph/cronógrafo (submostradores +
-  botões), diver/mergulho, GMT, automatic, quartz, etc.
-
-Regras:
-- is_watch=false se a imagem não for um relógio de pulso.
-- Não invente referência. Se não ler a ref, deixe reference=null.
-- reference só quando houver código comercial legível. Nunca coloque cor/descrição
-  do mostrador em reference — use color.
-- Em color: NÃO inclua pulseira, couro, caixa prata/aço.
-  Ex.: mostrador preto + caixa aço → color="preto", case_finish="aço" (ou "prata").
-- Em model: priorize linha/coleção legível. Se vir "AUTOMATIC" / "DIVER'S 200m" /
-  "CHRONO" no mostrador, inclua no model ou em features — não descarte.
-- Se houver submostradores ou botões de cronógrafo, features DEVE incluir "cronógrafo".
-- Se o mostrador tiver a palavra AUTOMATIC / AUTOMÁTICO, features DEVE incluir "automático"
-  (não confunda com variantes manuais/mecânicas da mesma linha).
-- Nunca retorne só brand+color quando a linha ou a função estiver legível na foto.
-- confidence entre 0 e 1 conforme legibilidade.
-- Preferir nomes comerciais usados em e-commerce BR.
-- Se houver legenda do cliente, use-a só como dica complementar — a imagem manda.
+Você identifica eletrônicos e acessórios de celular nas imagens enviadas à Xnamai.
+Extraia somente evidências visíveis:
+- is_product: se há um produto identificável na imagem.
+- product_type: categoria observada, como cabo, carregador, fone, capa ou suporte.
+- brand, model e reference: marca, modelo e referência legíveis no item ou embalagem.
+- color: cor principal do produto; material_finish: material ou acabamento visível.
+- features: conectores, funções ou especificações legíveis, sem inferir capacidade, potência ou compatibilidade pela aparência.
+- confidence: confiança entre 0 e 1, conforme legibilidade real.
+Deixe campos desconhecidos nulos. Nunca use cor ou descrição como referência.
+Marca e cor não bastam para confirmar um modelo. Se vários produtos aparecerem,
+registre a ambiguidade em notes e peça ao cliente para indicar o item.
+A legenda do cliente é uma dica; não substitui evidência visual.
+Imagem não comprova preço, estoque, disponibilidade ou compatibilidade.
 """
 
 
 class ImageProductIdentification(BaseModel):
-    is_watch: bool = True
+    is_product: bool = True
+    product_type: str | None = None
     brand: str | None = None
     model: str | None = None
     reference: str | None = None
     color: str | None = None
-    case_finish: str | None = None
+    material_finish: str | None = None
     features: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     notes: str | None = None
 
 
 _FEATURE_MATCH_ALIASES: dict[str, tuple[str, ...]] = {
-    "cronografo": ("cronografo", "chronograph", "chrono", "cronograph"),
-    "mergulho": ("mergulho", "diver", "divers", "dive", "200m"),
-    "gmt": ("gmt",),
+    "bluetooth": ("bluetooth",),
+    "usb-c": ("usb-c", "usb c", "tipo c"),
+    "lightning": ("lightning",),
 }
 
 
@@ -71,26 +55,15 @@ def normalize_feature_label(value: str | None) -> str | None:
     text = str(value or "").strip()
     if not text:
         return None
-    folded = "".join(
-        char
-        for char in unicodedata.normalize("NFKD", text).lower()
-        if not unicodedata.combining(char)
-    )
-    if "crono" in folded or "chrono" in folded:
-        return "Cronógrafo"
-    if "diver" in folded or "mergulho" in folded or "200m" in folded or "200 m" in folded:
-        return "Mergulho"
-    if "gmt" in folded:
-        return "GMT"
-    if "automatic" in folded or "automatico" in folded:
-        return "Automático"
-    if "quartz" in folded:
-        return "Quartz"
+    folded = text.casefold()
+    for label, aliases in _FEATURE_MATCH_ALIASES.items():
+        if folded in aliases:
+            return label.upper() if label == "usb-c" else label.title()
     return text
 
 
 def identification_has_catalog_identity(identified: ImageProductIdentification) -> bool:
-    """Brand+dial-color alone is too weak for keyword Tray (false siblings)."""
+    """Brand and color alone cannot establish a catalog identity."""
     from .models import ProductPreferences, ProductSubject
     from .product_retrieval import (
         effective_product_reference,
@@ -100,17 +73,6 @@ def identification_has_catalog_identity(identified: ImageProductIdentification) 
 
     if effective_product_reference(identified.reference):
         return True
-    features = [
-        label
-        for label in (normalize_feature_label(item) for item in identified.features)
-        if label
-    ]
-    # Chronograph/diver/etc. give enough signal with brand for a targeted search.
-    if any(
-        label.casefold() in {"cronógrafo", "cronografo", "mergulho", "gmt"}
-        for label in features
-    ):
-        return True
     model = (identified.model or "").strip()
     if not model:
         return False
@@ -118,7 +80,7 @@ def identification_has_catalog_identity(identified: ImageProductIdentification) 
     probe = SalesInterpretation.model_construct(
         domain="commerce",
         goal="find",
-        subject=ProductSubject(product_type="relógio", model=model),
+        subject=ProductSubject(product_type="produto", model=model),
         preferences=ProductPreferences(color=color),
         references_previous_context=False,
         needs_clarification=False,
@@ -129,13 +91,13 @@ def identification_has_catalog_identity(identified: ImageProductIdentification) 
     if not core:
         return False
     # model="Preto" alone is not identity — identity_core may fall back to the hue.
-    from .product_retrieval import _DIAL_COLOR_TOKENS, _OPTIONAL_MODEL_TOKENS
+    from .product_retrieval import _PRODUCT_COLOR_TOKENS, _OPTIONAL_MODEL_TOKENS
 
     non_color = [
         token
         for token in core
         if token not in color_tokens
-        and token not in _DIAL_COLOR_TOKENS
+        and token not in _PRODUCT_COLOR_TOKENS
         and token not in _OPTIONAL_MODEL_TOKENS
     ]
     return bool(non_color)
@@ -215,7 +177,7 @@ async def identify_product_from_image(
     encoded = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{content_type};base64,{encoded}"
     caption = _caption_hint(message)
-    user_text = "Identifique o relógio nesta foto para busca no catálogo da loja."
+    user_text = "Identifique o produto nesta foto para busca no catálogo da loja."
     if caption:
         user_text += f"\nLegenda do cliente: {caption}"
 
@@ -252,7 +214,7 @@ async def identify_product_from_image(
     if not isinstance(identified, ImageProductIdentification):
         raise ValueError("image_identify_schema_missing")
     print("[sales.image.identify]", {
-        "is_watch": identified.is_watch,
+        "is_product": identified.is_product,
         "has_brand": bool(identified.brand),
         "has_model": bool(identified.model),
         "has_reference": bool(identified.reference),
@@ -267,10 +229,10 @@ def interpretation_from_identification(
     from .product_retrieval import effective_product_reference, normalize_pt_catalog_query
 
     color = (identified.color or "").strip() or None
-    case_finish = (identified.case_finish or "").strip() or None
+    material_finish = (identified.material_finish or "").strip() or None
     raw_reference = (identified.reference or "").strip() or None
     reference = effective_product_reference(raw_reference)
-    # Vision sometimes puts dial color phrases into reference.
+    # Vision sometimes puts primary color phrases into reference.
     if raw_reference and reference is None:
         if not color:
             color = raw_reference
@@ -295,27 +257,27 @@ def interpretation_from_identification(
     model = (identified.model or "").strip() or None
     if model:
         model = normalize_pt_catalog_query(model)
-        # Append dial color only when model already has identity (never model="Preto").
+        # Append primary color only when model already has identity (never model="Preto").
         if color and color.casefold() not in model.casefold():
             model = f"{model} {color}".strip()
         for feature in features:
             if feature.casefold() not in model.casefold():
                 # Keep distinctive functions in the model string for probes.
-                if feature.casefold() in {"cronógrafo", "cronografo", "mergulho", "gmt"}:
+                if feature.casefold() in {"Bluetooth", "bluetooth", "portátil", "com fio"}:
                     model = f"{model} {feature}".strip()
 
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="find",
         subject={
-            "product_type": "relógio",
+            "product_type": (identified.product_type or "produto").strip(),
             "brand": (identified.brand or "").strip() or None,
             "model": model,
             "reference": reference,
         },
         preferences={
             "color": color,
-            "material": case_finish,
+            "material": material_finish,
             "attributes": features,
         },
         information_needed=["catalog"],
@@ -338,10 +300,10 @@ def _clarification_result(
     reason: str,
     identified: ImageProductIdentification | None = None,
 ) -> AgentResult:
-    if identified and not identified.is_watch:
+    if identified and not identified.is_product:
         text = (
-            "Recebi a imagem, mas não parece ser a foto de um relógio. "
-            "Pode enviar a foto do relógio ou me dizer a marca e o modelo?"
+            "Recebi a imagem, mas não parece ser a foto de um produto. "
+            "Pode enviar a foto do produto ou me dizer a marca e o modelo?"
         )
     elif identified and (identified.brand or identified.model):
         hint = " ".join(
@@ -352,7 +314,7 @@ def _clarification_result(
         text = (
             f"Não consegui confirmar a referência com segurança pela foto"
             f"{f' ({hint})' if hint else ''}. "
-            "Me confirma a marca e o modelo, ou envia uma foto mais nítida do mostrador?"
+            "Me confirma a marca e o modelo, ou envia uma foto mais nítida da etiqueta ou embalagem?"
         )
     else:
         text = (
@@ -527,7 +489,7 @@ def filter_products_to_interpretation_family(
     from .product_retrieval import (
         identity_core_tokens,
         preference_color_tokens,
-        product_compatible_with_requested_movement,
+        product_compatible_with_requested_connectivity,
         product_matches_feature_tokens,
         preference_feature_tokens,
         _fold,
@@ -554,7 +516,7 @@ def filter_products_to_interpretation_family(
                 continue
         if core and not all(token in text for token in core):
             continue
-        if not product_compatible_with_requested_movement(
+        if not product_compatible_with_requested_connectivity(
             product,
             interpretation.subject.model,
             interpretation.preferences.attributes,
@@ -683,7 +645,7 @@ async def _disambiguate_with_visual(
 async def handle_image_product_search(
     message: IncomingMessage,
 ) -> AgentResult | None:
-    """Identify a watch from an inbound image and search the Tray catalog."""
+    """Identify a product from an inbound image and search the Tray catalog."""
     if not image_search_eligible(message):
         return None
 
@@ -722,7 +684,7 @@ async def handle_image_product_search(
         return AgentResult(
             reply_text=(
                 "Recebi a imagem, mas não consegui analisar agora. "
-                "Pode me dizer a marca e o modelo do relógio?"
+                "Pode me dizer a marca e o modelo do produto?"
             ),
             intent="commerce",
             handoff_required=False,
@@ -730,7 +692,7 @@ async def handle_image_product_search(
             response_metadata={"domain": "commerce", "image_search": True},
         )
 
-    if not identified.is_watch:
+    if not identified.is_product:
         return _clarification_result(
             reason="image_identify_low_confidence",
             identified=identified,
@@ -783,7 +745,7 @@ async def handle_image_product_search(
         "model": interpretation.subject.model,
         "reference": interpretation.subject.reference,
         "attributes": interpretation.preferences.attributes[:4],
-        "case_finish": interpretation.preferences.material,
+        "material_finish": interpretation.preferences.material,
         "confidence": identified.confidence,
         "has_catalog_identity": identification_has_catalog_identity(identified),
     })
@@ -829,7 +791,7 @@ async def handle_image_product_search(
             return visual
 
     # Keyword Tray often returns several siblings of the same line. Re-rank with
-    # visual nearest neighbors so we don't send the mechanical/wrong SKU.
+    # visual nearest neighbors so we don't send the wired/wrong SKU.
     if isinstance(tray_products, list) and tray_products:
         disambiguated, visual_trigger = await _disambiguate_with_visual(
             message,
@@ -937,7 +899,7 @@ async def handle_image_product_search(
             )
         ]
         # Photo matches always need customer confirmation — never auto-price
-        # the first sibling (e.g. Ecce Smalt vs Ecce Lys).
+        # the first sibling (e.g. Sound Smalt vs Sound Mini).
         multi = (
             len(products) >= 2
             or match_status == "ambiguous"

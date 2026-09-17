@@ -17,13 +17,11 @@ from .turn_runtime import LLMCallBudgetExceeded
 
 
 VISUAL_FINGERPRINT_INSTRUCTIONS = """\
-Você descreve relógios para indexação visual de catálogo e-commerce.
-Gere um fingerprint estável e comparável entre fotos do mesmo modelo.
-
-Inclua no caption (em português, uma frase densa):
-marca, linha/modelo, cor do mostrador, formato/tamanho aparente da caixa,
-tipo de pulseira/bracelete, estilo da luneta, e traços distintivos visíveis.
-Não invente referência se não estiver legível.
+Você descreve eletrônicos e acessórios de celular para o catálogo visual da Xnamai.
+Gere uma descrição estável e comparável entre fotos do mesmo produto.
+Inclua marca e modelo legíveis, cor principal, formato, material, conectores e
+características visíveis. Não invente referência, potência ou compatibilidade.
+Descreva apenas o que pode ser observado no produto ou na embalagem.
 """
 
 
@@ -31,9 +29,9 @@ class VisualProductFingerprint(BaseModel):
     brand: str | None = None
     model: str | None = None
     reference: str | None = None
-    dial_color: str | None = None
-    case_shape: str | None = None
-    bezel: str | None = None
+    primary_color: str | None = None
+    shape: str | None = None
+    connector: str | None = None
     distinctive_features: list[str] = Field(default_factory=list)
     caption: str
 
@@ -44,6 +42,7 @@ def _embedding_literal(values: list[float]) -> str:
 
 def source_hash_for_image(image_url: str, *, content: bytes | None = None) -> str:
     digest = hashlib.sha256()
+    digest.update(b"xnamai-products-v1|")
     digest.update(image_url.strip().encode("utf-8"))
     if content:
         digest.update(b"|")
@@ -200,9 +199,9 @@ def build_caption_from_fingerprint(fingerprint: VisualProductFingerprint) -> str
         fingerprint.brand,
         fingerprint.model,
         fingerprint.reference,
-        fingerprint.dial_color,
-        fingerprint.case_shape,
-        fingerprint.bezel,
+        fingerprint.primary_color,
+        fingerprint.shape,
+        fingerprint.connector,
         *fingerprint.distinctive_features,
     ]
     return " ".join(str(part).strip() for part in parts if part).strip()
@@ -252,7 +251,7 @@ async def fingerprint_image_bytes(
         raise RuntimeError("openai_api_key_missing")
     encoded = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{content_type};base64,{encoded}"
-    user_text = "Gere o fingerprint visual deste relógio para busca por similaridade."
+    user_text = "Gere o fingerprint visual deste produto para busca por similaridade."
     if hint:
         user_text += f"\nContexto do catálogo: {hint}"
     messages: list[dict[str, Any]] = [
@@ -307,7 +306,7 @@ def caption_from_identification(identified: Any) -> str:
         getattr(identified, "model", None),
         getattr(identified, "reference", None),
         getattr(identified, "color", None),
-        getattr(identified, "case_finish", None),
+        getattr(identified, "material_finish", None),
         feature_text or None,
         getattr(identified, "notes", None),
     ]

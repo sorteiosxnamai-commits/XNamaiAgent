@@ -219,11 +219,11 @@ class Settings(BaseSettings):
         alias="AGENT_DB_PERSONA_ENABLED",
     )
     agent_persona_tenant_id: str = Field(
-        default="newstore",
+        default="xnamai",
         alias="AGENT_PERSONA_TENANT_ID",
     )
     agent_persona_key: str = Field(
-        default="newstore_commercial",
+        default="xnamai_commercial",
         alias="AGENT_PERSONA_KEY",
     )
     agent_max_recent_turns: int = Field(
@@ -566,10 +566,7 @@ class Settings(BaseSettings):
     )
 
     #: Tenant do DOMINIO COMERCIAL (sync state, indice de catalogo).
-    #: Deliberadamente separado de `agent_persona_tenant_id`: a persona e o
-    #: comercio sao dominios independentes, e amarrar o catalogo novo a chave de
-    #: lookup da persona legada reintroduziria NewStore por uma porta lateral.
-    #: A chave da persona (AGENT_PERSONA_TENANT_ID) fica intocada.
+    #: Catalog and persona use independent tenant settings.
     commerce_tenant_id: str = Field(default="xnamai", alias="COMMERCE_TENANT_ID")
 
     # --- Fronteira comercial: MercosAdaptor -------------------------------
@@ -796,7 +793,7 @@ class Settings(BaseSettings):
         alias="INSTAGRAM_STORY_ANALYSIS_DETAIL",
     )
     instagram_story_analysis_version: str = Field(
-        default="v2",
+        default="xnamai-products-v1",
         alias="INSTAGRAM_STORY_ANALYSIS_VERSION",
     )
     instagram_story_visual_cache_enabled: bool = Field(

@@ -7,16 +7,7 @@ from .site_knowledge import THIRD_PARTY_REFUSAL
 from .user_preferences import detect_preferred_name_update, save_preferred_name
 from .vip_profiles import get_vip_profile, pick_vip_nickname
 
-# Parte 1: o dominio de sorteio (saldo, Cartao Presente, simulacao, historico,
-# rodada aberta, numeros disponiveis, regulamento) saiu do runtime junto com o
-# banco que o alimentava. Sobram aqui apenas dois comportamentos genericos, que
-# nao pertencem a sorteio algum:
-#
-#   - registrar como o cliente prefere ser chamado;
-#   - recusar consulta a conta de terceiro (regra de privacidade).
-#
-# O texto de persona que menciona sorteios continua na persona protegida, mas
-# nao aciona mais nenhuma feature executavel.
+# Generic name preferences and third-party privacy replies.
 
 
 def build_preferred_name_reply(message: IncomingMessage, account: dict[str, Any]) -> AgentResult | None:

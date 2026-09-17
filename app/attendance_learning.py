@@ -248,7 +248,7 @@ _INSIGHT_TEMPLATES: dict[str, tuple[str, str, str, str]] = {
         "retrieval",
         "Preferências de gênero/orçamento não viram busca útil",
         (
-            "Quando o cliente complementar 'quero um relógio' com gênero "
+            "Quando o cliente complementar 'quero um produto' com gênero "
             "(feminino/masculino) e/ou orçamento (até X reais), trate como "
             "recomendação de catálogo — nunca como modelo exato. Use recipient/"
             "attributes para gênero e budget_max para o valor."
@@ -269,8 +269,8 @@ _INSIGHT_TEMPLATES: dict[str, tuple[str, str, str, str]] = {
         "handoff",
         "Política de avaliação/troca/compra de usados",
         (
-            "A New Store avalia, troca e compra relógios. Pedidos de seminovo, "
-            "avaliação ou troca devem ir para atendente humano — nunca negar a política."
+            "Não presuma que a Xnamai compra ou avalia produtos usados. Pedidos de seminovo, "
+            "avaliação ou troca devem ir para atendente humano para confirmar a política aplicável."
         ),
         "policy",
     ),
@@ -376,7 +376,7 @@ async def run_attendance_learning_batch(
     auto_promote: bool | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
-    tenant_id = str(getattr(settings, "agent_persona_tenant_id", "newstore") or "newstore")
+    tenant_id = str(getattr(settings, "agent_persona_tenant_id", "xnamai") or "xnamai")
     hours = lookback_hours or int(
         getattr(settings, "agent_learning_lookback_hours", 2) or 2
     )

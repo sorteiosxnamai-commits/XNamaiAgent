@@ -15,14 +15,14 @@ def _instagram_started() -> dict:
         "message": {
             "id": "msg-instagram-001",
             "type": "visitor",
-            "text": "Vocês têm relógio Tissot?",
+            "text": "Vocês têm produto MarcaA?",
             "createdAt": 1785700000000,
         },
         "visitor": {
             "id": "brevo-visitor-instagram-001",
             "source": "instagram",
             "sourceChannelRef": "instagram-account-001",
-            "sourceChannelLink": "https://instagram.com/newstore",
+            "sourceChannelLink": "https://instagram.com/xnamai",
             "sourceConversationRef": "instagram-user-999",
             "displayedName": "Cliente Instagram",
         },
@@ -38,7 +38,7 @@ def test_instagram_conversation_started_is_normalized_without_phone():
     assert incoming.conversation_id == "conv-instagram-001"
     assert incoming.sender_external_id == "instagram-user-999"
     assert incoming.sender_key == "instagram:instagram-user-999"
-    assert incoming.text == "Vocês têm relógio Tissot?"
+    assert incoming.text == "Vocês têm produto MarcaA?"
     assert incoming.message_id == "msg-instagram-001"
 
 
@@ -65,7 +65,7 @@ def test_fragment_selects_newest_visitor_from_out_of_order_history():
 
 
 @pytest.mark.parametrize("flag", ["isPushed", "isTrigger"])
-def test_automatic_messages_are_ignored(flag):
+def test_wireless_messages_are_ignored(flag):
     payload = {
         "eventName": "conversationFragment",
         "messages": [{"id": "auto", "type": "visitor", flag: True, "createdAt": 1}],

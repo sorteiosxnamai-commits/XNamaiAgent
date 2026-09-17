@@ -11,12 +11,12 @@ def test_consolidate_returns_counts_without_db(monkeypatch):
     monkeypatch.setattr(
         consolidation,
         "get_settings",
-        lambda: type("S", (), {"agent_persona_tenant_id": "newstore"})(),
+        lambda: type("S", (), {"agent_persona_tenant_id": "xnamai"})(),
     )
     result = consolidate_contact_memories(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         sender_key="whatsapp:1",
     )
     assert result["expired"] == 2
     assert result["pruned"] == 1
-    assert result["tenant_id"] == "newstore"
+    assert result["tenant_id"] == "xnamai"

@@ -134,7 +134,7 @@ async def transcribe_audio_url(url: str, filename: str | None = None) -> str:
                     language="pt",
                     prompt=(
                         "Transcrição de mensagem de WhatsApp em português do Brasil sobre "
-                        "sorteios New Store, saldo, cartão presente, relógios e simulação de compra."
+                        "atendimento da Xnamai, eletrônicos, acessórios de celular, catálogo e pedidos."
                     ),
                 ),
             )

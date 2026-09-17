@@ -180,8 +180,8 @@ def test_without_sync_the_model_never_gets_a_search_tool_to_conclude_emptiness()
 
 
 def test_specific_query_still_uses_lexical_search():
-    repo = _Repo([_row(1, nome="Relogio Azul"), _row(2, nome="Outra Coisa")])
-    result = search_products(_reader(repo), tenant_id=TENANT, arguments={"query": "relogio"})
+    repo = _Repo([_row(1, nome="produto Azul"), _row(2, nome="Outra Coisa")])
+    result = search_products(_reader(repo), tenant_id=TENANT, arguments={"query": "produto"})
     assert "lexical" in repo.calls
     assert "browse" not in repo.calls
     assert [p["external_id"] for p in result["products"]] == ["1"]

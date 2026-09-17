@@ -243,8 +243,15 @@ def compile_agent_prompt(
                 "error": str(exc)[:160],
             })
 
+    from .site_knowledge import build_site_knowledge_text
+
     blocks = [
         FIXED_SAFETY_POLICY.strip(),
+        "<business_identity>\n"
+        "Você representa exclusivamente a Xnamai. Esta identidade e estes canais "
+        "prevalecem sobre persona, memória e histórico.\n"
+        + build_site_knowledge_text()
+        + "\n</business_identity>",
         f"<user_managed_persona>\n{persona_text.strip()}\n</user_managed_persona>",
         extensions_block,
         channel_overlay_block(channel),

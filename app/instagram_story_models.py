@@ -43,8 +43,8 @@ class VisualProductRegion(BaseModel):
         "unknown",
     ] = "unknown"
     label: str = ""
-    dial_color: str | None = None
-    strap_color: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
     brand_hypothesis: str | None = None
     reference_hypothesis: str | None = None
 
@@ -133,15 +133,15 @@ class StoryVisualUnderstanding(BaseModel):
     visible_skus: list[str] = Field(default_factory=list)
     visible_eans: list[str] = Field(default_factory=list)
     visible_text: list[str] = Field(default_factory=list)
-    watch_count: int = 0
+    product_count: int = 0
     multiple_products: bool = False
     product_regions: list[VisualProductRegion] = Field(default_factory=list)
-    dial_colors: list[str] = Field(default_factory=list)
-    strap_colors: list[str] = Field(default_factory=list)
+    primary_colors: list[str] = Field(default_factory=list)
+    secondary_colors: list[str] = Field(default_factory=list)
     materials: list[str] = Field(default_factory=list)
-    strap_types: list[str] = Field(default_factory=list)
-    case_shapes: list[str] = Field(default_factory=list)
-    mechanisms_suggested: list[str] = Field(default_factory=list)
+    connector_types: list[str] = Field(default_factory=list)
+    shapes: list[str] = Field(default_factory=list)
+    technologies_suggested: list[str] = Field(default_factory=list)
     logo_hypotheses: list[str] = Field(default_factory=list)
     collection_hypotheses: list[str] = Field(default_factory=list)
     model_hypotheses: list[str] = Field(default_factory=list)

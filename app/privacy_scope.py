@@ -11,7 +11,7 @@ handlers de feature (saldo, cupom, sorteio, simulacao).
 A Parte 1 removeu aquelas features do runtime. Com elas foram os intents — e a
 guarda de privacidade ficaria MORTA: ``"saldo do Joao"`` deixaria de ser
 recusado. Disparar a guarda para qualquer mensagem, por outro lado, a deixaria
-MAIS ESTRITA que o baseline: ``"voces tem Tissot para o 4899...?"`` viraria
+MAIS ESTRITA que o baseline: ``"voces tem MarcaA para o 4899...?"`` viraria
 recusa de seguranca.
 
 Este modulo isola o SINAL de classificacao do baseline, sem nada mais:
@@ -20,7 +20,7 @@ Este modulo isola o SINAL de classificacao do baseline, sem nada mais:
 
 Nao existe — e nao pode passar a existir — o caminho::
 
-    sinal pessoal -> handler de feature -> saldo/cupom/sorteio/NewStore
+    sinal pessoal -> handler de feature -> dados pessoais protegidos
 
 Invariantes (verificados em ``tests/test_third_party_privacy_parity.py``)
 ------------------------------------------------------------------------
@@ -112,7 +112,7 @@ _CREDIT_SIGNALS: tuple[str, ...] = (
     "saldo", "cartão presente", "cartao presente", "crédito", "credito", "cupom",
 )
 _PRODUCT_SIGNALS: tuple[str, ...] = (
-    "relogio", "relógio", "reloj", "compra", "produto", "mil", "r$",
+    "produto", "celular", "fone", "compra", "acessório", "mil", "r$",
 )
 
 #: Termos que, sozinhos, ja colocam a mensagem em escopo de conta pessoal.

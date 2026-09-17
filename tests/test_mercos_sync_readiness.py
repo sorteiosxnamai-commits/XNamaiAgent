@@ -176,7 +176,7 @@ async def test_runner_refuses_when_the_state_table_is_missing():
         database_url = "postgresql://x/y"
         # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
         # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
-        agent_persona_tenant_id = "newstore"
+        agent_persona_tenant_id = "xnamai"
         commerce_tenant_id = TENANT
 
     store = _StateStore(SyncState("mercos", "products", missing_table=True))
@@ -204,7 +204,7 @@ async def test_runner_refuses_without_configuration(configured, database, expect
         database_url = database
         # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
         # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
-        agent_persona_tenant_id = "newstore"
+        agent_persona_tenant_id = "xnamai"
         commerce_tenant_id = TENANT
 
     result = await run_product_sync(settings=_Settings())
@@ -224,7 +224,7 @@ async def test_successful_run_records_the_success_that_opens_the_tools():
         database_url = "postgresql://x/y"
         # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
         # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
-        agent_persona_tenant_id = "newstore"
+        agent_persona_tenant_id = "xnamai"
         commerce_tenant_id = TENANT
 
     def handler(_):
@@ -263,7 +263,7 @@ async def test_failed_run_records_failure_without_erasing_the_previous_success()
         database_url = "postgresql://x/y"
         # O tenant da persona fica aqui de proposito: o runner tem de IGNORA-LO
         # e usar o comercial. Se um dia voltar a le-lo, estes testes quebram.
-        agent_persona_tenant_id = "newstore"
+        agent_persona_tenant_id = "xnamai"
         commerce_tenant_id = TENANT
 
     def handler(_):

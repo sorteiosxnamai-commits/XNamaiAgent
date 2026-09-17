@@ -51,7 +51,7 @@ def test_injection_proposal_rejected_and_not_applied(monkeypatch):
     )
     result = process_agent_memory_proposals(
         envelope=envelope,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="instagram:123",
         inbound_id=1,

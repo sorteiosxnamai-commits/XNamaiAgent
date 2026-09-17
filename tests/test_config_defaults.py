@@ -123,8 +123,8 @@ def test_brevo_identity_defaults_are_xnamai():
 
 
 def test_persona_lookup_keys_are_untouched():
-    assert Settings.model_fields["agent_persona_tenant_id"].default == "newstore"
-    assert Settings.model_fields["agent_persona_key"].default == "newstore_commercial"
+    assert Settings.model_fields["agent_persona_tenant_id"].default == "xnamai"
+    assert Settings.model_fields["agent_persona_key"].default == "xnamai_commercial"
 
 
 def test_settings_boot_without_env_file():

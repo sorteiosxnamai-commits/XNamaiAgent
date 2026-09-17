@@ -34,7 +34,7 @@ apenas o placeholder:
 
 ```text
 Webhook Brevo → InstagramStoryContext
-→ resolve_story_tenant (sem fallback silencioso newstore)
+→ resolve_story_tenant (sem fallback silencioso xnamai)
 → rollout off|shadow|canary|full
 → associação DB / lease processing
 → download streaming (URL assinada completa)

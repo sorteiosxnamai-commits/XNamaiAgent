@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from .models import AgentResult, PurchaseItem, SalesInterpretation
 
 def normalize_variant_identity(value: Any) -> str | None:
-    """Return the canonical NSAgent identity for an optional provider variant."""
+    """Return the canonical XNamaiAgent identity for an optional provider variant."""
     if value is None:
         return None
     if isinstance(value, bool):

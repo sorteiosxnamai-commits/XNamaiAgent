@@ -95,7 +95,7 @@ async def test_commercial_intent_reaches_null_provider_and_invents_nothing(
     from app import openai_agent
 
     result = await openai_agent.generate_agent_reply_async(
-        IncomingMessage(text="Voces tem Tissot Seastar? qual o preco?"),
+        IncomingMessage(text="Voces tem MarcaA ChargeMax? qual o preco?"),
         {},
     )
     output = capsys.readouterr().out
@@ -117,8 +117,8 @@ async def test_commercial_intent_reaches_null_provider_and_invents_nothing(
     assert result.commercial_data in (None, {})
     reply = result.reply_text.casefold()
     assert "r$" not in reply
-    assert "tissot" not in reply
-    assert "seastar" not in reply
+    assert "marcaa" not in reply
+    assert "ChargeMax" not in reply
 
     # 4. Nenhum fallback: nenhum módulo legado foi carregado no processo.
     assert _legacy_modules_loaded() == []
@@ -148,7 +148,7 @@ async def test_commercial_turn_never_falls_back_to_a_legacy_client(monkeypatch, 
     provider_module.set_commerce_provider(ObservedNullProvider())
 
     await openai_agent.generate_agent_reply_async(
-        IncomingMessage(text="quanto custa o relogio 1025?"),
+        IncomingMessage(text="quanto custa o produto 1025?"),
         {},
     )
 
@@ -172,7 +172,7 @@ async def test_execute_tool_never_raises_and_never_leaks_provider_internals(caps
             raise RuntimeError("token=super-secret-value")
 
     provider_module.set_commerce_provider(ExplodingProvider())
-    result = await execute_tool("search_products", {"query": "relogio"})
+    result = await execute_tool("search_products", {"query": "produto"})
     output = capsys.readouterr().out
 
     assert result["error"] == "commerce_tool_error"

@@ -1,7 +1,7 @@
 """Resolve tenant for Instagram Story flows from authenticated channel context.
 
 Never accept tenant_id from the customer message body.
-Never silently fall back to \"newstore\".
+Never silently fall back to \"xnamai\".
 explicit_tenant_id requires a RequestPrincipal with access.
 """
 

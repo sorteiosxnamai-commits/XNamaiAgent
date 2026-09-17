@@ -113,7 +113,7 @@ async def test_commerce_intent_without_provider_never_enters_the_tool_loop(monke
 
     assert commerce_tools_available() is False
     result = await openai_agent.generate_openai_reply_async(
-        IncomingMessage(text="quero comprar um relogio", sender_phone="5511999999999"),
+        IncomingMessage(text="quero comprar um produto", sender_phone="5511999999999"),
         {},
         {"primary_intent": "commerce"},
     )

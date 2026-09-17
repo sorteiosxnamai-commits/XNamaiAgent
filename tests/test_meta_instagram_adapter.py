@@ -241,7 +241,7 @@ def test_story_rollout_allows_meta_live_media(monkeypatch):
         instagram_story=story,
     )
     allowed, reason = story_rollout_allows(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         story=story,
         incoming=incoming,
     )

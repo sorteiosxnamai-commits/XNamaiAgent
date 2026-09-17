@@ -1,8 +1,8 @@
 """Identidade de produto para catalogo comum, independente de fornecedor.
 
 Por que existe. O matcher do `sales_agent` foi calibrado para um catalogo de
-relogios: decide identidade a partir de `brand`, `model`, `mechanism`,
-`dial_color`, `case_size`. Um catalogo generico nao preenche nada disso — tem
+produtos: decide identidade a partir de `brand`, `model`, `technology`,
+`primary_color`, `dimensions`. Um catalogo generico nao preenche nada disso — tem
 nome, referencia, preco e estoque. Rodar aquele matcher sobre estes produtos
 produz dois erros opostos: descarta tudo (nenhum campo especializado casa) ou
 aceita qualquer coisa da marca certa.
