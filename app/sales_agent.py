@@ -156,6 +156,10 @@ Não transforme a conversa em questionário. Não pergunte novamente informaçã
 fornecida, presente em known_preferences ou em recent_questions. Não pergunte por uma
 preferência listada em explicit_no_preferences; isso significa que o cliente disse que
 não possui preferência naquele critério.
+Em um pedido amplo, pergunte primeiro qual tipo de produto ou necessidade o
+cliente quer atender. Peça o modelo do aparelho somente quando ele for
+necessário para verificar compatibilidade. Nunca pergunte apenas "qual modelo
+ou estilo?" sem antes deixar clara a categoria do produto.
 Não afirme produto, preço, estoque, promoção ou condição comercial, pois a fonte oficial ainda
 não foi consultada. Responda apenas com uma frase curta ou até duas perguntas simples
 e relacionadas.
@@ -215,8 +219,8 @@ catalog, price, inventory, coupons ou payment.
 
 Decida também:
 - enough_information_to_search=true quando já existe produto/categoria identificável e
-  informação suficiente para iniciar uma busca útil. Uma preferência relevante costuma
-  bastar; não exija cor, material, estilo, tamanho, marca e funções ao mesmo tempo.
+  informação suficiente para iniciar uma busca útil. Categoria, uso, compatibilidade,
+  conector, quantidade ou orçamento podem tornar a busca útil; não exija todos ao mesmo tempo.
 - ready_for_retrieval=true quando o cliente pede semanticamente para ver, buscar ou receber
   opções/catálogo agora.
 - stop_clarification=true quando o cliente demonstra atrito, pede para agir, diz que já
@@ -260,7 +264,7 @@ Exemplos semanticos obrigatorios:
 - "quero comprar um produto" e apenas interesse amplo: normalmente use goal=discover,
   needs_clarification=true, enough_information_to_search=false e
   ready_for_retrieval=false, sem busca de produto.
-- "quero um produto casual ate uns R$ 5.000" ja pode ter contexto suficiente para
+- "quero um carregador USB-C ate R$ 100" ja pode ter contexto suficiente para
   retrieval, conforme seu julgamento semantico.
 - "me mostre os produtos disponiveis" e "procure carregador USB-C ate R$ 100" sao
   pedidos explicitos de retrieval e podem usar ready_for_retrieval=true imediatamente.
@@ -501,6 +505,15 @@ def _fallback_interpretation(text: str | None) -> SalesInterpretation:
         "product_comparison": "compare",
         "clarification": "discover",
     }.get(legacy.get("intent"))
+    explicit_catalog_search = bool(
+        legacy.get("intent") == "product_search"
+        and (
+            subject.get("product_type")
+            or subject.get("model")
+            or subject.get("reference")
+            or legacy.get("product_type")
+        )
+    )
     interpretation = SalesInterpretation(
         domain=legacy.get("domain", "out_of_scope"),
         goal=fallback_goal,
@@ -522,8 +535,8 @@ def _fallback_interpretation(text: str | None) -> SalesInterpretation:
         },
         information_needed=["catalog"] if legacy.get("domain") == "commerce" else [],
         references_previous_context=False,
-        enough_information_to_search=False,
-        ready_for_retrieval=False,
+        enough_information_to_search=explicit_catalog_search,
+        ready_for_retrieval=explicit_catalog_search,
         stop_clarification=False,
         needs_clarification=bool(legacy.get("needs_clarification")),
         clarification_question=legacy.get("clarification_question"),
@@ -909,6 +922,8 @@ async def interpret_message(
 
 
 def deterministic_sales_plan(text: str | None) -> dict[str, Any] | None:
+    from .product_vocabulary import extract_product_category
+
     normalized = (text or "").lower()
     purchase = any(term in normalized for term in ("quero comprar", "quero adquirir", "quero um ", "quero uma ", "gostaria de comprar", "gostaria de um ", "procuro", "busco", "recomende"))
     action = resolve_commerce_action(text)
@@ -927,18 +942,27 @@ def deterministic_sales_plan(text: str | None) -> dict[str, Any] | None:
         query = ""
     ean_match = re.fullmatch(r"(?:ean\s+)?(\d{8,14})", query, flags=re.IGNORECASE)
     reference = None
-    if not ean_match and query and (
-        re.search(r"[./_-]", query)
-        or (re.search(r"\d", query) and re.search(r"[A-Za-z]", query) and " " not in query)
-    ):
+    explicit_reference = bool(
+        re.match(r"^(?:sku|ref(?:er[êe]ncia)?)\s+", query, flags=re.IGNORECASE)
+    )
+    compact_code = bool(
+        " " not in query
+        and re.search(r"\d", query)
+        and re.search(r"[A-Za-z]", query)
+    )
+    if not ean_match and query and (explicit_reference or compact_code):
         reference = re.sub(r"^(?:sku|ref(?:er[êe]ncia)?)\s+", "", query, flags=re.IGNORECASE)
     fallback_product_type = None
     fallback_model = None
     if query and not ean_match and not reference:
         if action == "product_search":
             fallback_model = query
+            fallback_product_type = extract_product_category(query)
         else:
-            fallback_product_type = query.split()[0] if action == "purchase_intent" else query
+            fallback_product_type = (
+                extract_product_category(query)
+                or (query.split()[0] if action == "purchase_intent" else query)
+            )
     plan: dict[str, Any] = {
         "intent": "purchase_intent" if action == "purchase_intent" else _ACTION_TO_PLAN.get(action, "product_search"),
         "query": query,
@@ -1261,7 +1285,9 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
         OUTCOME_MEDIA_UNAVAILABLE,
         OUTCOME_PRODUCT_NOT_FOUND,
         OUTCOME_PROVIDER_UNAVAILABLE,
+        OUTCOME_PURCHASE_INTENT,
     )
+    from .site_knowledge import STORE_URL
     from .commerce_router import _product_lines
 
     quebra = chr(10)
@@ -1284,6 +1310,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 "conversation_repair_attempts": getattr(state, "conversation_repair_attempts", 0),
                 "last_media_product_id": getattr(state, "last_media_product_id", None),
                 "last_media_index": getattr(state, "last_media_index", 0),
+                "pending_commerce_action": getattr(state, "pending_commerce_action", None),
             }
             ativo = getattr(state, "active_product", None)
             if ativo is not None:
@@ -1294,6 +1321,21 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
         return base
 
     print("[sales.turn]", {"outcome": resultado.outcome, "action": resultado.action})
+
+    if resultado.outcome == OUTCOME_PURCHASE_INTENT:
+        return AgentResult(
+            reply_text=(
+                f"Você pode comprar pelo catálogo oficial da XNamai: {STORE_URL} "
+                "Se quiser ajuda para encontrar algo, diga o tipo de produto ou o que "
+                "você precisa — por exemplo, cabo, carregador, fone ou capa."
+            ),
+            intent="commerce",
+            handoff_required=False,
+            response_metadata=_metadados(
+                used_commerce_provider=False,
+                active_topic="purchase_guidance",
+            ),
+        )
 
     if resultado.outcome == OUTCOME_PROVIDER_UNAVAILABLE:
         # "Nao consegui olhar" nunca pode virar "nao temos".
@@ -2101,8 +2143,8 @@ async def _execute_compiled_product_retrieval(
             if retrieval_plan.mode == "exact" and hard_filtered:
                 break
 
-    # Tier 2.5 — if color still missing, reuse family codes seen on siblings
-    # (e.g. C63 from other SoundMax titles) to probe the exact color title.
+    # Tier 2.5 — if color still missing, reuse family codes seen on sibling
+    # products to probe the exact color title.
     if (
         retrieval_plan.mode == "exact"
         and not hard_filtered
@@ -3464,7 +3506,7 @@ async def _handle_sales_message_inner(
                 fallback_reason="instagram_price_without_media",
             )
         # Brevo often splits photo+caption: text "qual o preço desse?" arrives
-        # without image_url and would price the previous SKU (CW Rosa → MarcaL).
+        # without image_url and could price the previous SKU.
         if (
             not has_inbound_image
             and is_deictic_product_price_request(message.text)

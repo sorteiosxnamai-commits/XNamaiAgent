@@ -305,7 +305,7 @@ _REFERENCE_CODE_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-# Alphanumeric model codes with digits: PB20000, C63, SUB300, etc.
+# Alphanumeric model codes with digits, como FKT110C, CB702V e PB20000.
 _MODEL_CODE_RE = re.compile(
     r"\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{3,}\b"
 )
@@ -332,7 +332,7 @@ def required_model_tokens(model: str | None) -> tuple[str, ...]:
     )
     if len(identity) >= 2 or any(re.search(r"\d", token) for token in identity):
         return identity
-    # For single-word models (SoundMax), keep color tokens for ranking/disambiguation
+    # For single-word models, keep color tokens for ranking/disambiguation
     # but never require primary descriptors invented by Vision ("claro", "produto").
     tightened = tuple(
         token for token in tokens if token not in _DESCRIPTOR_MODEL_TOKENS
@@ -1472,7 +1472,7 @@ def infer_family_codes_from_candidates(
     products: list[dict[str, Any]],
     interpretation: SalesInterpretation,
 ) -> tuple[str, ...]:
-    """Pull shared family codes (C63, C60…) from sibling titles already in the pool."""
+    """Pull shared family codes from sibling titles already in the pool."""
     color_tokens = preference_color_tokens(interpretation)
     identity_tokens = identity_core_tokens(
         interpretation.subject.model,
@@ -1486,7 +1486,7 @@ def infer_family_codes_from_candidates(
         if not all(token in text for token in identity_tokens):
             continue
         name = str(product.get("name") or "")
-        # Prefer short family prefixes (C63). Ignore reference fragments like
+        # Prefer short family prefixes. Ignore reference fragments like
         # 39AGM3 that pollute provider name probes and burn the enrich budget.
         for match in re.findall(r"\b[Cc]\d{2}\b", name):
             codes.append(match.upper())
@@ -1588,8 +1588,8 @@ def exact_specific_product_matches(
             }:
                 matches.append(product)
                 continue
-            # The provider often stores short model ("SoundMax") while the customer
-            # asks with style/color words ("C63 SoundMax sem fio Rosa").
+            # The provider often stores a short model while the customer asks with
+            # extra connectivity, compatibility, or color words.
             # Color/material tokens are optional when identity tokens suffice.
             required = required_model_tokens(subject.model)
             text = _product_text(product)

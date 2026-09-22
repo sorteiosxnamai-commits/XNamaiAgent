@@ -303,8 +303,8 @@ Regras:
    brand_exclusive quando a marca for exclusiva.
 3. Orçamento com "até"/"no máximo" → hard_constraints.budget_max (filtro). Preferência vaga
    de preço sem número → soft ou missing_data.
-4. Gênero (feminino/masculino/unissex) → entities.gender e soft/hard conforme o tom;
-   NUNCA use gênero como model ou style.
+4. Compatibilidade, conector e modelo do aparelho devem virar restrições ou preferências
+   quando forem relevantes. O modelo do aparelho nunca vira o modelo do produto procurado.
 5. Nunca invente product_id, variant_id, preço, estoque ou URL. claimed_product_id e
    claimed_variant_id devem ser null (IDs internos só o sistema resolve).
 6. Referências ("esse", "o segundo", "o preto", "o mais barato") → references[] e

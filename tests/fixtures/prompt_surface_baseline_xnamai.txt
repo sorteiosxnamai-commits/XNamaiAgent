@@ -773,6 +773,10 @@ Não transforme a conversa em questionário. Não pergunte novamente informaçã
 fornecida, presente em known_preferences ou em recent_questions. Não pergunte por uma
 preferência listada em explicit_no_preferences; isso significa que o cliente disse que
 não possui preferência naquele critério.
+Em um pedido amplo, pergunte primeiro qual tipo de produto ou necessidade o
+cliente quer atender. Peça o modelo do aparelho somente quando ele for
+necessário para verificar compatibilidade. Nunca pergunte apenas "qual modelo
+ou estilo?" sem antes deixar clara a categoria do produto.
 Não afirme produto, preço, estoque, promoção ou condição comercial, pois a fonte oficial ainda
 não foi consultada. Responda apenas com uma frase curta ou até duas perguntas simples
 e relacionadas.
@@ -828,8 +832,8 @@ catalog, price, inventory, coupons ou payment.
 
 Decida também:
 - enough_information_to_search=true quando já existe produto/categoria identificável e
-  informação suficiente para iniciar uma busca útil. Uma preferência relevante costuma
-  bastar; não exija cor, material, estilo, tamanho, marca e funções ao mesmo tempo.
+  informação suficiente para iniciar uma busca útil. Categoria, uso, compatibilidade,
+  conector, quantidade ou orçamento podem tornar a busca útil; não exija todos ao mesmo tempo.
 - ready_for_retrieval=true quando o cliente pede semanticamente para ver, buscar ou receber
   opções/catálogo agora.
 - stop_clarification=true quando o cliente demonstra atrito, pede para agir, diz que já
@@ -873,7 +877,7 @@ Exemplos semanticos obrigatorios:
 - "quero comprar um produto" e apenas interesse amplo: normalmente use goal=discover,
   needs_clarification=true, enough_information_to_search=false e
   ready_for_retrieval=false, sem busca de produto.
-- "quero um produto casual ate uns R$ 5.000" ja pode ter contexto suficiente para
+- "quero um carregador USB-C ate R$ 100" ja pode ter contexto suficiente para
   retrieval, conforme seu julgamento semantico.
 - "me mostre os produtos disponiveis" e "procure carregador USB-C ate R$ 100" sao
   pedidos explicitos de retrieval e podem usar ready_for_retrieval=true imediatamente.
@@ -1143,8 +1147,8 @@ Regras:
    brand_exclusive quando a marca for exclusiva.
 3. Orçamento com "até"/"no máximo" → hard_constraints.budget_max (filtro). Preferência vaga
    de preço sem número → soft ou missing_data.
-4. Gênero (feminino/masculino/unissex) → entities.gender e soft/hard conforme o tom;
-   NUNCA use gênero como model ou style.
+4. Compatibilidade, conector e modelo do aparelho devem virar restrições ou preferências
+   quando forem relevantes. O modelo do aparelho nunca vira o modelo do produto procurado.
 5. Nunca invente product_id, variant_id, preço, estoque ou URL. claimed_product_id e
    claimed_variant_id devem ser null (IDs internos só o sistema resolve).
 6. Referências ("esse", "o segundo", "o preto", "o mais barato") → references[] e

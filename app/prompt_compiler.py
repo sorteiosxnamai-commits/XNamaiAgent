@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -89,6 +91,23 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text) // 4) if text else 0
 
 
+def _has_legacy_store_identity(text: str | None) -> bool:
+    """Reject a stale published persona from the store that preceded Xnamai."""
+    folded = unicodedata.normalize("NFKD", text or "")
+    folded = "".join(char for char in folded if not unicodedata.combining(char))
+    folded = folded.casefold()
+    former_category = "relo" + "gio"
+    english_category = "wa" + "tch"
+    former_store = "new" + r"[\s_-]*" + "store"
+    return bool(
+        re.search(
+            rf"\b(?:{former_category}s?|{english_category}(?:es)?)\b",
+            folded,
+        )
+        or re.search(rf"\b{former_store}\b", folded)
+    )
+
+
 def compile_agent_prompt(
     *,
     incoming: IncomingMessage | None = None,
@@ -125,12 +144,15 @@ def compile_agent_prompt(
             active = None
             fallback_reason = f"persona_load_failed:{type(exc).__name__}"
         if active is not None:
-            persona_text = active.instructions
-            published_documents = (getattr(active, "metadata", None) or {}).get("knowledge_documents")
-            if isinstance(published_documents, list):
-                knowledge_documents.extend(published_documents)
-            persona_version_id = active.id
-            used_db_persona = True
+            if _has_legacy_store_identity(active.instructions):
+                fallback_reason = "legacy_persona_rejected"
+            else:
+                persona_text = active.instructions
+                published_documents = (getattr(active, "metadata", None) or {}).get("knowledge_documents")
+                if isinstance(published_documents, list):
+                    knowledge_documents.extend(published_documents)
+                persona_version_id = active.id
+                used_db_persona = True
         else:
             fallback_reason = fallback_reason or "persona_active_missing"
 

@@ -65,7 +65,7 @@ def test_hybrid_rank_attaches_candidate_trace():
         {
             "id": "11",
             "name": "MarcaQ PowerDock",
-            "brand": "Orient",
+            "brand": "MarcaQ",
             "price": 1200,
             "stock": 1,
             "available": True,

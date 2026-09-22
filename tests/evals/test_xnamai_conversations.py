@@ -68,3 +68,31 @@ async def test_misunderstanding_repeats_safe_query_then_hands_off(catalog):
     assert "XNamai" in handoff.reply_text
     assert len(catalog) == before
     assert state.pending_commerce_action is None
+
+
+async def test_purchase_guidance_answers_how_to_buy_without_searching(catalog):
+    result, state = await turn(
+        "como faço para comprar com vocês?",
+        CommerceConversationState(),
+    )
+
+    assert "https://xnamai.meuspedidos.com.br/" in result.reply_text
+    assert "tipo de produto" in result.reply_text
+    assert "modelo ou estilo" not in result.reply_text.lower()
+    assert result.response_metadata["active_topic"] == "purchase_guidance"
+    assert result.response_metadata["used_commerce_provider"] is False
+    assert state.pending_commerce_action is None
+    assert catalog == []
+
+
+async def test_model_of_what_resumes_purchase_guidance_without_catalog_search(catalog):
+    _, state = await turn(
+        "como faço para comprar com vocês?",
+        CommerceConversationState(),
+    )
+    result, state = await turn("modelo de quê?", state)
+
+    assert "catálogo oficial da XNamai" in result.reply_text
+    assert "Não encontrei" not in result.reply_text
+    assert state.pending_commerce_action is None
+    assert catalog == []

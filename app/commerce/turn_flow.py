@@ -253,10 +253,10 @@ async def run_commerce_turn(
 
     # --- intencao de comprar ------------------------------------------------
     if acao == ACTION_START_PURCHASE:
-        # Nenhuma promessa de pedido criado: a capability de pedido nao esta
-        # exposta. O que da para fazer agora e ajudar a escolher o produto.
+        # A resposta final orienta a compra pelo catálogo oficial e oferece
+        # ajuda pela categoria ou necessidade do cliente.
         state.last_commerce_action = acao
-        state.pending_commerce_action = PENDING_BROWSE
+        state.pending_commerce_action = None
         return CommerceTurnOutcome(
             outcome=OUTCOME_PURCHASE_INTENT,
             product=None,

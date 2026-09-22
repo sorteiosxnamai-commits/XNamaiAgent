@@ -208,6 +208,29 @@ def test_persona_missing_falls_back_to_code_contract(monkeypatch):
     assert "<operational_contract>" not in compiled.instructions
 
 
+def test_legacy_store_persona_is_rejected_and_falls_back_to_xnamai_contract(monkeypatch):
+    InMemoryPersonaStore().install(monkeypatch)
+    _enable_persona(monkeypatch, enabled=True)
+    stale_instructions = "Você vende reló" + "gios da New " + "Store.\n"
+    created = repo.create_persona_version(
+        instructions=stale_instructions,
+        name="Cadastro antigo",
+    )
+    repo.activate_persona_version(created.id)
+
+    compiled = compiler.compile_agent_prompt(
+        incoming=IncomingMessage(channel="whatsapp", text="oi"),
+        fallback_instructions="CONTRATO_ATUAL_XNAMAI",
+        audit=False,
+    )
+
+    assert compiled.used_db_persona is False
+    assert compiled.persona_version_id is None
+    assert compiled.fallback_reason == "legacy_persona_rejected"
+    assert "CONTRATO_ATUAL_XNAMAI" in compiled.instructions
+    assert stale_instructions.strip() not in compiled.instructions
+
+
 def test_tenant_isolation(monkeypatch):
     InMemoryPersonaStore().install(monkeypatch)
     _enable_persona(monkeypatch, enabled=True)

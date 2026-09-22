@@ -48,7 +48,7 @@
     {
       "id": "product_search_001",
       "category": "product_search",
-      "input": "tem produto marcaa?",
+      "input": "tem carregador USB-C?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -72,7 +72,7 @@
     {
       "id": "exact_model_001",
       "category": "exact_model",
-      "input": "quero MarcaA ChargeMax 1000",
+      "input": "quero o carregador FKT-110C",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -96,7 +96,7 @@
     {
       "id": "exact_color_001",
       "category": "exact_color",
-      "input": "ChargeMax rosa",
+      "input": "cabo USB-C preto",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -168,7 +168,7 @@
     {
       "id": "category_001",
       "category": "category",
-      "input": "produtos femininos",
+      "input": "fones Bluetooth",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -216,7 +216,7 @@
     {
       "id": "compare_001",
       "category": "compare",
-      "input": "compara ChargeMax e prc 200",
+      "input": "compara FKT-110C e FKT-1108",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -240,7 +240,7 @@
     {
       "id": "similar_001",
       "category": "similar",
-      "input": "algo parecido com ChargeMax",
+      "input": "algo parecido com o FKT-110C",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -264,7 +264,7 @@
     {
       "id": "out_of_stock_001",
       "category": "out_of_stock",
-      "input": "tem o ChargeMax preto?",
+      "input": "tem o cabo CB702V preto?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -289,7 +289,7 @@
     {
       "id": "price_001",
       "category": "price",
-      "input": "quanto custa o ChargeMax?",
+      "input": "quanto custa o FKT-110C?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -593,7 +593,7 @@
     {
       "id": "audio_001",
       "category": "audio",
-      "input": "quero o ChargeMax",
+      "input": "quero o FKT-110C",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -617,7 +617,7 @@
     {
       "id": "tray_error_001",
       "category": "tray_error",
-      "input": "tem ChargeMax?",
+      "input": "tem FKT-110C?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -641,7 +641,7 @@
     {
       "id": "timeout_001",
       "category": "timeout",
-      "input": "busca marcab Power",
+      "input": "busca cabo USB-C",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -761,7 +761,7 @@
     {
       "id": "product_search_002",
       "category": "product_search",
-      "input": "tem marcaq powerdock?",
+      "input": "tem suporte para celular?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -784,7 +784,7 @@
     {
       "id": "product_search_003",
       "category": "product_search",
-      "input": "tem marcab Power Mini?",
+      "input": "tem power bank compacto?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -807,7 +807,7 @@
     {
       "id": "exact_model_004",
       "category": "exact_model",
-      "input": "MarcaG AudioMini",
+      "input": "fone Bluetooth FKT-WS02",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -830,7 +830,7 @@
     {
       "id": "exact_color_005",
       "category": "exact_color",
-      "input": "marcaa prc 200 azul",
+      "input": "cabo CB702V azul",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
@@ -876,7 +876,7 @@
     {
       "id": "price_007",
       "category": "price",
-      "input": "preço do prc 200",
+      "input": "preço do CB702V",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},

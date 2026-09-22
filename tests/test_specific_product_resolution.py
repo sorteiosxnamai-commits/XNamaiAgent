@@ -101,8 +101,8 @@ async def test_brand_candidates_resolve_partial_specific_model(monkeypatch):
 
     calls = []
     candidates = [
-        {"id": "1", "name": "MarcaI HydroConquest", "brand": "MarcaI"},
-        {"id": "2", "name": "MarcaI Spirit Zulu Time", "brand": "MarcaI"},
+        {"id": "1", "name": "MarcaI HubConnect", "brand": "MarcaI"},
+        {"id": "2", "name": "MarcaI Hub Multiport", "brand": "MarcaI"},
         {"id": "3", "name": "MarcaI Conquest", "brand": "MarcaI"},
     ]
 
@@ -155,9 +155,9 @@ async def test_exact_structured_model_does_not_need_brand_fallback(monkeypatch):
     calls = []
     product = {
         "id": "10",
-        "name": "MarcaI Spirit Zulu Time",
+        "name": "MarcaI Hub Multiport",
         "brand": "MarcaI",
-        "model": "Spirit Zulu Time",
+        "model": "Hub Multiport",
         "available": True,
     }
 
@@ -180,12 +180,12 @@ async def test_exact_structured_model_does_not_need_brand_fallback(monkeypatch):
     monkeypatch.setattr(sales_agent, "execute_tool", execute)
 
     result = await sales_agent._execute_compiled_product_retrieval(
-        _interpretation(brand="MarcaI", model="Spirit Zulu Time")
+        _interpretation(brand="MarcaI", model="Hub Multiport")
     )
 
     search_calls = [call for call in calls if call[0] == "search_products"]
     assert any(
-        call[1].get("name") == "Spirit Zulu Time"
+        call[1].get("name") == "Hub Multiport"
         and call[1].get("brand") == "MarcaI"
         for call in search_calls
     )
@@ -477,9 +477,9 @@ async def test_partial_model_returns_plausible_matches_from_brand_candidates(mon
 
     calls = []
     candidates = [
-        {"id": "1", "name": "MarcaI HydroConquest", "brand": "MarcaI"},
-        {"id": "2", "name": "MarcaI Spirit Zulu Time 39", "brand": "MarcaI"},
-        {"id": "3", "name": "MarcaI Spirit Zulu Time 42", "brand": "MarcaI"},
+        {"id": "1", "name": "MarcaI HubConnect", "brand": "MarcaI"},
+        {"id": "2", "name": "MarcaI Hub Multiport 4", "brand": "MarcaI"},
+        {"id": "3", "name": "MarcaI Hub Multiport 7", "brand": "MarcaI"},
         {"id": "4", "name": "MarcaI Conquest", "brand": "MarcaI"},
     ]
 
@@ -698,9 +698,9 @@ async def test_brand_discovery_reaches_third_page_and_disambiguates(monkeypatch)
             for index in range(20)
         ],
         3: [
-            {"id": "z39", "name": "MarcaI Spirit Zulu Time 39", "brand": "MarcaI"},
-            {"id": "z42", "name": "MarcaI Spirit Zulu Time 42", "brand": "MarcaI"},
-            {"id": "zg", "name": "MarcaI Spirit Zulu Time com fio", "brand": "MarcaI"},
+            {"id": "z39", "name": "MarcaI Hub Multiport 4", "brand": "MarcaI"},
+            {"id": "z42", "name": "MarcaI Hub Multiport 7", "brand": "MarcaI"},
+            {"id": "zg", "name": "MarcaI Hub Multiport com cabo", "brand": "MarcaI"},
         ],
     }
 
@@ -767,7 +767,7 @@ def test_generic_prefilter_uses_real_properties_and_limits_matcher_payload():
     ]
     related = {
         "id": "pilot",
-        "name": "MarcaG Promaster",
+        "name": "MarcaG PowerBank",
         "brand": "MarcaG",
         "properties": {"collection": "Pilot", "use": "aviação"},
     }
@@ -796,7 +796,7 @@ async def test_property_evidence_from_later_brand_page_reaches_matcher(monkeypat
     ]
     related = {
         "id": "pilot",
-        "name": "MarcaG Promaster",
+        "name": "MarcaG PowerBank",
         "brand": "MarcaG",
         "properties": {"collection": "Pilot", "use": "aviação"},
     }

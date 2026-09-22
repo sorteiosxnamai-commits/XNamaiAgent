@@ -84,7 +84,7 @@
     {
       "id": "s06_brand_search",
       "category": "brand_search",
-      "input": "tem produto MarcaA?",
+      "input": "tem carregador USB-C?",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -92,9 +92,9 @@
           "products": [
             {
               "id": "1001",
-              "name": "produto MarcaA ChargeMax 1000",
-              "brand": "MarcaA",
-              "price": "4590.00",
+              "name": "FKT-110C - Carregador Tipo C",
+              "brand": "",
+              "price": "14.91",
               "promotional_price": null,
               "stock": 2
             }
@@ -117,7 +117,7 @@
     {
       "id": "s07_budget_filter",
       "category": "budget",
-      "input": "quero um fone até 2000 reais",
+      "input": "quero um fone até 100 reais",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -125,9 +125,9 @@
           "products": [
             {
               "id": "2001",
-              "name": "produto MarcaG AudioMax",
-              "brand": "MarcaG",
-              "price": "1890.00",
+              "name": "Fone Bluetooth FKT-WS02",
+              "brand": "",
+              "price": "89.90",
               "stock": 1
             }
           ]
@@ -145,7 +145,7 @@
     {
       "id": "s08_color_pref",
       "category": "color",
-      "input": "tem marcad azul?",
+      "input": "tem cabo USB azul?",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -153,9 +153,9 @@
           "products": [
             {
               "id": "3001",
-              "name": "produto MarcaD 5 Sports Azul",
-              "brand": "MarcaD",
-              "price": "2490.00",
+              "name": "CB702V - Cabo USB V8 Azul",
+              "brand": "",
+              "price": "5.25",
               "stock": 3
             }
           ]
@@ -173,7 +173,7 @@
     {
       "id": "s09_exact_reference",
       "category": "exact_ref",
-      "input": "tem MarcaA ChargeMax 1000?",
+      "input": "tem o carregador FKT-110C?",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -181,9 +181,9 @@
           "products": [
             {
               "id": "1001",
-              "name": "produto MarcaA ChargeMax 1000",
-              "brand": "MarcaA",
-              "price": "4590.00",
+              "name": "FKT-110C - Carregador Tipo C",
+              "brand": "",
+              "price": "14.91",
               "stock": 2
             }
           ]
@@ -201,7 +201,7 @@
     {
       "id": "s10_typo_brand",
       "category": "typo",
-      "input": "tem tisot?",
+      "input": "tem carregdor tipo c?",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -209,9 +209,9 @@
           "products": [
             {
               "id": "1001",
-              "name": "produto MarcaA Gentleman",
-              "brand": "MarcaA",
-              "price": "3200.00",
+              "name": "FKT-110C - Carregador Tipo C",
+              "brand": "",
+              "price": "14.91",
               "stock": 1
             }
           ]
@@ -229,7 +229,7 @@
     {
       "id": "s11_short_message",
       "category": "short_msg",
-      "input": "tem marcaa",
+      "input": "tem cabo v8",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -237,9 +237,9 @@
           "products": [
             {
               "id": "1002",
-              "name": "produto MarcaA PRC 200",
-              "brand": "MarcaA",
-              "price": "2800.00",
+              "name": "CB702V - Cabo USB V8",
+              "brand": "",
+              "price": "5.25",
               "stock": 4
             }
           ]
@@ -255,9 +255,9 @@
       }
     },
     {
-      "id": "s12_size_pref",
-      "category": "size",
-      "input": "produto masculino 42mm",
+      "id": "s12_compatibility_pref",
+      "category": "compatibility",
+      "input": "cabo para celular com entrada USB-C",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -265,9 +265,9 @@
           "products": [
             {
               "id": "4001",
-              "name": "produto MarcaQ PowerDock 42mm",
-              "brand": "Orient",
-              "price": "1590.00",
+              "name": "Cabo USB-C 2 metros",
+              "brand": "",
+              "price": "19.90",
               "stock": 2
             }
           ]
@@ -293,9 +293,9 @@
           "products": [
             {
               "id": "5001",
-              "name": "produto MarcaD 5 sem fio",
-              "brand": "MarcaD",
-              "price": "2190.00",
+              "name": "Fone Bluetooth sem fio",
+              "brand": "",
+              "price": "79.90",
               "stock": 2
             }
           ]
@@ -313,7 +313,7 @@
     {
       "id": "s14_empty_catalog",
       "category": "oos_catalog",
-      "input": "tem MarcaH Daytona?",
+      "input": "tem hub USB-C com HDMI?",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -336,7 +336,7 @@
     {
       "id": "s15_tray_timeout",
       "category": "tray_timeout",
-      "input": "tem MarcaE?",
+      "input": "tem power bank?",
       "channel": "whatsapp",
       "tool_fixtures": {},
       "expected": {
@@ -387,7 +387,7 @@
     {
       "id": "s19_appraisal",
       "category": "trade_in",
-      "input": "quero avaliar meu MarcaC usado",
+      "input": "quero avaliar meu celular usado",
       "channel": "whatsapp",
       "expected": {
         "domain": "guardrail",
@@ -409,9 +409,9 @@
       }
     },
     {
-      "id": "s21_bulova_search",
+      "id": "s21_accessory_search",
       "category": "brand_search",
-      "input": "tem Bulova?",
+      "input": "tem suporte para celular?",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -419,9 +419,9 @@
           "products": [
             {
               "id": "6001",
-              "name": "produto Bulova Classic",
-              "brand": "Bulova",
-              "price": "3100.00",
+              "name": "Suporte articulado para celular",
+              "brand": "",
+              "price": "39.90",
               "stock": 1
             }
           ]
@@ -437,9 +437,9 @@
       }
     },
     {
-      "id": "s22_gender_budget",
+      "id": "s22_feature_budget",
       "category": "budget",
-      "input": "fone feminino até 1500",
+      "input": "fone Bluetooth até 150 reais",
       "channel": "whatsapp",
       "tool_fixtures": {
         "search_products": {
@@ -447,9 +447,9 @@
           "products": [
             {
               "id": "7001",
-              "name": "produto Feminino MarcaP",
-              "brand": "MarcaP",
-              "price": "1290.00",
+              "name": "Fone Bluetooth FKT-WS02",
+              "brand": "",
+              "price": "89.90",
               "stock": 2
             }
           ]

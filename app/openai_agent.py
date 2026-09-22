@@ -202,7 +202,7 @@ def _third_party_guardrail(message: IncomingMessage, primary_intent: str) -> Age
     sem rota, sem fonte de dados.
 
     Manter as duas condicoes importa nos dois sentidos: so o detector de
-    terceiro recusaria "voces tem MarcaA para o 4899...?" (mais estrito que o
+    terceiro recusaria "voces tem cabo USB-C para o 4899...?" (mais estrito que o
     baseline); so o escopo pessoal recusaria "qual o meu saldo" (a propria
     conta do cliente).
 

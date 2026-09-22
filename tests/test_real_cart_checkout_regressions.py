@@ -55,7 +55,7 @@ def test_interpreter_examples_distinguish_interest_context_and_explicit_retrieva
     assert '"quero comprar um produto"' in SALES_INTERPRETER_INSTRUCTIONS
     assert "enough_information_to_search=false" in SALES_INTERPRETER_INSTRUCTIONS
     assert "ready_for_retrieval=false" in SALES_INTERPRETER_INSTRUCTIONS
-    assert '"quero um produto casual ate uns R$ 5.000"' in SALES_INTERPRETER_INSTRUCTIONS
+    assert '"quero um carregador USB-C ate R$ 100"' in SALES_INTERPRETER_INSTRUCTIONS
     assert '"me mostre os produtos disponiveis"' in SALES_INTERPRETER_INSTRUCTIONS
 
 

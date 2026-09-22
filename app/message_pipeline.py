@@ -180,7 +180,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
             load_commerce_conversation_state(**state_lookup)
         )
     # New product photo starts a fresh identification — never price the
-    # previous SKU (e.g. CW Rosa) while Vision runs on a MarcaL.
+    # previous SKU while Vision analyzes the newly received product.
     if (incoming.image_url or "").strip():
         if commerce_state.active_product is not None:
             log_event(

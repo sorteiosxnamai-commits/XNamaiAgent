@@ -98,7 +98,7 @@ def _tools(executar) -> list[str]:
     "texto",
     ["quero fazer um pedido", "quero fazer pedido", "quero comprar",
      "quero pedir", "como faço um pedido?", "quero fechar um pedido",
-     "quero levar", "como compro?"],
+     "quero levar", "como compro?", "como faço para comprar com vocês?"],
 )
 def test_purchase_intent_is_not_a_product_search(texto):
     resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
@@ -121,6 +121,13 @@ async def test_purchase_intent_does_not_hit_the_catalog():
     assert r.outcome == OUTCOME_PURCHASE_INTENT
     assert r.outcome != OUTCOME_PRODUCT_NOT_FOUND
     assert "search_products" not in _tools(executar)
+
+
+@pytest.mark.parametrize("texto", ["modelo de quê?", "modelo do que?", "qual modelo?"])
+def test_question_about_model_is_guidance_not_a_catalog_query(texto):
+    resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
+    assert resolucao.action == ACTION_START_PURCHASE
+    assert resolucao.requires_catalog_search is False
 
 
 # === B. "tem produto disponivel?" e browse, nao clarificacao ===============

@@ -42,7 +42,7 @@ def test_product_with_blue_matches_azul_preference():
     assert tokens == ("azul",)
     product = {
         "id": "1",
-        "name": "produto MarcaD Presage Blue primary",
+        "name": "produto MarcaD CaboFlex Blue primary",
         "brand": "MarcaD",
         "color": "Blue",
         "price": 2500,
@@ -78,21 +78,21 @@ def test_recommendation_keeps_brand_pool_for_llm_even_without_literal_azul():
 
 
 def test_exact_mode_still_requires_color_match_with_aliases():
-    interpretation = _interp(goal="find", subject={"product_type": "produto", "brand": "MarcaD", "model": "Presage"})
+    interpretation = _interp(goal="find", subject={"product_type": "produto", "brand": "MarcaD", "model": "CaboFlex"})
     products = [
         {
             "id": "blue-1",
-            "name": "MarcaD Presage Blue",
+            "name": "MarcaD CaboFlex Blue",
             "brand": "MarcaD",
-            "model": "Presage",
+            "model": "CaboFlex",
             "price": 3000,
             "available": True,
         },
         {
             "id": "black-1",
-            "name": "MarcaD Presage Black",
+            "name": "MarcaD CaboFlex Black",
             "brand": "MarcaD",
-            "model": "Presage",
+            "model": "CaboFlex",
             "price": 3000,
             "available": True,
         },

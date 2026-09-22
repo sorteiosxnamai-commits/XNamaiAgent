@@ -11,7 +11,7 @@ handlers de feature (saldo, cupom, sorteio, simulacao).
 A Parte 1 removeu aquelas features do runtime. Com elas foram os intents — e a
 guarda de privacidade ficaria MORTA: ``"saldo do Joao"`` deixaria de ser
 recusado. Disparar a guarda para qualquer mensagem, por outro lado, a deixaria
-MAIS ESTRITA que o baseline: ``"voces tem MarcaA para o 4899...?"`` viraria
+MAIS ESTRITA que o baseline: ``"voces tem cabo USB-C para o 4899...?"`` viraria
 recusa de seguranca.
 
 Este modulo isola o SINAL de classificacao do baseline, sem nada mais:

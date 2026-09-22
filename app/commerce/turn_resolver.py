@@ -219,6 +219,18 @@ _PURCHASE = (
     "fazer uma compra", "realizar um pedido", "efetuar pedido",
 )
 
+# Resposta comum quando uma orientação de compra foi vaga (por exemplo,
+# "qual modelo você procura?"). Isso é um pedido de esclarecimento sobre o
+# atendimento, não o nome de um produto para consultar no catálogo.
+_PURCHASE_GUIDANCE_FOLLOWUP = frozenset({
+    "modelo de que",
+    "modelo do que",
+    "qual modelo",
+    "que modelo",
+    "tipo de que",
+    "produto de que",
+})
+
 #: Transacao de verdade: tem fluxo proprio e nao pode ser engolida aqui.
 _TRANSACTION = (
     "quero pagar", "forma de pagamento", "formas de pagamento", "finalizar compra",
@@ -503,11 +515,16 @@ def _detectar_acao(normalizado: str, state) -> tuple[str, str | None]:
     ultima = getattr(state, "last_commerce_action", None)
     ultimo_fato = getattr(state, "last_requested_fact", None)
     pendente = getattr(state, "pending_commerce_action", None)
+    enxuto = normalizado.strip(" ?!.")
+
+    # Uma dúvida sobre a pergunta do atendente não pode virar busca literal por
+    # "modelo de que". Retome a orientação de compra e explique as categorias.
+    if enxuto in _PURCHASE_GUIDANCE_FOLLOWUP:
+        return ACTION_START_PURCHASE, None
 
     # 1. resposta a uma pergunta que o proprio bot fez. So conta como resposta
     #    quando existe pergunta pendente — "sim" solto nao inventa acao.
     if pendente:
-        enxuto = normalizado.strip(" ?!.")
         if enxuto in _CONFIRM:
             return ACTION_CONFIRM_PENDING, None
         if enxuto in _DENY or enxuto.startswith("nao "):

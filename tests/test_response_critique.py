@@ -221,12 +221,12 @@ def test_critique_judge_prompt_requires_catalog_fit():
 
 def test_apply_search_products_replaces_classic_list():
     result = AgentResult(
-        reply_text="Encontrei estes Bulova Classic…",
+        reply_text="Encontrei estes cabos USB-C…",
         intent="commerce",
         commercial_data={
             "products": [
-                {"id": "737", "name": "Bulova Classic wireless"},
-                {"id": "753", "name": "Bulova Classic"},
+                {"id": "737", "name": "Cabo USB-C 1 metro"},
+                {"id": "753", "name": "Cabo USB-C 2 metros"},
             ]
         },
         response_metadata={"presented_products": True},
@@ -239,8 +239,8 @@ def test_apply_search_products_replaces_classic_list():
                 "products": [
                     {
                         "id": "9001",
-                        "name": "Bulova Marine Star bluetooth",
-                        "brand": "Bulova",
+                        "name": "Fone Bluetooth FKT-WS02",
+                        "brand": "",
                     }
                 ]
             }
@@ -250,7 +250,7 @@ def test_apply_search_products_replaces_classic_list():
     )
     products = updated.commercial_data["products"]
     assert len(products) == 1
-    assert "bluetooth" in products[0]["name"]
+    assert "bluetooth" in products[0]["name"].lower()
     assert updated.commercial_data["query"] == "Bluetooth"
     assert updated.response_metadata["critique_products_replaced"] is True
     assert state.last_presented_products[0].product_id == "9001"
@@ -261,7 +261,7 @@ def test_apply_search_products_empty_clears_wrong_list():
         reply_text="lista errada",
         intent="commerce",
         commercial_data={
-            "products": [{"id": "737", "name": "Bulova Classic wireless"}],
+            "products": [{"id": "737", "name": "Cabo USB-C 1 metro"}],
             "inventory": {"737": True},
         },
     )
@@ -280,13 +280,13 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
     _allow_critique_llm_without_risk(monkeypatch)
     incoming = IncomingMessage(channel="whatsapp", text="quero um bluetooth")
     result = AgentResult(
-        reply_text="Separei 3 opções Bulova Classic…",
+        reply_text="Separei 3 opções de cabos USB-C…",
         intent="commerce",
         commercial_data={
             "products": [
-                {"id": "737", "name": "Bulova Classic wireless"},
-                {"id": "753", "name": "Bulova Classic"},
-                {"id": "783", "name": "Bulova Classic Dress"},
+                {"id": "737", "name": "Cabo USB-C 1 metro"},
+                {"id": "753", "name": "Cabo USB-C 2 metros"},
+                {"id": "783", "name": "Cabo USB-C reforçado"},
             ]
         },
         response_metadata={"presented_products": True},
@@ -303,7 +303,7 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
                 score=25,
                 pass_check=False,
                 issues=["catalog_fit_mismatch"],
-                summary="Classic wireless ≠ Bluetooth",
+                summary="Cabos USB-C não atendem ao pedido por Bluetooth",
                 recommended_apis=[
                     RecommendedApiCall(
                         name="search_products",
@@ -323,8 +323,8 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
             "products": [
                 {
                     "id": "9001",
-                    "name": "produto Bulova Marine Star bluetooth",
-                    "brand": "Bulova",
+                    "name": "Fone Bluetooth FKT-WS02",
+                    "brand": "",
                 }
             ]
         }
@@ -337,7 +337,7 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
             search_query="Bluetooth",
         )
         swapped.reply_text = (
-            "Encontrei este Bluetooth: produto Bulova Marine Star bluetooth"
+            "Encontrei este Bluetooth: Fone Bluetooth FKT-WS02"
         )
         swapped.response_metadata["critique_regenerated"] = True
         return swapped
@@ -358,7 +358,7 @@ async def test_critique_catalog_mismatch_retries_search_and_swaps_products(monke
     assert report.approved is True
     assert calls["tools"][0][0] == "search_products"
     assert final.commercial_data["products"][0]["id"] == "9001"
-    assert "bluetooth" in final.reply_text
+    assert "bluetooth" in final.reply_text.lower()
     assert "Classic" not in final.commercial_data["products"][0]["name"]
     assert state.last_presented_products[0].product_id == "9001"
 
