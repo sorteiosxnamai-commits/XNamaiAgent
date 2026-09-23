@@ -168,6 +168,9 @@ class CommerceConversationState(BaseModel):
     # a revisao tem um estado proprio para a ausencia em vez de listar o campo
     # junto com os outros que faltam.
     mercos_customer_id: str | None = None
+    # Cadastro solicitado no atendimento. O rascunho atravessa turnos para que
+    # o cliente possa revisar antes de qualquer mutação na fonte comercial.
+    customer_registration: dict[str, Any] = Field(default_factory=dict)
     # Condicao COMERCIAL (prazo) da fonte, distinta de `selected_payment_option`,
     # que modela FORMA de pagamento (pix/cartao/boleto, parcelas, desconto).
     # Dois escalares em vez de um modelo novo: o pedido so precisa do id, e o
@@ -249,6 +252,8 @@ class CommerceConversationState(BaseModel):
         "awaiting_order_confirmation",
         "awaiting_payment",
         "awaiting_order_customer_document",
+        "awaiting_customer_registration_data",
+        "awaiting_customer_registration_confirmation",
     ] | None = None
     pending_action_product_ids: list[str] = Field(default_factory=list)
 
@@ -715,6 +720,8 @@ def evolve_commerce_state(
         "awaiting_order_confirmation",
         "awaiting_payment",
         "awaiting_order_customer_document",
+        "awaiting_customer_registration_data",
+        "awaiting_customer_registration_confirmation",
     }:
         state.pending_action = pending_action
         pending_ids = metadata.get("pending_action_product_ids")
@@ -805,6 +812,12 @@ def evolve_commerce_state(
                 state.checkout_draft = CheckoutDraft.model_validate(draft)
             except (TypeError, ValueError):
                 pass
+    registration_state = metadata.get("customer_registration_state")
+    if isinstance(registration_state, dict):
+        state.customer_registration = dict(registration_state)
+        customer_id = registration_state.get("customer_id")
+        if customer_id is not None:
+            state.mercos_customer_id = str(customer_id)
     order_state = metadata.get("order_state")
     if isinstance(order_state, dict):
         for field in (

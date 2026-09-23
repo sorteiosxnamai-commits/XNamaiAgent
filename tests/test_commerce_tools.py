@@ -50,7 +50,6 @@ def test_no_vendor_specific_tools():
     anticipated = {
         "get_payment_conditions",
         "get_price_tables",
-        "create_customer",
         "update_customer",
         "update_order",
     }

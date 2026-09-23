@@ -26,7 +26,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 #: Capacidades comerciais reconhecidas pelo executor. Identico ao baseline,
 #: menos a chave "raffle": o dominio de sorteio saiu do runtime na Parte 1.
 TOOL_REGISTRY: dict[str, tuple[str, ...]] = {
-    "commerce": ("search_products", "get_product", "get_product_link", "check_inventory", "list_categories", "get_category", "get_category_tree", "list_product_variants", "get_product_variant", "search_customer", "get_customer", "list_coupons", "get_coupon", "create_cart", "get_cart", "get_cart_complete", "set_cart_item_quantity", "delete_cart", "get_payment_options", "quote_shipping", "list_shipping_methods", "create_order", "list_orders", "get_order", "get_order_complete", "get_order_payment"),
+    "commerce": ("search_products", "get_product", "get_product_link", "check_inventory", "list_categories", "get_category", "get_category_tree", "list_product_variants", "get_product_variant", "search_customer", "get_customer", "create_customer", "list_coupons", "get_coupon", "create_cart", "get_cart", "get_cart_complete", "set_cart_item_quantity", "delete_cart", "get_payment_options", "quote_shipping", "list_shipping_methods", "create_order", "list_orders", "get_order", "get_order_complete", "get_order_payment"),
 }
 
 #: Mutacoes: nunca auto-retentaveis pelo loop de critique.
@@ -36,6 +36,7 @@ MUTATION_TOOL_NAMES: frozenset[str] = frozenset(
         "set_cart_item_quantity",
         "delete_cart",
         "create_order",
+        "create_customer",
     }
 )
 

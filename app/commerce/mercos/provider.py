@@ -104,6 +104,13 @@ CAPABILITY_MATRIX: tuple[CapabilitySupport, ...] = (
         False,
         "endpoint existe; mapeamento de campos desconhecido (MERCOS_ADAPTOR_GAP)",
     ),
+    _cap(
+        "create_customer",
+        "SUPPORTED_DIRECTLY",
+        "POST /v1/customers",
+        False,
+        "fluxo determinístico; exige confirmação explícita e porta de mutação ativa",
+    ),
     # --- pedidos ----------------------------------------------------------
     _cap(
         "list_orders",
@@ -253,6 +260,14 @@ class MercosCommerceProvider:
     def supported_capabilities(self) -> frozenset[str]:
         return SUPPORTED_CAPABILITIES
 
+    @property
+    def runtime_capabilities(self) -> frozenset[str]:
+        """Capabilities usable by deterministic flows in this environment."""
+        capabilities = set(self.llm_capabilities)
+        if self._client.customer_mutations_enabled:
+            capabilities.add("create_customer")
+        return frozenset(capabilities)
+
     def sync_health(self) -> dict[str, Any]:
         """Projecao de prontidao para o /health. So booleanos e um timestamp."""
         base = {"commerce_adaptor_configured": True}
@@ -338,6 +353,27 @@ class MercosCommerceProvider:
             return {"ok": False, "error": "missing_argument", "argument": "product_id"}
         return check_inventory(self._index, tenant_id=self._tenant_id, product_id=product_id)
 
+    async def _do_create_customer(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from .client import MercosMutationDisabled
+
+        required = ("tipo", "razao_social", "nome_fantasia", "cnpj")
+        missing = [field for field in required if not arguments.get(field)]
+        if missing:
+            return {"ok": False, "error": "missing_argument", "arguments": missing}
+        try:
+            raw = await self._client.create_customer(arguments)
+        except MercosMutationDisabled:
+            return {"ok": False, "error": "mutation_disabled", "code": "mutation_disabled"}
+        payload = raw if isinstance(raw, dict) else {}
+        nested = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        customer_id = (
+            payload.get("customer_id") or payload.get("id")
+            or payload.get("mercos_id") or nested.get("id")
+        )
+        if customer_id is None:
+            return {"ok": False, "error": "customer_id_missing"}
+        return {"ok": True, "customer_id": str(customer_id)}
+
     async def list_payment_conditions(self) -> list[dict[str, Any]]:
         """Condicoes de pagamento cadastradas na fonte comercial.
 
@@ -385,6 +421,9 @@ def build_mercos_provider(settings: Any, *, index: Any | None = None) -> MercosC
         base_url=settings.mercos_adaptor_url,
         api_key=settings.mercos_adaptor_api_key,
         timeout_seconds=getattr(settings, "mercos_adaptor_timeout_seconds", 90.0),
+        customer_mutations_enabled=bool(
+            getattr(settings, "mercos_customer_mutations_enabled", False)
+        ),
     )
     # Tenant COMERCIAL, nunca o da persona. Fonte unica: Settings — sem
     # fallback literal aqui, para nao existir uma segunda verdade.

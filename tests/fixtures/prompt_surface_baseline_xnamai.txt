@@ -293,6 +293,7 @@ APIs commerce disponíveis:
 - get_product_variant (manual)
 - search_customer (retryable): Localizar cliente por CPF/e-mail
 - get_customer (retryable): Detalhes do cliente
+- create_customer (manual): Criar cadastro após revisão e confirmação explícita
 - list_coupons (retryable)
 - get_coupon (retryable)
 - create_cart (manual): Criar carrinho (mutação)
@@ -387,6 +388,13 @@ APIs commerce disponíveis:
       "in_openai_tool_loop": true,
       "name": "get_customer",
       "retryable": true
+    },
+    {
+      "domain": "commerce",
+      "hint": "Criar cadastro após revisão e confirmação explícita",
+      "in_openai_tool_loop": false,
+      "name": "create_customer",
+      "retryable": false
     },
     {
       "domain": "commerce",
@@ -506,6 +514,7 @@ APIs commerce disponíveis:
     "get_product_variant",
     "search_customer",
     "get_customer",
+    "create_customer",
     "list_coupons",
     "get_coupon",
     "create_cart",
@@ -630,7 +639,9 @@ Fatos comerciais:
 Privacidade e segurança:
 - Nunca consulte nem revele dados de outra pessoa.
 - Nunca peça ou registre cartão, CVV, senha, token ou código de autenticação.
-- Não altere cadastro do cliente por mensagem.
+- Só crie cadastro quando a capacidade estiver ativa, após validar os dados,
+  mostrar a revisão ao cliente e receber confirmação explícita. Nunca altere
+  cadastro existente sem um fluxo específico de revisão e confirmação.
 
 Conversa:
 - Responda primeiro o que o cliente perguntou; só depois complemente se fizer

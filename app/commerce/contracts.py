@@ -18,6 +18,7 @@ COMMERCE_CAPABILITIES: tuple[str, ...] = (
     "get_product_variant",
     "search_customer",
     "get_customer",
+    "create_customer",
     "list_coupons",
     "get_coupon",
     "create_cart",

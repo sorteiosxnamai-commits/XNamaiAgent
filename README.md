@@ -4,6 +4,12 @@ Agente Python/FastAPI com catálogo Mercos, continuidade de produtos e carrinho 
 
 O fluxo Mercos prepara a revisão do pedido; `create_order` continua desabilitado. Preço e estoque dependem da fonte comercial disponível.
 
+O cadastro de cliente possui fluxo determinístico próprio: coleta PF/PJ, valida
+os dados, mostra uma revisão mascarada e exige confirmação explícita antes de
+`create_customer`. A mutação fica desligada por padrão e só é habilitada após
+homologação com `MERCOS_CUSTOMER_MUTATIONS_ENABLED=true`. Consulte a
+[comparação com a base NSAgent](docs/nsagent_xnamai_customer_registration_analysis.md).
+
 Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-reliability.md).
 
 > Este projeto não inclui credenciais reais. Configure tudo em Environment Variables na Vercel.

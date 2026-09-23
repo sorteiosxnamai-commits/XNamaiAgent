@@ -65,7 +65,8 @@ def detect_commerce_inquiry(text: str | None) -> bool:
         "preco", "quanto fica", "disponibilidade", "referência", "referencia", "sku", "ean",
         "pix", "parcelamento", "parcelar", "promoção", "promocao",
         "cupom comercial", "produto", "produtos", "produto", "produto",
-        "marca", "modelo",
+        "marca", "modelo", "me cadastrar", "fazer cadastro", "criar meu cadastro",
+        "cadastro de cliente", "cadastrar cliente", "confirmo o cadastro",
     )
     unicode_phrases = (
         "voc\u00eas t\u00eam", "voc\u00eas tem", "qual o pre\u00e7o", "pre\u00e7o",

@@ -570,7 +570,8 @@ class Settings(BaseSettings):
     commerce_tenant_id: str = Field(default="xnamai", alias="COMMERCE_TENANT_ID")
 
     # --- Fronteira comercial: MercosAdaptor -------------------------------
-    # SOMENTE estas duas. Os tokens da Mercos (ApplicationToken/CompanyToken) e
+    # O agente recebe apenas URL, chave interna e portões operacionais. Os tokens
+    # da Mercos (ApplicationToken/CompanyToken) e
     # a MERCOS_BASE_URL pertencem ao MercosAdaptor e NAO podem existir aqui: o
     # XNamai fala com o adaptador por chave interna e nunca com a Mercos.
     # Portoes de mutacao, DESLIGADOS por padrao. Pedido criado por engano nao

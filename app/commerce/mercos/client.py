@@ -174,6 +174,10 @@ class MercosAdaptorClient:
         self._mutations_enabled = bool(mutations_enabled)
         self._customer_mutations_enabled = bool(customer_mutations_enabled)
 
+    @property
+    def customer_mutations_enabled(self) -> bool:
+        return self._customer_mutations_enabled
+
     # --- infraestrutura ----------------------------------------------------
 
     def _headers(self) -> dict[str, str]:

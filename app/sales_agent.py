@@ -30,6 +30,8 @@ from .checkout_data_service import (
     should_repair_checkout_data,
     update_checkout_data,
 )
+from .capability_catalog import runtime_commerce_capabilities
+from .customer_registration import handle_customer_registration_turn
 from .cart_service import (
     CartItemRequest,
     create_cart_checkout,
@@ -3103,6 +3105,17 @@ async def _handle_sales_message_inner(
             message_text=message.text,
         )
     state = commerce_state or CommerceConversationState()
+
+    registration_result = await handle_customer_registration_turn(
+        message.text,
+        state=state,
+        execute=execute_tool,
+        registration_enabled=(
+            "create_customer" in runtime_commerce_capabilities()
+        ),
+    )
+    if registration_result is not None:
+        return registration_result
 
     # Pergunta generica de catalogo ("o que voces vendem?") nao sobrevive ao
     # resto desta funcao: ha ramos que devolvem None antes do fast path mais

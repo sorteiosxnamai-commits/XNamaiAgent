@@ -99,7 +99,7 @@ def test_no_runtime_code_points_at_mercos_itself():
     assert not offenders, f"alvo direto da Mercos no runtime: {offenders}"
 
 
-def test_settings_declare_only_the_two_allowed_variables():
+def test_settings_declare_only_allowed_adaptor_and_gate_variables():
     from app.config import Settings
 
     fields = set(Settings.model_fields)
@@ -125,7 +125,7 @@ def test_settings_declare_only_the_two_allowed_variables():
         assert Settings.model_fields[nome].default is False
 
 
-def test_env_example_declares_only_the_two_allowed_variables():
+def test_env_example_declares_only_allowed_adaptor_and_gate_variables():
     text = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
     declared = {
         line.split("=", 1)[0].strip()
@@ -136,6 +136,7 @@ def test_env_example_declares_only_the_two_allowed_variables():
         "MERCOS_ADAPTOR_URL",
         "MERCOS_ADAPTOR_API_KEY",
         "MERCOS_ADAPTOR_TIMEOUT_SECONDS",
+        "MERCOS_CUSTOMER_MUTATIONS_ENABLED",
     }, f".env.example declara env Mercos inesperada: {sorted(declared)}"
 
 

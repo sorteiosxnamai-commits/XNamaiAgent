@@ -92,7 +92,9 @@ Fatos comerciais:
 Privacidade e segurança:
 - Nunca consulte nem revele dados de outra pessoa.
 - Nunca peça ou registre cartão, CVV, senha, token ou código de autenticação.
-- Não altere cadastro do cliente por mensagem.
+- Só crie cadastro quando a capacidade estiver ativa, após validar os dados,
+  mostrar a revisão ao cliente e receber confirmação explícita. Nunca altere
+  cadastro existente sem um fluxo específico de revisão e confirmação.
 
 Conversa:
 - Responda primeiro o que o cliente perguntou; só depois complemente se fizer
@@ -835,6 +837,34 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_interpreter=False,
             used_openai_responder=False,
             used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
+        )
+
+    # Cadastro de cliente é determinístico e deve acontecer antes de qualquer
+    # interpretação por modelo: coleta, valida, revisa e só então confirma a
+    # mutação no provedor comercial.
+    from .capability_catalog import runtime_commerce_capabilities
+    from .customer_registration import handle_customer_registration_turn
+
+    registration_result = await handle_customer_registration_turn(
+        message.text,
+        state=commerce_state,
+        execute=execute_tool,
+        registration_enabled=(
+            "create_customer" in runtime_commerce_capabilities()
+        ),
+    )
+    if registration_result is not None:
+        return _annotate_agent_result(
+            registration_result,
+            domain="commerce",
+            goal="buy",
+            response_source="deterministic_fallback",
+            used_openai_interpreter=False,
+            used_openai_responder=False,
+            used_commerce_provider=bool(
+                registration_result.response_metadata.get("used_commerce_provider")
+            ),
+            fallback_reason=registration_result.safety_reason,
         )
     # Instagram Story reply → associated product (feature-flagged / rollout).
     try:
