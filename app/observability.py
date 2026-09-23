@@ -111,8 +111,7 @@ def redact_value(value: Any, *, depth: int = 0) -> Any:
                     "email",
                     "phone",
                     "telefone",
-                    "documento",
-                    "tax_document",
+                    "document",  # cobre documento/tax_document e o draft de cadastro
                 )
             ):
                 redacted[str(key)] = "[REDACTED]"
@@ -386,6 +385,10 @@ def log_event(event: str, payload: dict[str, Any] | None = None) -> None:
         ),
         "full_obs": full_obs_enabled(),
     }
+    # Delivery correlation (ids only — no phone, no conversation key).
+    if runtime is not None and runtime.outbox_id is not None:
+        body["outbox_id"] = runtime.outbox_id
+        body["delivery_attempt"] = runtime.delivery_attempt
     if runtime is not None and full_obs_enabled():
         body["openai_call_count"] = runtime.openai_call_count
         body["commerce_call_count"] = runtime.commerce_call_count
@@ -448,6 +451,7 @@ def record_openai_observation(
     error_type: str | None = None,
     cached_tokens: int = 0,
     reasoning_tokens: int = 0,
+    error_category: str | None = None,
 ) -> None:
     runtime = get_current_turn()
     limits = obs_limits()
@@ -456,6 +460,7 @@ def record_openai_observation(
         "model": model,
         "ok": ok,
         "error_type": error_type,
+        "error_category": error_category,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "cached_tokens": cached_tokens,

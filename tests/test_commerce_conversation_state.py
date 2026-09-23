@@ -107,18 +107,18 @@ def test_new_presented_list_replaces_previous_positions():
 
 
 def test_openai_domain_is_not_reclassified_by_state():
-    interpreted = _interpretation(domain="raffle", domain_change_explicit=False)
+    interpreted = _interpretation(domain="store_general", domain_change_explicit=False)
 
     contextual, changed = apply_commerce_domain_context(interpreted, _state())
 
-    assert contextual.domain == "raffle"
+    assert contextual.domain == "store_general"
     assert changed is False
 
 
 def test_openai_payment_domain_remains_authoritative():
     state = _state().model_copy(update={"purchase_stage": "payment_discussion"})
     interpreted = _interpretation(
-        domain="raffle",
+        domain="store_general",
         goal="buy",
         purchase_stage="payment_discussion",
         domain_change_explicit=False,
@@ -126,39 +126,52 @@ def test_openai_payment_domain_remains_authoritative():
 
     contextual, _ = apply_commerce_domain_context(interpreted, state)
 
-    assert contextual.domain == "raffle"
+    assert contextual.domain == "store_general"
     assert contextual.goal == "buy"
 
 
-def test_explicit_raffle_change_is_preserved():
+def test_explicit_domain_change_is_preserved():
     interpreted = _interpretation(
-        domain="raffle",
+        domain="store_general",
         goal=None,
         subject={},
         references_previous_context=False,
         domain_change_explicit=True,
     )
-
-    contextual, changed = apply_commerce_domain_context(interpreted, _state())
-
-    assert contextual.domain == "raffle"
-    assert changed is False
-
-
-def test_local_raffle_fallback_remains_available_after_interpreter_failure():
-    interpreted = _interpretation(
-        domain="raffle",
-        goal=None,
-        subject={},
-        references_previous_context=False,
-        domain_change_explicit=False,
-    )
     interpreted._source = "deterministic_fallback"
 
     contextual, changed = apply_commerce_domain_context(interpreted, _state())
 
-    assert contextual.domain == "raffle"
+    assert contextual.domain == "store_general"
     assert changed is False
+
+
+def test_legacy_domain_is_not_offered_to_the_interpreter():
+    """O dominio do produto anterior nao existe mais no contrato do modelo."""
+    from openai.lib._pydantic import to_strict_json_schema
+
+    schema = to_strict_json_schema(SalesInterpretation)
+    assert "raffle" not in schema["properties"]["domain"]["enum"]
+
+
+def test_legacy_domain_value_is_read_as_out_of_scope():
+    """Valor antigo (cache/estado) e lido, nunca produzido: vira fora de escopo."""
+    interpreted = _interpretation(domain="raffle", goal=None, subject={})
+    assert interpreted.domain == "out_of_scope"
+
+
+def test_persisted_legacy_active_domain_keeps_the_rest_of_the_state():
+    """Um ``active_domain`` legado nao pode descartar carrinho e produtos."""
+    payload = _state().model_dump(mode="json")
+    payload["active_domain"] = "raffle"
+    payload["cart_session_id"] = "cart-1"
+
+    restored = CommerceConversationState.from_payload(payload)
+
+    assert restored.active_domain is None
+    assert restored.cart_session_id == "cart-1"
+    assert restored.active_product is not None
+    assert restored.active_product.product_id == "202"
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,16 @@ SITE_URL = "https://www.xnamai.com/"
 STORE_URL = "https://xnamai.meuspedidos.com.br/"
 CLUB_URL = "https://www.clubxnamai.com.br/"
 
+
+def official_public_urls() -> frozenset[str]:
+    """Pontos de entrada publicos e institucionais da Xnamai.
+
+    Fonte unica para quem precisa saber "este link e oficial?" (ex.: a
+    validacao factual). Somente as entradas exatas: paginas de produto,
+    checkout e pagamento continuam exigindo evidencia comercial do turno.
+    """
+    return frozenset({SITE_URL, STORE_URL, CLUB_URL})
+
 HUMAN_SUPPORT_MESSAGE = (
     "Vou encaminhar seu atendimento à equipe da Xnamai. "
     f"Você também pode acessar os canais oficiais pelo site {SITE_URL}."
