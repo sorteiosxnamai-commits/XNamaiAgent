@@ -171,6 +171,9 @@ class CommerceConversationState(BaseModel):
     # Cadastro solicitado no atendimento. O rascunho atravessa turnos para que
     # o cliente possa revisar antes de qualquer mutação na fonte comercial.
     customer_registration: dict[str, Any] = Field(default_factory=dict)
+    # Oferta institucional do Club é mostrada no máximo uma vez por contexto.
+    club_offer_shown: bool = False
+    club_membership_status: Literal["member", "non_member"] | None = None
     # Condicao COMERCIAL (prazo) da fonte, distinta de `selected_payment_option`,
     # que modela FORMA de pagamento (pix/cartao/boleto, parcelas, desconto).
     # Dois escalares em vez de um modelo novo: o pedido so precisa do id, e o
@@ -818,6 +821,11 @@ def evolve_commerce_state(
         customer_id = registration_state.get("customer_id")
         if customer_id is not None:
             state.mercos_customer_id = str(customer_id)
+    if metadata.get("club_offer_shown") is True:
+        state.club_offer_shown = True
+    membership_status = metadata.get("club_membership_status")
+    if membership_status in {"member", "non_member"}:
+        state.club_membership_status = membership_status
     order_state = metadata.get("order_state")
     if isinstance(order_state, dict):
         for field in (

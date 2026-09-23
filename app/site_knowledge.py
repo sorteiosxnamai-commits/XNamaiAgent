@@ -2,6 +2,7 @@
 
 SITE_URL = "https://www.xnamai.com/"
 STORE_URL = "https://xnamai.meuspedidos.com.br/"
+CLUB_URL = "https://www.clubxnamai.com.br/"
 
 HUMAN_SUPPORT_MESSAGE = (
     "Vou encaminhar seu atendimento à equipe da Xnamai. "
@@ -21,7 +22,11 @@ def build_site_knowledge_text() -> str:
 - A Xnamai é uma distribuidora de eletrônicos e acessórios de celular para venda no atacado.
 - Site institucional: {SITE_URL}
 - Catálogo e portal de pedidos: {STORE_URL}
+- Clube empresarial e planos: {CLUB_URL}
 - Esses endereços são canais oficiais públicos e podem ser compartilhados no atendimento.
+- O XNaMai Club oferece preços exclusivos em compras elegíveis para membros com assinatura ativa.
+- Se o cliente ainda não for membro, apresente o Club uma vez, sem interromper a resposta principal.
+- Consulte as regras atuais no site do Club; não prometa economia, cashback ou promoção individual.
 - Preço, estoque, compatibilidade, pedido mínimo, frete, pagamento e prazos dependem de confirmação atual no catálogo, nas ferramentas ou com a equipe.
 - Não presuma políticas de compra de usados, avaliação, troca, descontos ou promoções.
 - Não invente telefone, endereço ou contato. Quando necessário, encaminhe à equipe pelos canais oficiais.

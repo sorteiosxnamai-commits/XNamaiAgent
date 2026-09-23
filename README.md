@@ -61,7 +61,7 @@ A persona usa `AGENT_PERSONA_TENANT_ID=xnamai` e `AGENT_PERSONA_KEY=xnamai_comme
 
 A identidade está em `persona_xnamai.txt`. Para cadastrar em um ambiente configurado, execute `python scripts/seed_xnamai_persona.py`. O seed preserva personas existentes; revise e ative a versão correta pelo admin quando já houver uma persona cadastrada. Configurações e personas publicadas precisam ser atualizadas no ambiente de implantação para refletir esta versão.
 
-Canais oficiais: [site institucional](https://www.xnamai.com/) e [catálogo e pedidos](https://xnamai.meuspedidos.com.br/).
+Canais oficiais: [site institucional](https://www.xnamai.com/), [catálogo e pedidos](https://xnamai.meuspedidos.com.br/) e [XNaMai Club](https://www.clubxnamai.com.br/).
 
 Admin (Bearer `ADMIN_API_TOKEN`):
 

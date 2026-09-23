@@ -839,11 +839,24 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
         )
 
-    # Cadastro de cliente é determinístico e deve acontecer antes de qualquer
+    # Club e cadastro são determinísticos e devem acontecer antes de qualquer
     # interpretação por modelo: coleta, valida, revisa e só então confirma a
     # mutação no provedor comercial.
+    from .club_xnamai import handle_club_turn
     from .capability_catalog import runtime_commerce_capabilities
     from .customer_registration import handle_customer_registration_turn
+
+    club_result = handle_club_turn(message.text, state=commerce_state)
+    if club_result is not None:
+        return _annotate_agent_result(
+            club_result,
+            domain="commerce",
+            goal="discover",
+            response_source="deterministic_fallback",
+            used_openai_interpreter=False,
+            used_openai_responder=False,
+            used_commerce_provider=False,
+        )
 
     registration_result = await handle_customer_registration_turn(
         message.text,

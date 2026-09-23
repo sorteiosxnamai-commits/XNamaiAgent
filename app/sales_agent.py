@@ -31,6 +31,7 @@ from .checkout_data_service import (
     update_checkout_data,
 )
 from .capability_catalog import runtime_commerce_capabilities
+from .club_xnamai import handle_club_turn, maybe_append_club_offer
 from .customer_registration import handle_customer_registration_turn
 from .cart_service import (
     CartItemRequest,
@@ -1325,59 +1326,80 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
     print("[sales.turn]", {"outcome": resultado.outcome, "action": resultado.action})
 
     if resultado.outcome == OUTCOME_PURCHASE_INTENT:
+        reply, offered = maybe_append_club_offer(
+            f"Você pode comprar pelo catálogo oficial da XNamai: {STORE_URL} "
+            "Se quiser ajuda para encontrar algo, diga o tipo de produto ou o que "
+            "você precisa — por exemplo, cabo, carregador, fone ou capa.",
+            state=state,
+        )
         return AgentResult(
-            reply_text=(
-                f"Você pode comprar pelo catálogo oficial da XNamai: {STORE_URL} "
-                "Se quiser ajuda para encontrar algo, diga o tipo de produto ou o que "
-                "você precisa — por exemplo, cabo, carregador, fone ou capa."
-            ),
+            reply_text=reply,
             intent="commerce",
             handoff_required=False,
             response_metadata=_metadados(
                 used_commerce_provider=False,
                 active_topic="purchase_guidance",
+                club_offer_shown=offered or getattr(state, "club_offer_shown", False),
             ),
         )
 
     if resultado.outcome == OUTCOME_PROVIDER_UNAVAILABLE:
         # "Nao consegui olhar" nunca pode virar "nao temos".
+        reply, offered = maybe_append_club_offer(
+            "Não consegui consultar os produtos da loja neste momento. "
+            f"Você pode ver o catálogo oficial da XNamai em {STORE_URL}",
+            state=state,
+        )
         return AgentResult(
-            reply_text=(
-                "Não consegui consultar as informações da loja neste momento. "
-                "Tente novamente em instantes."
-            ),
+            reply_text=reply,
             intent="commerce",
             handoff_required=False,
             safety_reason="commerce_provider_unavailable",
-            response_metadata=_metadados(used_commerce_provider=False),
+            response_metadata=_metadados(
+                used_commerce_provider=False,
+                active_topic="product_catalog",
+                club_offer_shown=offered or bool(getattr(state, "club_offer_shown", False)),
+            ),
         )
 
     if resultado.outcome == OUTCOME_BROWSE:
         if not resultado.products:
             return None
-        return AgentResult(
-            reply_text="Estes são alguns dos produtos disponíveis:"
+        reply, offered = maybe_append_club_offer(
+            "Estes são alguns dos produtos disponíveis:"
             + quebra
             + _numerar(resultado.products),
+            state=state,
+        )
+        return AgentResult(
+            reply_text=reply,
             intent="commerce",
             handoff_required=False,
             commercial_data={"products": resultado.products},
             response_metadata=_metadados(
-                presented_products=True, active_topic="product_catalog"
+                presented_products=True,
+                active_topic="product_catalog",
+                club_offer_shown=offered or getattr(state, "club_offer_shown", False),
             ),
         )
 
     if resultado.outcome == OUTCOME_AMBIGUOUS and resultado.products:
-        return AgentResult(
-            reply_text="Encontrei mais de uma opção. Qual destas você procura?"
+        reply, offered = maybe_append_club_offer(
+            "Encontrei mais de uma opção. Qual destas você procura?"
             + quebra
             + _numerar(resultado.products),
+            state=state,
+        )
+        return AgentResult(
+            reply_text=reply,
             intent="commerce",
             handoff_required=False,
             safety_reason="commerce_clarification",
             commercial_data={"products": resultado.products},
             response_metadata=_metadados(
-                presented_products=True, active_topic="product_catalog"
+                presented_products=True,
+                active_topic="product_catalog",
+                club_offer_shown=offered or getattr(state, "club_offer_shown", False),
             ),
         )
 
@@ -3105,6 +3127,10 @@ async def _handle_sales_message_inner(
             message_text=message.text,
         )
     state = commerce_state or CommerceConversationState()
+
+    club_result = handle_club_turn(message.text, state=state)
+    if club_result is not None:
+        return club_result
 
     registration_result = await handle_customer_registration_turn(
         message.text,

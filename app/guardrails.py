@@ -67,6 +67,8 @@ def detect_commerce_inquiry(text: str | None) -> bool:
         "cupom comercial", "produto", "produtos", "produto", "produto",
         "marca", "modelo", "me cadastrar", "fazer cadastro", "criar meu cadastro",
         "cadastro de cliente", "cadastrar cliente", "confirmo o cadastro",
+        "club xnamai", "clube xnamai", "xnamai club", "preço de membro",
+        "preco de membro", "quero ser membro", "quero assinar o club",
     )
     unicode_phrases = (
         "voc\u00eas t\u00eam", "voc\u00eas tem", "qual o pre\u00e7o", "pre\u00e7o",

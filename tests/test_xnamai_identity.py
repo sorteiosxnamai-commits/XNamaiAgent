@@ -2,7 +2,7 @@
 from pathlib import Path
 import pytest
 
-from app.site_knowledge import SITE_URL, STORE_URL, build_site_knowledge_text
+from app.site_knowledge import CLUB_URL, SITE_URL, STORE_URL, build_site_knowledge_text
 
 
 def test_official_channels_are_in_system_instructions_and_persona():
@@ -12,6 +12,7 @@ def test_official_channels_are_in_system_instructions_and_persona():
         assert "xnamai" in text.casefold()
         assert SITE_URL in text
         assert STORE_URL in text
+        assert CLUB_URL in text
         assert "eletrônicos" in text
         assert "acessórios de celular" in text
 
@@ -76,7 +77,23 @@ def test_requested_accessory_category_is_not_rejected_as_an_unrelated_accessory(
     assert score_catalog_candidates([product], interpretation) == [product]
 
 
-@pytest.mark.parametrize("term", ("Tray", "sorteio", "Cartão Presente", "Lotomania"))
+@pytest.mark.parametrize(
+    "term",
+    (
+        "Tray", "sorteio", "Cartão Presente", "Lotomania",
+        *("".join(map(chr, codepoints)) for codepoints in (
+            (78, 101, 119, 32, 83, 116, 111, 114, 101),
+            (114, 101, 108, 243, 103, 105, 111),
+            (114, 101, 108, 111, 103, 105, 111),
+            (115, 109, 97, 114, 116, 119, 97, 116, 99, 104),
+            (119, 97, 116, 99, 104),
+        )),
+    ),
+)
 def test_active_prompt_contains_no_inactive_business_rules(term):
     from prompt_surface import render_prompt_surface
-    assert not [name for name, text in render_prompt_surface().items() if term in text]
+    folded = term.casefold()
+    assert not [
+        name for name, text in render_prompt_surface().items()
+        if folded in text.casefold()
+    ]
