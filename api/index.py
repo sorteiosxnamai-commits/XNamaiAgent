@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.background import BackgroundTask
 
 from app.security import verify_brevo_webhook, verify_admin_token, verify_remarketing_cron
 from app.persona_admin_api import router as persona_admin_router
@@ -32,6 +33,7 @@ from app.db import (
 )
 from app.inbound_coalesce import is_caption_echo_of_recent_image
 from app.config import get_allowed_channels, get_settings
+from app.request_body import read_limited_request_body
 from app.commerce.provider import get_commerce_provider
 from app.rollout import build_rollout_status
 from app.conversation_lock import (
@@ -99,7 +101,7 @@ async def turn_runtime_middleware(request: Request, call_next):
     context = TurnRuntimeContext(
         trace_id=_request_trace_id(request),
         llm_budget=LLMCallBudget(
-            max_calls=int(budget_cfg.get("max_calls") or 2),
+            max_calls=int(budget_cfg.get("max_calls", 2)),
             enforce=bool(budget_cfg.get("enforce", True)),
         ),
     )
@@ -218,7 +220,7 @@ async def read_request_payload(request: Request) -> dict:
 
     Never lets JSONDecodeError crash the ASGI app.
     """
-    raw_body = await request.body()
+    raw_body = await read_limited_request_body(request)
 
     if not raw_body:
         return {}
@@ -262,7 +264,6 @@ async def read_request_payload(request: Request) -> dict:
             "error": "invalid_json_body",
             "message": "O body recebido não é um JSON válido.",
             "content_type": content_type,
-            "raw_preview": raw_text[:200],
             "hint": "Envie Content-Type: application/json com propriedades entre aspas duplas.",
         },
     )
@@ -715,6 +716,7 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
     # FASE 2: optional durable enqueue — HTTP 200 before agent turn.
     if bool(getattr(settings, "agent_async_ingress_enabled", False)):
         from app.ingress.inbox import enqueue_inbound
+        from app.ingress.dispatch import process_pending_queues
 
         created, inbox_id = enqueue_inbound(
             provider=incoming.provider or "brevo",
@@ -724,8 +726,10 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
             visitor_id=incoming.visitor_id,
             sender_key=incoming.sender_key,
             event_name=event_name,
-            payload=payload if isinstance(payload, dict) else {},
+            payload={"normalized": incoming.model_dump(mode="json")},
         )
+        if inbox_id is None:
+            raise HTTPException(503, detail="inbox_acceptance_failed")
         return JSONResponse(
             {
                 "ok": True,
@@ -733,7 +737,8 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
                 "created": created,
                 "inbox_id": inbox_id,
                 "async_ingress": True,
-            }
+            },
+            background=BackgroundTask(process_pending_queues),
         )
 
     # Cheap duplicate check before waiting on the conversation lock. Brevo often
@@ -1034,6 +1039,7 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
                 "intent": agent_result.intent,
                 "handoff_required": agent_result.handoff_required,
                 "safety_reason": agent_result.safety_reason,
+                "response_metadata": agent_result.response_metadata,
                 "provider_send_ok": provider_send_ok,
                 "provider_response": provider_response,
             }
@@ -1290,7 +1296,7 @@ async def meta_instagram_webhook(request: Request):
     if not meta_webhook_enabled():
         raise HTTPException(status_code=404, detail={"error": "meta_webhook_disabled"})
 
-    body = await request.body()
+    body = await read_limited_request_body(request)
     signature_sha256 = (
         request.headers.get("x-hub-signature-256")
         or request.headers.get("X-Hub-Signature-256")
@@ -1376,9 +1382,11 @@ async def meta_instagram_webhook(request: Request):
                 "raw": incoming.raw,
             },
         )
+        if inbox_id is None:
+            raise HTTPException(503, detail="inbox_unavailable")
         queued.append({"created": created, "inbox_id": inbox_id})
 
-    # Process immediately so Instagram DMs don't wait for the minute cron.
+    # Process immediately; the periodic queue worker recovers interruptions.
     worker_result = None
     if queued:
         try:
@@ -1457,7 +1465,7 @@ async def ycloud_whatsapp_webhook(request: Request):
     if not ycloud_webhook_enabled():
         raise HTTPException(status_code=404, detail={"error": "ycloud_webhook_disabled"})
 
-    body = await request.body()
+    body = await read_limited_request_body(request)
     signature_header = (
         request.headers.get("ycloud-signature")
         or request.headers.get("YCloud-Signature")
@@ -1561,6 +1569,8 @@ async def ycloud_whatsapp_webhook(request: Request):
             "raw": incoming.raw,
         },
     )
+    if inbox_id is None:
+        raise HTTPException(503, detail="inbox_unavailable")
     queued = [{"created": created, "inbox_id": inbox_id}]
     log_event(
         "ycloud.inbound_accepted",
@@ -1977,9 +1987,10 @@ async def cron_instagram_story_media_retention_get():
     dependencies=[Depends(verify_remarketing_cron)],
 )
 async def cron_process_inbox():
-    from app.ingress.worker import process_inbox_batch
+    from app.ingress.dispatch import process_pending_queues
 
-    return await process_inbox_batch()
+    result = await process_pending_queues()
+    return {**result["inbox"], "ok": result["ok"], "outbox": result["outbox"]}
 
 
 @app.get(

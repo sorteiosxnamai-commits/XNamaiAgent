@@ -34,7 +34,7 @@ def runtime():
 async def test_unavailable_call_is_still_observed(runtime):
     assert runtime.commerce_calls == []
 
-    result = await execute_tool("search_products", {"query": "relogio"})
+    result = await execute_tool("search_products", {"query": "produto"})
 
     assert result["error"] == COMMERCE_UNAVAILABLE_CODE
     assert len(runtime.commerce_calls) == 1, "chamada indisponível também precisa ser observada"
@@ -57,7 +57,7 @@ async def test_successful_call_is_observed_as_ok(runtime):
 
     try:
         set_commerce_provider(FakeProvider())
-        result = await execute_tool("search_products", {"query": "relogio"})
+        result = await execute_tool("search_products", {"query": "produto"})
     finally:
         reset_commerce_provider()
 

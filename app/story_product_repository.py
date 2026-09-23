@@ -229,7 +229,7 @@ class StoryProductRepository:
         if not tenant_id or not media_sha256:
             raise ValueError("tenant_scoped_lookup_required")
         version = analysis_version or str(
-            getattr(get_settings(), "instagram_story_analysis_version", "v2") or "v2"
+            getattr(get_settings(), "instagram_story_analysis_version", "xnamai-products-v1") or "xnamai-products-v1"
         )
         ensure_tables()
         try:
@@ -310,7 +310,7 @@ class StoryProductRepository:
     ) -> None:
         settings = get_settings()
         version = analysis_version or str(
-            getattr(settings, "instagram_story_analysis_version", "v2") or "v2"
+            getattr(settings, "instagram_story_analysis_version", "xnamai-products-v1") or "xnamai-products-v1"
         )
         retention_days = int(
             getattr(settings, "instagram_story_media_retention_days", 7) or 7

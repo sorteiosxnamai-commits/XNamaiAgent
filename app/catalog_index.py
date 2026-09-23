@@ -33,7 +33,7 @@ FactualSource = Literal[
 
 
 class CanonicalCatalogItem(BaseModel):
-    tenant_id: str = "newstore"
+    tenant_id: str = "xnamai"
     catalog_item_key: str = ""
     product_id: str
     variant_id: str | None = None
@@ -46,12 +46,12 @@ class CanonicalCatalogItem(BaseModel):
     title_normalized: str = ""
     category: str | None = None
     gender: str | None = None
-    mechanism: str | None = None
-    case_size: str | None = None
-    dial_color: str | None = None
-    strap_color: str | None = None
+    technology: str | None = None
+    dimensions: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
     material: str | None = None
-    strap_type: str | None = None
+    connector_type: str | None = None
     colors_normalized: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     price: float | None = None
@@ -192,7 +192,7 @@ def to_canonical_item(
         tenant_id=(
             tenant_id
             or getattr(settings, "agent_persona_tenant_id", None)
-            or "newstore"
+            or "xnamai"
         ),
         product_id=str(product.get("id")),
         variant_id=(
@@ -229,16 +229,16 @@ def to_canonical_item(
         )
         or None,
         gender=None,
-        mechanism=None,
-        case_size=None,
-        dial_color=str(color) if color else None,
-        strap_color=None,
+        technology=None,
+        dimensions=None,
+        primary_color=str(color) if color else None,
+        secondary_color=None,
         material=(
             str(product.get("material"))
             if product.get("material")
             else None
         ),
-        strap_type=None,
+        connector_type=None,
         colors_normalized=[c for c in colors if c],
         aliases=[],
         price=price,
@@ -291,7 +291,7 @@ def _hard_constraints_from_interpretation(
         "budget_max": prefs.budget_max,
         "brand_exclusive": False,
         "exact_only": False,
-        "dial_color": None,
+        "primary_color": None,
         "gender": None,
         "material": None,
         "must_match_fields": [],
@@ -332,7 +332,7 @@ def _hard_constraints_from_interpretation(
                     else hard["budget_max"],
                     "brand_exclusive": hard["brand_exclusive"] or hc.brand_exclusive,
                     "exact_only": hard["exact_only"] or hc.exact_only,
-                    "dial_color": hc.dial_color or hc.strap_color,
+                    "primary_color": hc.primary_color or hc.secondary_color,
                     "gender": hc.gender,
                     "material": hc.material,
                     "must_match_fields": list(hc.must_match_fields or []),
@@ -412,15 +412,15 @@ def evaluate_hard_constraints(
 
     # exact_only / "somente": color & material become hard when provided.
     if hard.get("exact_only") or mode == "exact":
-        dial = _fold(hard.get("dial_color"))
-        if dial:
+        primary = _fold(hard.get("primary_color"))
+        if primary:
             color_blob = " ".join(item.colors_normalized) + " " + text
             try:
                 from .product_retrieval import expand_color_aliases
 
-                aliases = expand_color_aliases(dial)
+                aliases = expand_color_aliases(primary)
             except Exception:
-                aliases = frozenset({dial})
+                aliases = frozenset({primary})
             if not any(alias in color_blob for alias in aliases):
                 return False, "color_hard_mismatch", exact
             exact.append("color")
@@ -830,8 +830,7 @@ def upsert_canonical_items(
                         INSERT INTO public.ai_catalog_index (
                             tenant_id, catalog_item_key, product_id, variant_id, sku, ean, reference,
                             brand, collection, model, title_normalized, category,
-                            gender, mechanism, case_size, dial_color, strap_color,
-                            material, strap_type, colors_normalized, aliases,
+                            gender, material, colors_normalized, aliases,
                             price, promotional_price, stock, available,
                             available_in_store, url, image_url, freshness_at,
                             factual_source, payload
@@ -839,8 +838,7 @@ def upsert_canonical_items(
                             %(tenant_id)s, %(catalog_item_key)s, %(product_id)s, %(variant_id)s, %(sku)s,
                             %(ean)s, %(reference)s, %(brand)s, %(collection)s,
                             %(model)s, %(title_normalized)s, %(category)s,
-                            %(gender)s, %(mechanism)s, %(case_size)s, %(dial_color)s,
-                            %(strap_color)s, %(material)s, %(strap_type)s,
+                            %(gender)s, %(material)s,
                             %(colors_normalized)s::jsonb, %(aliases)s::jsonb,
                             %(price)s, %(promotional_price)s, %(stock)s, %(available)s,
                             %(available_in_store)s, %(url)s, %(image_url)s,

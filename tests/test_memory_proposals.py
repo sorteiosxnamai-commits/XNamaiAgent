@@ -38,14 +38,14 @@ def test_proposals_persist_without_auto_apply(monkeypatch):
     monkeypatch.setattr(service, "get_settings", lambda: _settings())
 
     envelope = AgentTurnEnvelope(
-        reply="Perfeito, anotei que voce prefere Tissot.",
+        reply="Perfeito, anotei que voce prefere MarcaA.",
         memory_proposals=[
             MemoryProposal(
                 action=MemoryAction.upsert,
                 scope=MemoryScope.contact,
                 kind=MemoryKind.brand_preference,
                 key="preferred_brands",
-                value="Tissot",
+                value="MarcaA",
                 importance=0.9,
                 confidence=0.95,
                 reason_code="explicit_user_preference",
@@ -55,7 +55,7 @@ def test_proposals_persist_without_auto_apply(monkeypatch):
     )
     result = process_agent_memory_proposals(
         envelope=envelope,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="conv-1",
         sender_key="whatsapp:5511999999999",
         inbound_id=10,
@@ -85,7 +85,7 @@ def test_disabled_flag_is_noop(monkeypatch):
                 scope=MemoryScope.contact,
                 kind=MemoryKind.brand_preference,
                 key="preferred_brands",
-                value="Hamilton",
+                value="MarcaB",
                 importance=0.9,
                 confidence=0.9,
                 reason_code="explicit_user_preference",
@@ -94,7 +94,7 @@ def test_disabled_flag_is_noop(monkeypatch):
     )
     result = process_agent_memory_proposals(
         envelope=envelope,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
     )
@@ -125,7 +125,7 @@ def test_extension_proposal_stays_pending_review(monkeypatch):
     )
     result = process_agent_memory_proposals(
         envelope=envelope,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
         inbound_id=3,
@@ -153,14 +153,14 @@ def test_auto_apply_when_enabled(monkeypatch):
         lambda **_k: {"expired": 0, "pruned": 0},
     )
     envelope = AgentTurnEnvelope(
-        reply="Anotei Hamilton.",
+        reply="Anotei MarcaB.",
         memory_proposals=[
             MemoryProposal(
                 action=MemoryAction.upsert,
                 scope=MemoryScope.contact,
                 kind=MemoryKind.brand_preference,
                 key="preferred_brands",
-                value="Hamilton",
+                value="MarcaB",
                 importance=0.9,
                 confidence=0.95,
                 reason_code="explicit_user_correction",
@@ -170,11 +170,11 @@ def test_auto_apply_when_enabled(monkeypatch):
     )
     result = process_agent_memory_proposals(
         envelope=envelope,
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
         inbound_id=7,
     )
     assert result.proposals_applied == 1
     assert len(store.memories) == 1
-    assert store.memories[0]["value"]["value"] == "Hamilton"
+    assert store.memories[0]["value"]["value"] == "MarcaB"

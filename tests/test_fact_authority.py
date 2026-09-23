@@ -81,12 +81,12 @@ def test_claim_from_product_field_marks_revalidated():
             "current_price": 199.9,
             "_revalidated": True,
             "_factual_source": "tray_live",
-            "tenant_id": "newstore",
+            "tenant_id": "xnamai",
         },
         kind="price",
         key="current_price",
         value=199.9,
-        tenant_id="newstore",
+        tenant_id="xnamai",
     )
     assert claim.source == FactSource.COMMERCE_LIVE
     assert claim.product_id == "42"

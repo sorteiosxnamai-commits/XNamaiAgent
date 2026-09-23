@@ -400,7 +400,7 @@ async def test_tool_loop_preserves_call_ids_and_outputs(responses_settings):
                         type="function_call",
                         call_id="call_a",
                         name="search_products",
-                        arguments='{"q":"seiko"}',
+                        arguments='{"q":"marcad"}',
                     ),
                     SimpleNamespace(
                         type="function_call",
@@ -465,7 +465,7 @@ async def test_tool_loop_preserves_call_ids_and_outputs(responses_settings):
         tools=tools,
         execute_tool=execute_tool,
         instructions="sys",
-        input_items="quero seiko",
+        input_items="quero marcad",
         max_rounds=3,
     )
     assert result.text == "pronto"

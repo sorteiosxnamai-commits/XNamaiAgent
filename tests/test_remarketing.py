@@ -32,7 +32,7 @@ def test_stage_prioritizes_payment_checkout_and_cart():
     assert _remarketing_stage({"order_payment_status": "pending"}) == "awaiting_payment"
     assert _remarketing_stage({"purchase_stage": "shipping"}) == "checkout"
     assert _remarketing_stage({"cart_session_id": "cart-1"}) == "cart"
-    assert _remarketing_stage({"active_product": {"name": "Relógio"}}) == "product_selection"
+    assert _remarketing_stage({"active_product": {"name": "produto"}}) == "product_selection"
 
 
 def test_message_is_stage_specific_and_always_contains_opt_out():
@@ -71,7 +71,7 @@ async def test_batch_replies_only_through_the_origin_channel(monkeypatch):
                 "conversation_status_id": 20,
                 "touch_number": 1,
                 "stage": "product_selection",
-                "product_name": "Relógio",
+                "product_name": "produto",
                 "channel": "instagram",
                 "sender_key": "instagram:user-1",
                 "visitor_id": "visitor-1",

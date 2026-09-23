@@ -184,10 +184,10 @@ async def test_image_only_fragment_is_not_skipped_as_no_text(monkeypatch):
                 "type": "visitor",
                 "id": "message-img-1",
                 "file": {
-                    "link": "https://cdn.example.com/watch.jpg",
+                    "link": "https://cdn.example.com/product.jpg",
                     "mimeType": "image/jpeg",
                     "type": "image",
-                    "name": "watch.jpg",
+                    "name": "product.jpg",
                 },
             }
         ],
@@ -201,7 +201,7 @@ async def test_image_only_fragment_is_not_skipped_as_no_text(monkeypatch):
 
     assert response.status_code == 200
     assert len(processed) == 1
-    assert processed[0].image_url == "https://cdn.example.com/watch.jpg"
+    assert processed[0].image_url == "https://cdn.example.com/product.jpg"
     assert processed[0].attachment_type == "image"
 
 

@@ -89,9 +89,16 @@ def redact_value(value: Any, *, depth: int = 0) -> Any:
         ]
     if isinstance(value, dict):
         redacted: dict[str, Any] = {}
+        customer_identity_keys = {
+            "razao_social",
+            "razão_social",
+            "nome_fantasia",
+            "legal_name",
+            "trade_name",
+        }
         for key, item in list(value.items())[: limits["dict_items"]]:
             key_l = str(key).casefold()
-            if any(
+            if key_l in customer_identity_keys or any(
                 token in key_l
                 for token in (
                     "token",
@@ -103,6 +110,8 @@ def redact_value(value: Any, *, depth: int = 0) -> Any:
                     "cnpj",
                     "email",
                     "phone",
+                    "telefone",
+                    "documento",
                     "tax_document",
                 )
             ):

@@ -98,7 +98,7 @@ def _tools(executar) -> list[str]:
     "texto",
     ["quero fazer um pedido", "quero fazer pedido", "quero comprar",
      "quero pedir", "como faço um pedido?", "quero fechar um pedido",
-     "quero levar", "como compro?"],
+     "quero levar", "como compro?", "como faço para comprar com vocês?"],
 )
 def test_purchase_intent_is_not_a_product_search(texto):
     resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
@@ -121,6 +121,13 @@ async def test_purchase_intent_does_not_hit_the_catalog():
     assert r.outcome == OUTCOME_PURCHASE_INTENT
     assert r.outcome != OUTCOME_PRODUCT_NOT_FOUND
     assert "search_products" not in _tools(executar)
+
+
+@pytest.mark.parametrize("texto", ["modelo de quê?", "modelo do que?", "qual modelo?"])
+def test_question_about_model_is_guidance_not_a_catalog_query(texto):
+    resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
+    assert resolucao.action == ACTION_START_PURCHASE
+    assert resolucao.requires_catalog_search is False
 
 
 # === B. "tem produto disponivel?" e browse, nao clarificacao ===============
@@ -270,7 +277,7 @@ def test_a_trailing_number_is_not_a_position_when_the_text_does_not_match():
             or resolucao.resolved_product.product_id != FKT["id"])
 
 
-@pytest.mark.parametrize("texto", ["quero iphone7", "tem s23?", "tem a54?", "watch5"])
+@pytest.mark.parametrize("texto", ["quero iphone7", "tem s23?", "tem a54?", "phone5"])
 def test_model_numbers_are_not_read_as_positions(texto):
     lista = _lista(OUTROS)
     estado = CommerceConversationState(last_presented_products=lista)

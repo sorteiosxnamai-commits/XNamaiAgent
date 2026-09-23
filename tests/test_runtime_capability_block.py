@@ -139,7 +139,7 @@ def test_the_block_never_names_a_vendor(com_provider):
     for provider in (_provider_pronto(), _provider_sem_sync()):
         com_provider(provider)
         minusculo = runtime_capability_block().casefold()
-        for marca in ("mercos", "tray", "newstore", "supabase"):
+        for marca in ("mercos", "tray", "xnamai", "supabase"):
             assert marca not in minusculo
 
 

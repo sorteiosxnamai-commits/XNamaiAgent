@@ -89,7 +89,7 @@ def evaluate_freshness(
 
     age = (reference - synced_at).total_seconds()
     if age < 0:
-        # Relogio adiantado na origem: tratar como recem-sincronizado, nunca
+        # produto adiantado na origem: tratar como recem-sincronizado, nunca
         # como "do futuro" (o que daria validade infinita).
         age = 0.0
 

@@ -1,4 +1,4 @@
-# OBSERVABILITY_BREAKING_RENAME — Parte 1 (neutralizacao NewStore/Tray)
+# OBSERVABILITY_BREAKING_RENAME — Parte 1 (neutralizacao XNamai/Tray)
 
 A telemetria comercial deixou de citar o fornecedor legado no nome dos eventos,
 contadores e campos.

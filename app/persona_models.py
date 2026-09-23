@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 PersonaStatus = Literal["draft", "active", "archived"]
@@ -29,7 +29,14 @@ class PersonaVersion(BaseModel):
 
 
 class PersonaVersionCreate(BaseModel):
-    name: str = "NewStore Commercial"
+    name: str = "XNamai Comercial"
     instructions: str
     created_by: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_business_policies(cls, value):
+        from .business_policy import BusinessPolicy
+        BusinessPolicy.model_validate(value.get("business_policies") or {})
+        return value

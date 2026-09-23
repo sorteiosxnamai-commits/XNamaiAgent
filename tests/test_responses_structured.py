@@ -26,8 +26,8 @@ async def test_responses_parse_returns_pydantic(monkeypatch):
             assert kwargs["text_format"] is ProductHint
             assert kwargs["store"] is False
             return SimpleNamespace(
-                output_parsed=ProductHint(brand="Tissot", model="PRX"),
-                output_text='{"brand":"Tissot","model":"PRX"}',
+                output_parsed=ProductHint(brand="MarcaA", model="PBX"),
+                output_text='{"brand":"MarcaA","model":"PBX"}',
                 status="completed",
                 refusal=None,
                 output=[],
@@ -38,8 +38,8 @@ async def test_responses_parse_returns_pydantic(monkeypatch):
         model="gpt-4.1-mini",
         text_format=ProductHint,
         instructions="extraia marca",
-        input_items="quero um Tissot PRX",
+        input_items="quero um MarcaA PBX",
     )
     assert isinstance(result.parsed, ProductHint)
-    assert result.parsed.brand == "Tissot"
-    assert result.parsed.model == "PRX"
+    assert result.parsed.brand == "MarcaA"
+    assert result.parsed.model == "PBX"

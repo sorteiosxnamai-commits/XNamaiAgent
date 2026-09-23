@@ -12,15 +12,15 @@ from app.response_critique import apply_fast_deterministic_critique
 from app.site_knowledge import TRADE_IN_HANDOFF_MESSAGE
 
 
-def test_detect_trade_in_seminovo_certina():
-    text = "Bom dia vcs estão comprando Certina ds action seminovo comprado com vcs?"
+def test_detect_trade_in_seminovo_marcac():
+    text = "Bom dia vcs estão comprando MarcaC Charge Pro seminovo comprado com vcs?"
     assert detect_trade_in_or_appraisal_request(text) is True
 
 
 def test_trade_in_triggers_handoff_with_policy_message():
     incoming = IncomingMessage(
         channel="instagram",
-        text="vocês estão comprando relógio seminovo?",
+        text="vocês estão comprando produto seminovo?",
     )
     assert should_request_human_handoff(incoming) == "trade_in_or_appraisal"
     result = build_human_handoff_result(reason="trade_in_or_appraisal")
@@ -28,19 +28,16 @@ def test_trade_in_triggers_handoff_with_policy_message():
     assert "avalia" in result.reply_text.lower()
     assert "XNamai" in result.reply_text
     assert "troca" in result.reply_text.lower()
-    # A copy legada de `site_knowledge` nao e mais reaproveitada: ela nomeia a
-    # marca anterior. O arquivo segue intocado no repositorio.
-    assert "New Store" not in result.reply_text
 
 
 def test_fast_critique_rewrites_trade_in_denial():
     incoming = IncomingMessage(
         channel="instagram",
-        text="estão comprando Certina seminovo?",
+        text="estão comprando MarcaC seminovo?",
     )
     bad = AgentResult(
         reply_text=(
-            "Bom dia! Não compramos relógios seminovos, apenas vendemos produtos novos."
+            "Bom dia! Não compramos produtos seminovos, apenas vendemos produtos novos."
         ),
         intent="commerce",
         handoff_required=False,

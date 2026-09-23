@@ -1,46 +1,23 @@
-"""Isolamento de ambiente para a suite.
+"""Test isolation: ignore local dotenv files and forbid live DB/HTTP traffic.
 
-Por que isto existe
--------------------
-`Settings` le o arquivo `.env`. Num ambiente de desenvolvimento com credenciais
-comerciais reais configuradas, a fabrica de provider passava a construir um
-`MercosCommerceProvider` de verdade durante os testes — e o
-`monkeypatch.delenv` dos testes nao adiantava, porque o valor vinha do arquivo,
-nao da env do processo.
-
-O efeito era duplo e silencioso:
-
-* testes que afirmam "sem configuracao -> NullCommerceProvider" falhavam na
-  maquina de quem tinha credencial, e passavam em CI — o pior tipo de teste;
-* a suite fazia chamada HTTP para o adaptador de PRODUCAO. Nenhum teste deve
-  tocar a Mercos real, nem para leitura.
-
-A neutralizacao abaixo e minima e explicita: so as variaveis da fronteira
-comercial. As demais (YCloud, OpenAI, banco) seguem como o ambiente definir,
-porque varios testes dependem do comportamento "ausente por padrao" delas.
-
-Um teste que QUEIRA um provider comercial configurado constroi o `Settings`
-explicitamente (como `tests/test_commerce_tenant_isolation.py` faz) — nunca por
-vazamento do ambiente.
+Tests can replace psycopg with explicit fakes and HTTPX with MockTransport,
+ASGITransport, WSGITransport or FastAPI TestClient. Blocking connections also
+protects developer machines that have production credentials in the environment.
 """
 
 from __future__ import annotations
 
 import pytest
 
-#: Variaveis que decidem se existe fonte comercial. Vazias, o provider e o Null.
-_COMMERCE_ENV = (
-    "MERCOS_ADAPTOR_URL",
-    "MERCOS_ADAPTOR_API_KEY",
-    "MERCOS_ADAPTOR_TIMEOUT_SECONDS",
-    "COMMERCE_TENANT_ID",
-)
 
+@pytest.fixture(autouse=True)
+def _no_real_database_connections(monkeypatch):
+    import psycopg
 
-#: Hosts que nao saem para a rede: TestClient do FastAPI ("test"/"testserver"),
-#: loopback e os dominios reservados para exemplo/teste.
-_TEST_HOSTS = frozenset({"test", "testserver", "localhost", "127.0.0.1", "::1"})
+    def blocked(*args, **kwargs):
+        raise AssertionError("teste tentou abrir conexão real de banco — use um fake")
 
+    monkeypatch.setattr(psycopg, "connect", blocked)
 
 @pytest.fixture(autouse=True, scope="session")
 def _isolate_commerce_environment():
@@ -77,19 +54,26 @@ def _no_real_commerce_calls(monkeypatch):
 
     real_send = httpx.AsyncClient.send
 
-    def _permitido(host: str) -> bool:
-        if not host:
-            return True
-        if host in _TEST_HOSTS or host.endswith(".example.com"):
-            return True
-        return host.endswith(".invalid") or host.endswith(".localhost")
+    def _permitido(client, request) -> bool:
+        transport = client._transport_for_url(request.url)
+        return isinstance(transport, (httpx.MockTransport, httpx.ASGITransport, httpx.WSGITransport)) or (
+            type(transport).__module__ == "starlette.testclient"
+        )
 
     async def guarded(self, request, *args, **kwargs):
         host = request.url.host or ""
-        if not _permitido(host):
+        if not _permitido(self, request):
             raise AssertionError(
                 f"teste tentou chamada HTTP real para {host!r} — use MockTransport"
             )
         return await real_send(self, request, *args, **kwargs)
 
     monkeypatch.setattr(httpx.AsyncClient, "send", guarded)
+    real_sync_send = httpx.Client.send
+
+    def guarded_sync(self, request, *args, **kwargs):
+        if not _permitido(self, request):
+            raise AssertionError("teste tentou chamada HTTP real — use MockTransport")
+        return real_sync_send(self, request, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.Client, "send", guarded_sync)

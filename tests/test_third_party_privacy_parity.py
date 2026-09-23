@@ -53,9 +53,9 @@ BASELINE_CASES = [
     ("saldo do Joao", "security_refusal", "conta de terceiro -> recusa"),
     ("qual o saldo do telefone 48988887777", "security_refusal", "conta de terceiro -> recusa"),
     ("quero ver o pedido do telefone 48988887777", "commerce", "comercio com telefone NAO e recusa"),
-    ("voces tem Tissot Seastar para o 48988887777?", "commerce", "comercio com telefone NAO e recusa"),
+    ("voces tem MarcaA ChargeMax para o 48988887777?", "commerce", "comercio com telefone NAO e recusa"),
     ("ola", "general", "saudacao"),
-    ("quanto custa o relogio?", "commerce", "comercio"),
+    ("quanto custa o produto?", "commerce", "comercio"),
 ]
 
 
@@ -85,14 +85,14 @@ def test_personal_account_scope_signal_exists():
     assert is_personal_account_scope("saldo do Joao") is True
     assert is_personal_account_scope("meu cupom") is True
     assert is_personal_account_scope("quero simular o uso do cartao presente") is True
-    assert is_personal_account_scope("quanto custa o relogio?") is False
+    assert is_personal_account_scope("quanto custa o produto?") is False
     assert is_personal_account_scope("ola") is False
     assert is_personal_account_scope("") is False
     assert is_personal_account_scope(None) is False
 
 
 def test_privacy_scope_is_imported_only_by_the_guard():
-    """Estrutural: nao pode existir caminho sinal-pessoal -> feature -> NewStore."""
+    """Estrutural: nao pode existir caminho sinal-pessoal -> feature -> XNamai."""
     import pathlib
 
     root = pathlib.Path(__file__).resolve().parents[1]
@@ -145,15 +145,12 @@ def test_no_feature_handler_was_reactivated(symbol):
     import pathlib
 
     root = pathlib.Path(__file__).resolve().parents[1]
-    # app/site_knowledge.py e persona protegida: guarda um build_simulation_reply
-    # DORMENTE (sem chamador de runtime). Residuo de persona, nao handler.
-    persona_protected = {"app/site_knowledge.py", "app/simulation.py"}
     offenders = [
         rel
         for base in ("app", "api", "scripts")
         for path in sorted((root / base).rglob("*.py"))
         if "__pycache__" not in path.parts
-        and (rel := path.relative_to(root).as_posix()) not in persona_protected
+        and (rel := path.relative_to(root).as_posix())
         and symbol in path.read_text(encoding="utf-8")
     ]
     assert not offenders, f"{symbol} reativado em {offenders}"

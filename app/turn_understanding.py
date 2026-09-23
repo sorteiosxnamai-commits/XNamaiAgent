@@ -86,13 +86,13 @@ class ExtractedEntities(BaseModel):
     sku: str | None = Field(default_factory=lambda: None)
     ean: str | None = Field(default_factory=lambda: None)
     category: str | None = Field(default_factory=lambda: None)
-    dial_color: str | None = Field(default_factory=lambda: None)
-    strap_color: str | None = Field(default_factory=lambda: None)
+    primary_color: str | None = Field(default_factory=lambda: None)
+    secondary_color: str | None = Field(default_factory=lambda: None)
     material: str | None = Field(default_factory=lambda: None)
-    strap_type: str | None = Field(default_factory=lambda: None)
-    mechanism: str | None = Field(default_factory=lambda: None)
+    connector_type: str | None = Field(default_factory=lambda: None)
+    technology: str | None = Field(default_factory=lambda: None)
     gender: str | None = Field(default_factory=lambda: None)
-    case_size: str | None = Field(default_factory=lambda: None)
+    dimensions: str | None = Field(default_factory=lambda: None)
     budget_min: float | None = Field(default_factory=lambda: None)
     budget_max: float | None = Field(default_factory=lambda: None)
     quantity: int | None = Field(default_factory=lambda: None, ge=1)
@@ -114,11 +114,11 @@ class ProductHardConstraints(BaseModel):
     ean: str | None = Field(default_factory=lambda: None)
     category: str | None = Field(default_factory=lambda: None)
     gender: str | None = Field(default_factory=lambda: None)
-    dial_color: str | None = Field(default_factory=lambda: None)
-    strap_color: str | None = Field(default_factory=lambda: None)
+    primary_color: str | None = Field(default_factory=lambda: None)
+    secondary_color: str | None = Field(default_factory=lambda: None)
     material: str | None = Field(default_factory=lambda: None)
-    mechanism: str | None = Field(default_factory=lambda: None)
-    case_size: str | None = Field(default_factory=lambda: None)
+    technology: str | None = Field(default_factory=lambda: None)
+    dimensions: str | None = Field(default_factory=lambda: None)
     budget_min: float | None = Field(default_factory=lambda: None)
     budget_max: float | None = Field(default_factory=lambda: None)
     exact_only: bool = Field(default_factory=bool)
@@ -135,8 +135,8 @@ class ProductSoftPreferences(BaseModel):
     material: str | None = Field(default_factory=lambda: None)
     occasion: str | None = Field(default_factory=lambda: None)
     recipient: str | None = Field(default_factory=lambda: None)
-    mechanism: str | None = Field(default_factory=lambda: None)
-    case_size: str | None = Field(default_factory=lambda: None)
+    technology: str | None = Field(default_factory=lambda: None)
+    dimensions: str | None = Field(default_factory=lambda: None)
     budget_min: float | None = Field(default_factory=lambda: None)
     budget_max: float | None = Field(default_factory=lambda: None)
     attributes: list[str] = Field(default_factory=list)
@@ -303,14 +303,14 @@ Regras:
    brand_exclusive quando a marca for exclusiva.
 3. Orçamento com "até"/"no máximo" → hard_constraints.budget_max (filtro). Preferência vaga
    de preço sem número → soft ou missing_data.
-4. Gênero (feminino/masculino/unissex) → entities.gender e soft/hard conforme o tom;
-   NUNCA use gênero como model ou style.
+4. Compatibilidade, conector e modelo do aparelho devem virar restrições ou preferências
+   quando forem relevantes. O modelo do aparelho nunca vira o modelo do produto procurado.
 5. Nunca invente product_id, variant_id, preço, estoque ou URL. claimed_product_id e
    claimed_variant_id devem ser null (IDs internos só o sistema resolve).
 6. Referências ("esse", "o segundo", "o preto", "o mais barato") → references[] e
    entities.demonstrative_terms. Não invente o produto.
 7. clarification_required=true SOMENTE se a ambiguidade impedir resposta segura.
-   "quero relógios Casio até R$ 500" → search_catalog, clarification_required=false.
+   "quero fones Bluetooth até R$ 100" → search_catalog, clarification_required=false.
    "quero esse" sem referência recuperável → clarify.
 8. Assuntos fora do escopo comercial: responda de forma breve e honesta, sem inventar.
 9. hypotheses = palpites não confirmados; missing_data = dados ausentes úteis.
@@ -409,7 +409,7 @@ def apply_clarification_policy(
         or entities.ean
         or entities.category
         or (entities.budget_max is not None or hard.budget_max is not None)
-        or (entities.gender and (entities.category or entities.brand or "relógio" in text.casefold() or "relogio" in text.casefold()))
+        or (entities.gender and (entities.category or entities.brand or "produto" in text.casefold() or "produto" in text.casefold()))
     )
 
     demonstrative = bool(entities.demonstrative_terms) or any(
@@ -526,13 +526,13 @@ def turn_understanding_to_sales(
         ean=hard.ean or entities.ean,
     )
     if not subject.product_type and (subject.brand or subject.model or hard.budget_max or entities.budget_max):
-        subject.product_type = entities.category or "relógio"
+        subject.product_type = entities.category or "produto"
 
     color = (
-        hard.dial_color
-        or hard.strap_color
-        or entities.dial_color
-        or entities.strap_color
+        hard.primary_color
+        or hard.secondary_color
+        or entities.primary_color
+        or entities.secondary_color
         or soft.color
     )
     preferences = ProductPreferences(
@@ -677,7 +677,7 @@ def sales_to_turn_understanding(
         ean=subject.ean,
         category=subject.product_type,
         gender=prefs.recipient if prefs.recipient in {"feminino", "masculino", "unissex"} else None,
-        dial_color=prefs.color if exclusive else None,
+        primary_color=prefs.color if exclusive else None,
         material=prefs.material if exclusive else None,
         budget_min=prefs.budget_min,
         budget_max=prefs.budget_max,
@@ -712,7 +712,7 @@ def sales_to_turn_understanding(
         reference=subject.reference,
         ean=subject.ean,
         category=subject.product_type,
-        dial_color=prefs.color,
+        primary_color=prefs.color,
         material=prefs.material,
         gender=prefs.recipient if prefs.recipient in {"feminino", "masculino", "unissex"} else None,
         budget_min=prefs.budget_min,

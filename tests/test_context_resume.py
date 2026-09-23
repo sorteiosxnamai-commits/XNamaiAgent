@@ -24,7 +24,7 @@ def test_merge_recovers_order_wiped_by_later_greeting():
         "order_payment_url": "https://pay.example/1",
         "pending_action": "awaiting_payment",
         "purchase_stage": "awaiting_payment",
-        "active_product": {"product_id": "1", "name": "Seiko"},
+        "active_product": {"product_id": "1", "name": "MarcaD"},
     }
     merged = merge_commerce_states(latest, previous)
     assert merged["order_id"] == "0CC131B51070AEF"
@@ -57,12 +57,12 @@ def test_contextual_greeting_is_soft_and_non_intrusive():
         order_id="0CC131B51070AEF",
         order_payment_url="https://pay.example/1",
         pending_action="awaiting_payment",
-        active_product={"product_id": "1", "name": "Seiko SRPD79K1"},
+        active_product={"product_id": "1", "name": "MarcaD SRPD79K1"},
     )
     result = build_contextual_greeting(state)
     assert "0CC131B51070AEF" not in result.reply_text
     assert "https://pay.example/1" not in result.reply_text
-    assert "Seiko" not in result.reply_text
+    assert "MarcaD" not in result.reply_text
     assert result.response_metadata["response_source"] == "context_resume_soft"
 
 
@@ -76,7 +76,7 @@ async def test_pipeline_greeting_keeps_memory_without_dumping_order(monkeypatch)
         order_payment_url="https://pay.example/pedido",
         pending_action="awaiting_payment",
         purchase_stage="awaiting_payment",
-        active_product={"product_id": "77", "name": "Seiko"},
+        active_product={"product_id": "77", "name": "MarcaD"},
     ).model_dump(mode="json")
 
     monkeypatch.setattr(
@@ -214,7 +214,7 @@ def test_working_memory_is_compact_and_policy_aware():
             order_id="0CC131B51070AEF",
             order_payment_url="https://pay.example/1",
             pending_action="awaiting_payment",
-            active_product={"product_id": "1", "name": "Seiko"},
+            active_product={"product_id": "1", "name": "MarcaD"},
             checkout_draft={
                 "customer": {
                     "name": "Paulo",

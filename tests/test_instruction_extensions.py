@@ -22,7 +22,7 @@ def test_create_extension_stays_pending(monkeypatch):
     import app.instruction_extension_repository as repo
 
     created = repo.create_extension_proposal(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         extension_key="tone_short",
         instruction_text="Seja breve.",
         category="tone",

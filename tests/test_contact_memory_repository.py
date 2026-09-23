@@ -13,17 +13,17 @@ def test_format_customer_memory_block_is_factual():
         [
             ContactMemory(
                 id=1,
-                tenant_id="newstore",
+                tenant_id="xnamai",
                 sender_key="whatsapp:1",
                 memory_key="preferred_brands",
                 memory_kind="brand_preference",
-                value={"value": "Tissot"},
-                safe_summary="Tissot",
+                value={"value": "MarcaA"},
+                safe_summary="MarcaA",
                 use_in_instructions=True,
             )
         ]
     )
-    assert "preferred_brands: Tissot" in block
+    assert "preferred_brands: MarcaA" in block
     assert "sempre" not in block.lower()
 
 
@@ -35,12 +35,12 @@ def test_select_relevant_memories_prefers_commerce_kinds(monkeypatch):
         [
             {
                 "id": 1,
-                "tenant_id": "newstore",
+                "tenant_id": "xnamai",
                 "sender_key": "whatsapp:1",
                 "memory_key": "preferred_brands",
                 "memory_kind": "brand_preference",
-                "value": {"value": "Tissot"},
-                "safe_summary": "Tissot",
+                "value": {"value": "MarcaA"},
+                "safe_summary": "MarcaA",
                 "status": "active",
                 "importance": 0.9,
                 "confidence": 0.9,
@@ -49,7 +49,7 @@ def test_select_relevant_memories_prefers_commerce_kinds(monkeypatch):
             },
             {
                 "id": 2,
-                "tenant_id": "newstore",
+                "tenant_id": "xnamai",
                 "sender_key": "whatsapp:1",
                 "memory_key": "preferred_name",
                 "memory_kind": "preferred_name",
@@ -73,7 +73,7 @@ def test_select_relevant_memories_prefers_commerce_kinds(monkeypatch):
         ],
     )
     selected = select_relevant_memories(
-        tenant_id="newstore",
+        tenant_id="xnamai",
         sender_key="whatsapp:1",
         domain="commerce",
         limit=5,

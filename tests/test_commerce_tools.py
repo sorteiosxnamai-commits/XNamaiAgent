@@ -43,14 +43,13 @@ def test_no_vendor_specific_tools():
     names = set(TOOL_REGISTRY["commerce"])
     for name in names:
         lowered = name.casefold()
-        for vendor in ("tray", "newstore", "sorteio", "raffle", "mercadopago", "mercos"):
+        for vendor in ("tray", "xnamai", "sorteio", "raffle", "mercadopago", "mercos"):
             assert vendor not in lowered, f"tool com marca de fornecedor: {name}"
 
     # Antecipacao do fornecedor seguinte: fora da superficie da Parte 1.
     anticipated = {
         "get_payment_conditions",
         "get_price_tables",
-        "create_customer",
         "update_customer",
         "update_order",
     }
@@ -104,7 +103,7 @@ def test_registry_is_exactly_the_declared_contract():
 
 @pytest.mark.asyncio
 async def test_execute_tool_returns_unavailable_without_raising():
-    result = await execute_tool("search_products", {"query": "relogio"})
+    result = await execute_tool("search_products", {"query": "produto"})
     assert result["ok"] is False
     assert result["error"] == COMMERCE_UNAVAILABLE_CODE
 

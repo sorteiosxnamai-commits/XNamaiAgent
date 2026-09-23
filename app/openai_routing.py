@@ -22,10 +22,10 @@ def routing_key_from_turn() -> str | None:
         from .config import get_settings
 
         tenant = str(
-            getattr(get_settings(), "agent_persona_tenant_id", None) or "newstore"
+            getattr(get_settings(), "agent_persona_tenant_id", None) or "xnamai"
         ).strip()
     except Exception:
-        tenant = "newstore"
+        tenant = "xnamai"
     conversation = (runtime.conversation_key or "").strip()
     if conversation and conversation != "unresolved":
         # Hash the conversation side so logs never need the raw id.
@@ -40,7 +40,7 @@ def routing_key_from_turn() -> str | None:
 
 def sticky_routing_key(*, tenant_id: str, conversation_id: str) -> str:
     """Public helper for canary sticky routing tests / ops."""
-    tenant = str(tenant_id or "newstore").strip() or "newstore"
+    tenant = str(tenant_id or "xnamai").strip() or "xnamai"
     conv = str(conversation_id or "").strip()
     digest = hashlib.sha256(conv.encode("utf-8")).hexdigest()[:16]
     return f"{tenant}:{digest}"

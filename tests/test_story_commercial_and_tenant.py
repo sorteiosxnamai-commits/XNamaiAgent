@@ -68,7 +68,7 @@ async def test_internal_principal_allows_explicit():
 
 def test_visual_candidate_cannot_authorize_price():
     evidence = evidence_from_tray_product(
-        {"id": "1", "name": "Seiko", "price": 100.0, "stock": 2, "url": "https://loja/p/1"},
+        {"id": "1", "name": "MarcaD", "price": 100.0, "stock": 2, "url": "https://loja/p/1"},
         tenant_id="t1",
         source="tray_api",
     ).model_copy(update={"source": "visual_candidate"})
@@ -85,44 +85,44 @@ def test_tray_evidence_allows_matching_price():
     evidence = evidence_from_tray_product(
         {
             "id": "42",
-            "name": "Seiko",
+            "name": "MarcaD",
             "price": 1899.0,
             "stock": 2,
             "available": True,
             "url": "https://loja/p/42",
         },
-        tenant_id="newstore",
+        tenant_id="xnamai",
         source="tray_api",
     )
     assert evidence.price_cents == 189900
     assert evidence.authorizes_price()
     violations = validate_commercial_answer(
-        "Esse é o Seiko. Consultei agora e o valor atual é R$ 1.899,00. Ele está disponível.",
-        {"id": "42", "tenant_id": "newstore", "url": "https://loja/p/42"},
+        "Esse é o MarcaD. Consultei agora e o valor atual é R$ 1.899,00. Ele está disponível.",
+        {"id": "42", "tenant_id": "xnamai", "url": "https://loja/p/42"},
         evidence,
-        "newstore",
+        "xnamai",
     )
     assert violations == []
 
 
 def test_price_mismatch_blocked():
     evidence = evidence_from_tray_product(
-        {"id": "42", "name": "Seiko", "price": 1899.0, "stock": 1},
-        tenant_id="newstore",
+        {"id": "42", "name": "MarcaD", "price": 1899.0, "stock": 1},
+        tenant_id="xnamai",
         source="tray_api",
     )
     violations = validate_commercial_answer(
         "O valor é R$ 9,99.",
-        {"id": "42", "tenant_id": "newstore"},
+        {"id": "42", "tenant_id": "xnamai"},
         evidence,
-        "newstore",
+        "xnamai",
     )
     assert "price_differs_from_evidence" in violations
 
 
 def test_tenant_leak_in_evidence_blocked():
     evidence = evidence_from_tray_product(
-        {"id": "42", "name": "Seiko", "price": 10.0},
+        {"id": "42", "name": "MarcaD", "price": 10.0},
         tenant_id="tenant_a",
         source="tray_api",
     )

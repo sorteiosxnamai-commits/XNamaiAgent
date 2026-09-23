@@ -49,7 +49,7 @@ def test_attach_recent_image_for_valor(monkeypatch):
             "id": 42,
             "text": "[Imagem recebida via Instagram]",
             "channel_metadata": {
-                "image_url": "https://cdn.example/watch.jpg",
+                "image_url": "https://cdn.example/product.jpg",
                 "image_url_present": True,
             },
         },
@@ -62,7 +62,7 @@ def test_attach_recent_image_for_valor(monkeypatch):
         sender_key="instagram:user-1",
     )
     updated = attach_recent_image_for_followup(incoming)
-    assert updated.image_url == "https://cdn.example/watch.jpg"
+    assert updated.image_url == "https://cdn.example/product.jpg"
     assert updated.attachment_type == "image"
     assert updated.input_modality == "text_with_image"
 

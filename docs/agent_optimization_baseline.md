@@ -1,9 +1,9 @@
 # Agent optimization baseline
 
-Date: 2026-08-04  
-Repo: `NSAgentForSorteios`  
-Command: `python -m pytest -q --tb=line`  
-Initial result: **679 passed, 5 failed, ~9.01s**  
+Date: 2026-08-04
+Repo: `XNamaiAgent`
+Command: `python -m pytest -q --tb=line`
+Initial result: **679 passed, 5 failed, ~9.01s**
 After baseline fixes + Phase 2 prompt dedup: **687 passed, 0 failed, ~4.6s**
 
 No secrets, phones, documents, or full conversation content are included.
@@ -196,21 +196,21 @@ With critique/judge shadow/enforce, +1 (or more with regenerate).
 
 ## 12. Proposed commit division (low → high risk)
 
-1. **baseline + suite green** — docs baseline; fix health regression; align outdated retrieval/interpreter tests to current correct contracts  
-2. **prompt dedup (Fase 2)** — single authority order; no duplicate current message; prompt audit hash/chars/tokens  
-3. **history window (Fase 6 slice)** — cap model window (`HISTORY_LIMIT=12`, `MAX_RECENT_TURNS=8`); keep hard_cap=80 for deterministic recovery  
-4. **LLM budget (Fase 8)** — enforce max calls; zero-LLM paths; metrics for avoided calls  
-5. **fact source typing + factual validator (Fases 3/10)** — structured evidence; enforce mode behind flag  
-6. **selective judge (Fase 9)** — risk-triggered; critique stays off by default  
-7. **persona DB on with fallback (Fase 5)** — no dual persona inject  
-8. **memory proposals + contact memory inject (Fase 7)** — auto-apply off  
-9. **conversation summary (Fase 6 remainder)** — async/criteria-based, not every turn  
-10. **Responses canary defaults/docs (Fase 4)** — sticky routing already exists; update example/README; strengthen tool-loop fallback tests  
-11. **sales_agent extract (Fase 11)** — incremental package under `app/sales/` with wrappers  
-12. **response presenter / naturalness (Fase 12)**  
-13. **product snapshot cache (Fase 13)** — measure first  
-14. **turn metrics event (Fase 14)**  
-15. **offline evals (Fase 15)**  
+1. **baseline + suite green** — docs baseline; fix health regression; align outdated retrieval/interpreter tests to current correct contracts
+2. **prompt dedup (Fase 2)** — single authority order; no duplicate current message; prompt audit hash/chars/tokens
+3. **history window (Fase 6 slice)** — cap model window (`HISTORY_LIMIT=12`, `MAX_RECENT_TURNS=8`); keep hard_cap=80 for deterministic recovery
+4. **LLM budget (Fase 8)** — enforce max calls; zero-LLM paths; metrics for avoided calls
+5. **fact source typing + factual validator (Fases 3/10)** — structured evidence; enforce mode behind flag
+6. **selective judge (Fase 9)** — risk-triggered; critique stays off by default
+7. **persona DB on with fallback (Fase 5)** — no dual persona inject
+8. **memory proposals + contact memory inject (Fase 7)** — auto-apply off
+9. **conversation summary (Fase 6 remainder)** — async/criteria-based, not every turn
+10. **Responses canary defaults/docs (Fase 4)** — sticky routing already exists; update example/README; strengthen tool-loop fallback tests
+11. **sales_agent extract (Fase 11)** — incremental package under `app/sales/` with wrappers
+12. **response presenter / naturalness (Fase 12)**
+13. **product snapshot cache (Fase 13)** — measure first
+14. **turn metrics event (Fase 14)**
+15. **offline evals (Fase 15)**
 16. **security revalidation pass (Fase 16)** + legacy removal only after metrics
 
 Each commit: targeted tests → related regression → document env changes.

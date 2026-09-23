@@ -45,14 +45,15 @@ def fetch_recent_attendances(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT
+                WITH delivered AS (
+                SELECT DISTINCT ON (response.inbound_id)
                     response.id AS response_id,
                     response.inbound_id,
                     response.reply_text AS agent_reply,
                     response.intent,
                     response.handoff_required,
                     response.safety_reason,
-                    response.response_metadata,
+                    COALESCE(response.provider_response->'_agent_metadata', '{}'::jsonb) AS response_metadata,
                     response.created_at AS response_created_at,
                     response.sender_key,
                     inbound.text AS customer_text,
@@ -60,17 +61,29 @@ def fetch_recent_attendances(
                     inbound.conversation_id,
                     inbound.sender_phone
                 FROM public.ai_agent_responses AS response
-                LEFT JOIN public.ai_inbound_messages AS inbound
+                INNER JOIN public.ai_inbound_messages AS inbound
                   ON inbound.id = response.inbound_id
                 WHERE response.created_at >= %s
-                ORDER BY response.created_at DESC
+                  AND response.provider_send_ok = true
+                  AND NULLIF(TRIM(response.reply_text), '') IS NOT NULL
+                  AND response.provider_response->>'_agent_tenant_id' = %s
+                  AND LOWER(COALESCE(response.provider_response->>'dry_run', 'false')) NOT IN ('true', '1')
+                  AND LOWER(COALESCE(response.provider_response->>'skipped', 'false')) IN ('false', '0', '')
+                  AND LOWER(COALESCE(response.provider_response#>>'{provider_response,dry_run}', 'false')) NOT IN ('true', '1')
+                  AND LOWER(COALESCE(response.provider_response#>>'{provider_response,skipped}', 'false')) IN ('false', '0', '')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM public.ai_attendance_reviews AS review
+                    JOIN public.ai_agent_responses AS reviewed ON reviewed.id = review.response_id
+                    WHERE review.tenant_id = %s AND reviewed.inbound_id = response.inbound_id
+                  )
+                ORDER BY response.inbound_id, response.id DESC
+                )
+                SELECT * FROM delivered ORDER BY response_created_at DESC, response_id DESC
                 LIMIT %s
                 """,
-                (since, limit),
+                (since, tenant_id, tenant_id, max(1, min(int(limit), 1000))),
             )
             rows = list(cur.fetchall() or [])
-    # tenant_id is reserved for multi-tenant filtering when column exists.
-    _ = tenant_id
     return rows
 
 
@@ -235,7 +248,7 @@ _INSIGHT_TEMPLATES: dict[str, tuple[str, str, str, str]] = {
         "retrieval",
         "Preferências de gênero/orçamento não viram busca útil",
         (
-            "Quando o cliente complementar 'quero um relógio' com gênero "
+            "Quando o cliente complementar 'quero um produto' com gênero "
             "(feminino/masculino) e/ou orçamento (até X reais), trate como "
             "recomendação de catálogo — nunca como modelo exato. Use recipient/"
             "attributes para gênero e budget_max para o valor."
@@ -256,8 +269,8 @@ _INSIGHT_TEMPLATES: dict[str, tuple[str, str, str, str]] = {
         "handoff",
         "Política de avaliação/troca/compra de usados",
         (
-            "A New Store avalia, troca e compra relógios. Pedidos de seminovo, "
-            "avaliação ou troca devem ir para atendente humano — nunca negar a política."
+            "Não presuma que a Xnamai compra ou avalia produtos usados. Pedidos de seminovo, "
+            "avaliação ou troca devem ir para atendente humano para confirmar a política aplicável."
         ),
         "policy",
     ),
@@ -363,7 +376,7 @@ async def run_attendance_learning_batch(
     auto_promote: bool | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
-    tenant_id = str(getattr(settings, "agent_persona_tenant_id", "newstore") or "newstore")
+    tenant_id = str(getattr(settings, "agent_persona_tenant_id", "xnamai") or "xnamai")
     hours = lookback_hours or int(
         getattr(settings, "agent_learning_lookback_hours", 2) or 2
     )

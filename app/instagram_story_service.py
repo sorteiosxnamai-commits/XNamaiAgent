@@ -169,27 +169,27 @@ def _clarification_from_regions(
             bits = []
             if region.label:
                 bits.append(region.label)
-            if region.dial_color:
-                bits.append(f"mostrador {region.dial_color}")
+            if region.primary_color:
+                bits.append(f"produto {region.primary_color}")
             if region.position and region.position != "unknown":
                 bits.append(f"à {region.position}" if region.position in {"left", "right"} else region.position)
             label = " — ".join(bits) if bits else f"produto {len(options) + 1}"
             options.append(label)
         elif isinstance(region, dict):
             label = str(region.get("label") or "").strip()
-            dial = str(region.get("dial_color") or "").strip()
+            primary = str(region.get("primary_color") or "").strip()
             pos = str(region.get("position") or "").strip()
-            bits = [b for b in (label, f"mostrador {dial}" if dial else "", pos if pos and pos != "unknown" else "") if b]
+            bits = [b for b in (label, f"produto {primary}" if primary else "", pos if pos and pos != "unknown" else "") if b]
             options.append(" — ".join(bits) if bits else f"produto {len(options) + 1}")
-    if len(options) >= 2 and any("mostrador" in o or "left" in o or "right" in o or "esquerda" in o or "direita" in o for o in options):
+    if len(options) >= 2 and any("produto" in o or "left" in o or "right" in o or "esquerda" in o or "direita" in o for o in options):
         reply = (
-            f"Nesse Story aparecem {len(options)} relógios. "
+            f"Nesse Story aparecem {len(options)} produtos. "
             f"Você quer o {options[0]} ou o {options[1]}?"
         )
         return options, reply
-    if analysis.watch_count > 1 or analysis.multiple_products:
+    if analysis.product_count > 1 or analysis.multiple_products:
         reply = (
-            "Nesse Story aparecem mais de um relógio. "
+            "Nesse Story aparecem mais de um produto. "
             "Você quer saber do primeiro ou do segundo?"
         )
         return options or ["primeiro", "segundo"], reply
@@ -975,7 +975,7 @@ async def resolve_story_product_question(
         media_bytes=media_bytes,
     )
 
-    if analysis.multiple_products or analysis.watch_count > 1:
+    if analysis.multiple_products or analysis.product_count > 1:
         options, reply = _clarification_from_regions(analysis)
         repo.mark_ambiguous(
             tenant_id=tenant,
@@ -1019,7 +1019,7 @@ async def resolve_story_product_question(
         candidates=[c.model_dump(mode="json") for c in candidates],
         explanation={
             "analysis_version": getattr(
-                get_settings(), "instagram_story_analysis_version", "v2"
+                get_settings(), "instagram_story_analysis_version", "xnamai-products-v1"
             )
         },
     )

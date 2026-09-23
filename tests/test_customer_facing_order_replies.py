@@ -28,7 +28,7 @@ async def test_order_status_reply_is_customer_facing():
 @pytest.mark.asyncio
 async def test_payment_reply_includes_link_for_customer():
     payment_url = (
-        "https://www.newstorerj.com.br/loja/pagamento.php"
+        "https://xnamai.meuspedidos.com.br/loja/pagamento.php"
         "?loja=687890&pedido=0CC131B51070AEF"
     )
 

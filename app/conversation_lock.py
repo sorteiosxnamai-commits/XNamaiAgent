@@ -99,15 +99,18 @@ def _acquire_database_lock(
     connection = psycopg.connect(
         database_url,
         connect_timeout=min(max(int(timeout_seconds), 1), 10),
+        prepare_threshold=None,
     )
-    connection.autocommit = True
+    # A transaction pins the connection in transaction-pooling deployments.
+    # Session advisory locks can otherwise outlive the connection we receive.
+    connection.autocommit = False
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT set_config('lock_timeout', %s, false)",
+                "SELECT set_config('lock_timeout', %s, true)",
                 (f"{max(int(timeout_seconds * 1000), 100)}ms",),
             )
-            cursor.execute("SELECT pg_advisory_lock(%s)", (lock_id,))
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (lock_id,))
         return connection
     except Exception:
         connection.close()
@@ -116,8 +119,7 @@ def _acquire_database_lock(
 
 def _release_database_lock(connection: Any, lock_id: int) -> None:
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
+        connection.rollback()
     finally:
         connection.close()
 
@@ -150,19 +152,28 @@ async def acquire_conversation_lock(
 
     database_connection = None
     if database_url:
+        acquisition = asyncio.create_task(asyncio.to_thread(
+            _acquire_database_lock, database_url, lock_id, timeout_seconds,
+        ))
         try:
             database_connection = await asyncio.wait_for(
-                asyncio.to_thread(
-                    _acquire_database_lock,
-                    database_url,
-                    lock_id,
-                    timeout_seconds,
-                ),
+                asyncio.shield(acquisition),
                 timeout=timeout_seconds + 2,
             )
-        except Exception as exc:
+        except BaseException as exc:
+            # Cancelling to_thread does not stop psycopg. Release a lock that
+            # arrives after the HTTP request was cancelled or timed out.
+            def close_late_result(task):
+                try:
+                    connection = task.result()
+                except BaseException:
+                    return
+                asyncio.create_task(asyncio.to_thread(_release_database_lock, connection, lock_id))
+            acquisition.add_done_callback(close_late_result)
             register_integration_failure("database_lock")
             await _release_local(key_hash, local_entry)
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             # Contention: another worker holds the conversation.
             # Infra failure: caller may fall back to a local-only lock so
             # photo turns are not silently dropped.

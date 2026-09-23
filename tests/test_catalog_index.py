@@ -27,12 +27,12 @@ from app.turn_understanding import (
 def _product(**overrides):
     base = {
         "id": "1",
-        "name": "Relógio Casio MTP Azul",
-        "brand": "Casio",
-        "model": "MTP",
-        "reference": "MTP-1374",
+        "name": "produto MarcaE PD20 Azul",
+        "brand": "MarcaE",
+        "model": "PD20",
+        "reference": "PD20-1374",
         "ean": "7891234567890",
-        "color": "Blue Dial",
+        "color": "Blue primary",
         "current_price": 450.0,
         "stock": 3,
         "available": True,
@@ -44,16 +44,16 @@ def _product(**overrides):
 
 
 def test_trigram_similarity_basic():
-    assert trigram_similarity("casio", "casio") == 1.0
+    assert trigram_similarity("marcae", "marcae") == 1.0
     assert trigram_similarity("azul", "azull") > 0.3
-    assert trigram_similarity("seiko", "tissot") < 0.3
+    assert trigram_similarity("alpha", "beta") < 0.3
 
 
 def test_to_canonical_item_shape():
     item = to_canonical_item(_product(), factual_source="tray_search")
     assert item is not None
     assert item.product_id == "1"
-    assert item.brand == "Casio"
+    assert item.brand == "MarcaE"
     assert item.price == 450.0
     assert "blue" in item.colors_normalized or "azul" in item.colors_normalized
 
@@ -63,7 +63,7 @@ def test_hard_constraints_exclude_over_budget():
     assert item is not None
     ok, reason, _ = evaluate_hard_constraints(
         item,
-        {"budget_max": 500, "brand": "Casio"},
+        {"budget_max": 500, "brand": "MarcaE"},
         mode="recommendation",
     )
     assert ok is False
@@ -75,9 +75,9 @@ def test_brand_exclusive_excludes_other_brands():
         TurnUnderstanding(
             primary_intent="commerce_recommend",
             confidence=0.9,
-            entities=ExtractedEntities(brand="Casio", category="relógio"),
+            entities=ExtractedEntities(brand="MarcaE", category="produto"),
             hard_constraints=ProductHardConstraints(
-                brand="Casio",
+                brand="MarcaE",
                 brand_exclusive=True,
                 exact_only=True,
                 budget_max=500,
@@ -87,8 +87,8 @@ def test_brand_exclusive_excludes_other_brands():
         )
     )
     products = [
-        _product(id="1", brand="Casio", current_price=400),
-        _product(id="2", brand="Seiko", name="Seiko 5 Azul", current_price=400),
+        _product(id="1", brand="MarcaE", current_price=400),
+        _product(id="2", brand="MarcaD", name="MarcaD 5 Azul", current_price=400),
     ]
     filtered = hard_filter_products(products, interpretation, mode="recommendation")
     assert [p["id"] for p in filtered] == ["1"]
@@ -98,7 +98,7 @@ def test_hybrid_rank_prefers_color_and_budget_fit():
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="recommend",
-        subject={"brand": "Casio", "product_type": "relógio"},
+        subject={"brand": "MarcaE", "product_type": "produto"},
         preferences={"color": "azul", "budget_max": 500, "attributes": ["azul"]},
         references_previous_context=False,
         needs_clarification=False,
@@ -107,9 +107,9 @@ def test_hybrid_rank_prefers_color_and_budget_fit():
         ready_for_retrieval=True,
     )
     products = [
-        _product(id="a", name="Casio Preto", color="Black", current_price=400),
-        _product(id="b", name="Casio Azul", color="Blue Dial", current_price=420),
-        _product(id="c", name="Casio Azul Premium", color="Blue", current_price=800),
+        _product(id="a", name="MarcaE Preto", color="Black", current_price=400),
+        _product(id="b", name="MarcaE Azul", color="Blue primary", current_price=420),
+        _product(id="c", name="MarcaE Azul Premium", color="Blue", current_price=800),
     ]
     ranked = hybrid_rank_products(products, interpretation, mode="recommendation")
     ids = [p["id"] for p in ranked]
@@ -134,13 +134,13 @@ async def test_rerank_rejects_invented_ids(monkeypatch):
     from app import product_retrieval as pr
 
     products = [
-        _product(id="10", name="Casio Azul"),
-        _product(id="11", name="Casio Preto", color="Black"),
+        _product(id="10", name="MarcaE Azul"),
+        _product(id="11", name="MarcaE Preto", color="Black"),
     ]
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="recommend",
-        subject={"brand": "Casio"},
+        subject={"brand": "MarcaE"},
         preferences={"color": "azul"},
         references_previous_context=False,
         needs_clarification=False,

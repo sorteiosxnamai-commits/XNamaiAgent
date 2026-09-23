@@ -1,8 +1,8 @@
 # Etapa 1 — Diagnóstico: fluxo atual → agente generativo factual
 
-**Projeto:** NSAgentForSorteios  
-**Baseline:** 847 testes coletados; `openai==2.7.2`  
-**Data:** 2026-08-05  
+**Projeto:** XNamaiAgent
+**Baseline:** 847 testes coletados; `openai==2.7.2`
+**Data:** 2026-08-05
 **Escopo:** documento de mapeamento (sem mudança de comportamento nesta etapa)
 
 ---

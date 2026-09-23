@@ -27,7 +27,7 @@ def test_extracts_order_payment_and_customer_from_transcript():
             "role": "assistant",
             "content": (
                 "Pedido criado. Pague em "
-                "https://www.newstorerj.com.br/loja/pagamento.php"
+                "https://xnamai.meuspedidos.com.br/loja/pagamento.php"
                 "?loja=687890&pedido=0CC131B51070AEF"
             ),
         },
@@ -35,7 +35,7 @@ def test_extracts_order_payment_and_customer_from_transcript():
     handles = extract_handles_from_conversation(
         state=CommerceConversationState(),
         recent_turns=turns,
-        message_text="como ficou o meu pedido do seiko?",
+        message_text="como ficou o meu pedido do marcad?",
     )
     assert "0CC131B51070AEF" in handles["order_ids"]
     assert any("pedido=0CC131B51070AEF" in url for url in handles["payment_urls"])
@@ -48,7 +48,7 @@ def test_hydrate_fills_missing_order_and_checkout_fields():
     handles = {
         "order_ids": ["0CC131B51070AEF"],
         "payment_urls": [
-            "https://www.newstorerj.com.br/loja/pagamento.php?loja=687890&pedido=0CC131B51070AEF"
+            "https://xnamai.meuspedidos.com.br/loja/pagamento.php?loja=687890&pedido=0CC131B51070AEF"
         ],
         "emails": ["tironinho@hotmail.com"],
         "documents": [("cpf", "07281035918")],
@@ -63,7 +63,7 @@ def test_hydrate_fills_missing_order_and_checkout_fields():
 
 def test_detects_followup_order_and_pix_requests():
     assert is_order_lookup_request("como ficou") is True
-    assert is_order_lookup_request("como ficou o meu pedido do seiko?") is True
+    assert is_order_lookup_request("como ficou o meu pedido do marcad?") is True
     assert is_payment_link_request("me da o pix para pagamento") is True
     assert is_payment_link_request("me da o link para pagamento") is True
     assert is_payment_link_request("quero o link de pagamento") is True
@@ -219,7 +219,7 @@ async def test_pipeline_recovers_order_from_transcript_for_status(monkeypatch):
             channel="whatsapp",
             conversation_id="conv-1",
             sender_phone="85999498149",
-            text="como ficou o meu pedido do seiko?",
+            text="como ficou o meu pedido do marcad?",
             raw={"inbound_id": 21},
         ),
         {"found": False},
@@ -253,7 +253,7 @@ async def test_pipeline_pix_request_reuses_payment_link_from_transcript(monkeypa
     monkeypatch.setattr(pipeline, "persist_customer_commerce_session", lambda **_k: None)
     monkeypatch.setattr(pipeline, "upsert_customer_identity_links", lambda *a, **k: None)
     payment_url = (
-        "https://www.newstorerj.com.br/loja/pagamento.php"
+        "https://xnamai.meuspedidos.com.br/loja/pagamento.php"
         "?loja=687890&pedido=0CC131B51070AEF"
     )
     monkeypatch.setattr(

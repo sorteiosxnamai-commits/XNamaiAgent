@@ -20,7 +20,7 @@ def test_explicit_brand_preference_accepted():
             scope=MemoryScope.contact,
             kind=MemoryKind.brand_preference,
             key="preferred_brands",
-            value="Tissot",
+            value="MarcaA",
             importance=0.9,
             confidence=0.95,
             reason_code="explicit_user_preference",
@@ -29,7 +29,7 @@ def test_explicit_brand_preference_accepted():
     )
     assert decision.accepted is True
     assert decision.normalized_key == "preferred_brands"
-    assert decision.normalized_value == "Tissot"
+    assert decision.normalized_value == "MarcaA"
 
 
 def test_sensitive_card_rejected():
@@ -56,7 +56,7 @@ def test_commercial_volatile_fact_rejected():
             scope=MemoryScope.contact,
             kind=MemoryKind.stable_customer_fact,
             key="last_price_seen",
-            value="Seastar em estoque por R$ 1990",
+            value="ChargeMax em estoque por R$ 1990",
             importance=0.9,
             confidence=0.95,
             reason_code="explicit_user_preference",

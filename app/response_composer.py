@@ -47,7 +47,7 @@ def compose_outbound_reply(
         from .fact_authority import authorize_products_for_responder
 
         tenant_id = str(
-            (result.response_metadata or {}).get("tenant_id") or "newstore"
+            (result.response_metadata or {}).get("tenant_id") or "xnamai"
         )
         # Closed ID set from evidence already attached to the turn (if any).
         meta = dict(result.response_metadata or {})

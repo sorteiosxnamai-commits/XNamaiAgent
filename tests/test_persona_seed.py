@@ -4,18 +4,18 @@ import hashlib
 from pathlib import Path
 
 import app.persona_repository as repo
-import scripts.seed_newstore_persona as seed
+import scripts.seed_xnamai_persona as seed
 from tests.persona_fakes import InMemoryPersonaStore
 
 ROOT = Path(__file__).resolve().parents[1]
-PERSONA_PATH = ROOT / "persona NS.txt"
-EXPECTED_HASH = "bbdc5b84d3d699f31ca87f9f94c4ce86fcdc977c42a1de95859e0383be025b45"
+PERSONA_PATH = ROOT / "persona_xnamai.txt"
+EXPECTED_HASH = "d3ea3c2a2a3e288f7b161a1355ae4c8cdbe0b902d09082956fda8b80227c7a04"
 
 
 def test_persona_file_hash_is_stable():
     path, text = seed.load_persona_text(PERSONA_PATH)
     assert path == PERSONA_PATH
-    assert "assistente comercial oficial da NewStore" in text.splitlines()[0]
+    assert "assistente comercial oficial da XNamai" in text.splitlines()[0]
     assert hashlib.sha256(text.encode("utf-8")).hexdigest() == EXPECTED_HASH
 
 

@@ -67,7 +67,7 @@ def test_prepare_inbound_persists_image_url_in_metadata():
         {
             "provider": "brevo",
             "text": "e esse?",
-            "image_url": "https://example.com/watch.jpg",
+            "image_url": "https://example.com/product.jpg",
             "input_modality": "text_with_image",
             "attachment_type": "image",
             "channel_metadata": {},
@@ -75,7 +75,7 @@ def test_prepare_inbound_persists_image_url_in_metadata():
     )
     metadata = prepared["channel_metadata"].obj
     assert metadata["image_url_present"] is True
-    assert metadata["image_url"] == "https://example.com/watch.jpg"
+    assert metadata["image_url"] == "https://example.com/product.jpg"
     assert metadata["input_modality"] == "text_with_image"
     assert metadata["attachment_type"] == "image"
 

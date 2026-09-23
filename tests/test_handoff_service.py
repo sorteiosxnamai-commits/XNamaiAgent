@@ -5,7 +5,6 @@ from app.handoff_service import (
     should_request_human_handoff,
 )
 from app.models import AgentResult, IncomingMessage
-from app.site_knowledge import NS_SALES_WHATSAPP
 
 
 def test_customer_request_triggers_handoff():
@@ -19,7 +18,7 @@ def test_customer_request_triggers_handoff():
     # O contato da marca legada saiu da copy: encaminhar para la mandaria o
     # cliente da XNamai para outra empresa.
     assert "XNamai" in result.reply_text
-    assert NS_SALES_WHATSAPP not in result.reply_text
+    assert "+55" not in result.reply_text
     assert handoff_provider_payload(result)["provider_action"] == "mark_for_human"
 
 

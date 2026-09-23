@@ -69,7 +69,7 @@ class CommercialClaim(BaseModel):
     freshness_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    tenant_id: str = "newstore"
+    tenant_id: str = "xnamai"
     product_id: str | None = None
     variant_id: str | None = None
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -207,7 +207,7 @@ def claim_from_product_field(
     kind: Literal["price", "promotional_price", "stock", "availability", "url", "product"],
     key: str,
     value: Any,
-    tenant_id: str = "newstore",
+    tenant_id: str = "xnamai",
 ) -> CommercialClaim:
     factual = str(product.get("_factual_source") or "").strip().lower()
     revalidated = bool(product.get("_revalidated"))
@@ -321,14 +321,14 @@ def catalog_item_key_for(product_id: str, variant_id: str | None = None) -> str:
 def grounded_evidence_from_product(
     product: dict[str, Any],
     *,
-    tenant_id: str = "newstore",
+    tenant_id: str = "xnamai",
     expected_tenant_id: str | None = None,
 ) -> list[GroundedCommerceEvidence]:
     """Build grounded evidence rows; omit unauthorized / cross-tenant fields."""
     pid = str(product.get("id") or product.get("product_id") or "").strip()
     if not pid:
         return []
-    product_tenant = str(product.get("tenant_id") or tenant_id or "newstore").strip()
+    product_tenant = str(product.get("tenant_id") or tenant_id or "xnamai").strip()
     if expected_tenant_id and product_tenant != str(expected_tenant_id).strip():
         return []
     vid = (
@@ -382,7 +382,7 @@ def grounded_evidence_from_product(
 def authorize_products_for_responder(
     products: list[dict[str, Any]],
     *,
-    tenant_id: str = "newstore",
+    tenant_id: str = "xnamai",
 ) -> tuple[list[dict[str, Any]], list[GroundedCommerceEvidence]]:
     """Return product dicts stripped to authorized commercial fields + evidence."""
     authorized: list[dict[str, Any]] = []

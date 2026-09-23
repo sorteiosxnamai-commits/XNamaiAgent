@@ -276,7 +276,7 @@ async def test_budget_exceeded_on_clarification_uses_deterministic_fallback(monk
         )
         interpretation._source = "fallback"
         result = await sales_agent.generate_clarification_reply(
-            message=IncomingMessage(text="relógio", conversation_id="c1"),
+            message=IncomingMessage(text="produto", conversation_id="c1"),
             interpretation=interpretation,
             recent_turns=[],
             used_commerce_provider=False,

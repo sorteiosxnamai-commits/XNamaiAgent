@@ -2,7 +2,7 @@
 -- Tenant-scoped; commercial facts still revalidated live before display.
 
 CREATE TABLE IF NOT EXISTS public.ai_catalog_index (
-    tenant_id text NOT NULL DEFAULT 'newstore',
+    tenant_id text NOT NULL DEFAULT 'xnamai',
     product_id text NOT NULL,
     variant_id text NULL,
     sku text NULL,
@@ -14,12 +14,7 @@ CREATE TABLE IF NOT EXISTS public.ai_catalog_index (
     title_normalized text NOT NULL DEFAULT '',
     category text NULL,
     gender text NULL,
-    mechanism text NULL,
-    case_size text NULL,
-    dial_color text NULL,
-    strap_color text NULL,
     material text NULL,
-    strap_type text NULL,
     colors_normalized jsonb NOT NULL DEFAULT '[]'::jsonb,
     aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
     price numeric NULL,

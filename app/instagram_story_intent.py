@@ -20,10 +20,10 @@ _AVAIL_RE = re.compile(
 _LINK_RE = re.compile(r"\b(link|url|site|manda\s+o\s+link|envia\s+o\s+link)\b", re.I)
 _COLOR_RE = re.compile(r"\b(outra\s+cor|outras\s+cores|cor\s+diferente|cores?)\b", re.I)
 _MODEL_RE = re.compile(
-    r"\b(modelo|refer[eê]ncia|qual\s+(?:e|é)\s+(?:esse|este)|que\s+rel[oó]gio)\b",
+    r"\b(modelo|refer[eê]ncia|qual\s+(?:e|é)\s+(?:esse|este)|que\s+produto)\b",
     re.I,
 )
-_MECH_RE = re.compile(r"\b(autom[aá]tico|quartz|mecanismo|cron[oó]grafo)\b", re.I)
+_FEATURE_RE = re.compile(r"\b(bluetooth|usb[ -]?c|conector|pot[eê]ncia|compat[ií]vel|sem\s+fio|com\s+fio)\b", re.I)
 _STORY_HINT_RE = re.compile(r"\b(story|storie|stories)\b", re.I)
 
 
@@ -39,7 +39,7 @@ def detect_story_question_type(text: str | None) -> StoryQuestionType:
         return StoryQuestionType.PRICE
     if _AVAIL_RE.search(value):
         return StoryQuestionType.AVAILABILITY
-    if _MECH_RE.search(value) or _MODEL_RE.search(value):
+    if _FEATURE_RE.search(value) or _MODEL_RE.search(value):
         return StoryQuestionType.PRODUCT_DETAILS
     if _STORY_HINT_RE.search(value):
         return StoryQuestionType.PRODUCT_IDENTIFICATION

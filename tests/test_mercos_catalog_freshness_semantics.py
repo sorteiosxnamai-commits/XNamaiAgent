@@ -39,7 +39,7 @@ TENANT = "xnamai"
 DATA_ANTIGA_NA_ORIGEM = "2025-11-20T08:56:18"
 
 #: O sync que confirmou o snapshot — quase dez meses depois.
-INSTANTE_DO_SYNC = datetime(2026, 9, 15, 13, 30, tzinfo=timezone.utc)
+INSTANTE_DO_SYNC = datetime.now(timezone.utc)
 
 
 def _campos(**overrides: Any) -> dict[str, Any]:
@@ -220,7 +220,7 @@ def test_generic_browse_returns_a_product_synced_from_an_old_source_record(repos
 def _linha_sincronizada_agora(**overrides: Any) -> dict[str, Any]:
     """Como `_linha_do_indice`, mas com o sync ACONTECENDO agora.
 
-    A politica de frescor mede contra o relogio real (estoque vence em 1h), e um
+    A politica de frescor mede contra o produto real (estoque vence em 1h), e um
     instante fixo no passado faria estes dois testes passarem pela manha e
     falharem a tarde.
     """

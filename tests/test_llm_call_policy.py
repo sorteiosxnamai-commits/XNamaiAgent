@@ -12,7 +12,7 @@ def test_should_run_llm_critique_skips_low_risk(monkeypatch):
     monkeypatch.setenv("AGENT_CRITIQUE_SHADOW_SAMPLE_RATE", "0")
     get_settings.cache_clear()
     run, reason, signals = should_run_llm_critique(
-        incoming=IncomingMessage(channel="whatsapp", text="tem relógio?"),
+        incoming=IncomingMessage(channel="whatsapp", text="tem produto?"),
         result=AgentResult(
             reply_text="Tenho opções",
             intent="commerce",
@@ -32,7 +32,7 @@ def test_should_run_llm_critique_on_factual_fail(monkeypatch):
     monkeypatch.setenv("AGENT_CRITIQUE_LLM_ON_RISK_ONLY", "true")
     get_settings.cache_clear()
     result = AgentResult(
-        reply_text="Esse relógio custa R$ 10",
+        reply_text="Esse produto custa R$ 10",
         intent="commerce",
         response_metadata={"factual_validation": {"valid": False}},
     )

@@ -94,6 +94,39 @@ async def enrich_agent_result(incoming: IncomingMessage, result: AgentResult) ->
 
 
 async def process_incoming_message(incoming: IncomingMessage, customer_context: dict) -> AgentResult:
+    from .business_policy import bind_policy, reset_policy
+    from .turn_cache import begin_turn_cache, end_turn_cache
+
+    cache_token = begin_turn_cache()
+    policy_token = None
+    active = None
+    try:
+        settings = get_settings()
+        if getattr(settings, "database_url", None) and getattr(settings, "agent_db_persona_enabled", False):
+            try:
+                from .persona_repository import get_active_persona
+                active = get_active_persona(settings.agent_persona_tenant_id, settings.agent_persona_key)
+            except Exception as exc:
+                log_exception("persona.configuration_unavailable", exc)
+        try:
+            policy_token = bind_policy(getattr(active, "metadata", None))
+        except ValueError as exc:
+            log_exception("persona.configuration_invalid", exc)
+            policy_token = bind_policy(None)
+        result = await _process_incoming_message(incoming, customer_context)
+        if active is not None:
+            result.response_metadata["business_configuration"] = {
+                "persona_version_id": active.id, "persona_version": active.version,
+                "tenant_id": settings.agent_persona_tenant_id,
+            }
+        return result
+    finally:
+        if policy_token is not None:
+            reset_policy(policy_token)
+        end_turn_cache(cache_token)
+
+
+async def _process_incoming_message(incoming: IncomingMessage, customer_context: dict) -> AgentResult:
     settings = get_settings()
     runtime = get_current_turn()
     if runtime is not None:
@@ -147,7 +180,7 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             load_commerce_conversation_state(**state_lookup)
         )
     # New product photo starts a fresh identification — never price the
-    # previous SKU (e.g. CW Rosa) while Vision runs on a Beaubleu.
+    # previous SKU while Vision analyzes the newly received product.
     if (incoming.image_url or "").strip():
         if commerce_state.active_product is not None:
             log_event(
@@ -465,7 +498,7 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
                 memory_result = process_agent_memory_proposals(
                     envelope=envelope,
                     tenant_id=str(
-                        getattr(settings, "agent_persona_tenant_id", "newstore")
+                        getattr(settings, "agent_persona_tenant_id", "xnamai")
                     ),
                     conversation_key=(
                         incoming.conversation_id

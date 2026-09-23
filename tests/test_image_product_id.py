@@ -21,9 +21,9 @@ def _image_payload(*, with_caption: bool = False) -> dict:
         "type": "visitor",
         "createdAt": 1785700000000,
         "file": {
-            "link": "https://example.com/watches/certina.jpg",
+            "link": "https://example.com/products/marcac.jpg",
             "mimeType": "image/jpeg",
-            "name": "certina.jpg",
+            "name": "marcac.jpg",
             "type": "image",
         },
     }
@@ -46,7 +46,7 @@ def test_parser_persists_image_url_for_whatsapp_photo():
 
     assert incoming.attachment_type == "image"
     assert incoming.input_modality == "image"
-    assert incoming.image_url == "https://example.com/watches/certina.jpg"
+    assert incoming.image_url == "https://example.com/products/marcac.jpg"
     assert incoming.image_mime_type == "image/jpeg"
     assert "Imagem recebida" in incoming.text
 
@@ -55,7 +55,7 @@ def test_parser_keeps_caption_with_image():
     incoming = parse_brevo_conversations_payload(_image_payload(with_caption=True))
 
     assert incoming.input_modality == "text_with_image"
-    assert incoming.image_url == "https://example.com/watches/certina.jpg"
+    assert incoming.image_url == "https://example.com/products/marcac.jpg"
     assert incoming.text == "tem esse?"
 
 
@@ -91,10 +91,10 @@ def test_interpretation_ignores_vision_color_as_reference():
     )
 
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Christopher Ward",
-        model="Sealander Automatic",
-        reference="rosa claro (mostrador)",
+        is_product=True,
+        brand="MarcaF",
+        model="SoundMax wireless",
+        reference="rosa claro (produto)",
         color=None,
         confidence=0.9,
     )
@@ -102,14 +102,14 @@ def test_interpretation_ignores_vision_color_as_reference():
     assert interpretation.subject.reference is None
     assert interpretation.preferences.color
     assert "rosa" in interpretation.preferences.color.casefold()
-    assert "Sealander" in (interpretation.subject.model or "")
+    assert "SoundMax" in (interpretation.subject.model or "")
 
 
 def test_interpretation_from_identification_builds_find_subject():
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Certina",
-        model="DS Super PH2000M Automático",
+        is_product=True,
+        brand="MarcaC",
+        model="DS Super PB20000 sem fio",
         reference="C050.607.44.011.02",
         color="Branco",
         confidence=0.91,
@@ -119,16 +119,16 @@ def test_interpretation_from_identification_builds_find_subject():
     assert interpretation.domain == "commerce"
     assert interpretation.goal == "find"
     assert interpretation.ready_for_retrieval is True
-    assert interpretation.subject.brand == "Certina"
+    assert interpretation.subject.brand == "MarcaC"
     assert interpretation.subject.reference == "C050.607.44.011.02"
-    assert "PH2000M" in (interpretation.subject.model or "")
+    assert "PB20000" in (interpretation.subject.model or "")
     assert "Branco" in (interpretation.subject.model or "")
 
 
 def test_interpretation_never_uses_color_as_model_alone():
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
+        is_product=True,
+        brand="MarcaB",
         model=None,
         color="Preto",
         confidence=0.9,
@@ -138,36 +138,36 @@ def test_interpretation_never_uses_color_as_model_alone():
     assert interpretation.preferences.color == "Preto"
 
 
-def test_interpretation_maps_chrono_and_case_finish():
+def test_interpretation_maps_chrono_and_material_finish():
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
-        model="Intra-Matic",
+        is_product=True,
+        brand="MarcaB",
+        model="Audio Pro",
         color="Preto",
-        case_finish="aço",
-        features=["chronograph", "automatic"],
+        material_finish="aço",
+        features=["bluetooth", "wireless"],
         confidence=0.93,
     )
     interpretation = interpretation_from_identification(identified)
-    assert "Intra-Matic" in (interpretation.subject.model or "")
-    assert "Cronógrafo" in (interpretation.subject.model or "")
-    assert "Cronógrafo" in interpretation.preferences.attributes
+    assert "Audio Pro" in (interpretation.subject.model or "")
+    assert "Bluetooth" in (interpretation.subject.model or "")
+    assert "Bluetooth" in interpretation.preferences.attributes
     assert interpretation.preferences.material == "aço"
     assert identification_has_catalog_identity(identified) is True
 
 
 def test_identification_brand_color_only_is_weak():
     weak = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
+        is_product=True,
+        brand="MarcaB",
         model=None,
         color="Preto",
         confidence=0.9,
     )
     assert identification_has_catalog_identity(weak) is False
     weak_color_model = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
+        is_product=True,
+        brand="MarcaB",
         model="Preto",
         color="Preto",
         confidence=0.9,
@@ -177,20 +177,20 @@ def test_identification_brand_color_only_is_weak():
 
 def test_products_match_required_features_rejects_khaki_for_chrono():
     products = [
-        {"id": "1", "name": "Relógio Hamilton Khaki Field Preto H70455733"},
-        {"id": "2", "name": "Relógio Hamilton Khaki Navy Scuba Automático Preto"},
+        {"id": "1", "name": "produto MarcaB Power Mini Preto H70455733"},
+        {"id": "2", "name": "produto MarcaB Power Navy Scuba sem fio Preto"},
     ]
-    assert products_match_required_features(products, ["Cronógrafo"]) is False
-    chrono = [
+    assert products_match_required_features(products, ["Bluetooth"]) is False
+    bluetooth = [
         {
             "id": "3",
-            "name": "Relógio Hamilton American Classic Intra-Matic Chrono Automático Preto",
+            "name": "produto MarcaB American Classic Audio Pro bluetooth sem fio Preto",
         }
     ]
-    assert products_match_required_features(chrono, ["chronograph"]) is True
+    assert products_match_required_features(bluetooth, ["bluetooth"]) is True
 
 
-def test_score_prefers_samurai_steel_over_black_case_sibling():
+def test_score_prefers_soundpro_steel_over_black_case_sibling():
     from app.models import SalesInterpretation
     from app.product_retrieval import score_catalog_candidates
 
@@ -198,9 +198,9 @@ def test_score_prefers_samurai_steel_over_black_case_sibling():
         domain="commerce",
         goal="find",
         subject={
-            "product_type": "relógio",
-            "brand": "Seiko",
-            "model": "Prospex Sea Samurai Preto",
+            "product_type": "produto",
+            "brand": "MarcaD",
+            "model": "Audio Sound Pro Preto",
         },
         preferences={"color": "Preto", "material": "aço"},
         references_previous_context=False,
@@ -210,14 +210,14 @@ def test_score_prefers_samurai_steel_over_black_case_sibling():
     products = [
         {
             "id": "3891",
-            "name": "Relógio Seiko Prospex Automático Preto SRPB55K1",
-            "brand": "Seiko",
+            "name": "produto MarcaD Audio sem fio Preto SRPB55K1",
+            "brand": "MarcaD",
             "price": 6399.99,
         },
         {
             "id": "1945",
-            "name": "Relógio Seiko Prospex Sea Samurai Automático Preto SRPL13K1",
-            "brand": "Seiko",
+            "name": "produto MarcaD Audio Sound Pro sem fio Preto SRPL13K1",
+            "brand": "MarcaD",
             "price": 6099.99,
         },
     ]
@@ -226,7 +226,7 @@ def test_score_prefers_samurai_steel_over_black_case_sibling():
     assert ranked[0]["id"] == "1945"
 
 
-def test_score_requires_chrono_feature_for_hamilton():
+def test_score_requires_chrono_feature_for_marcab():
     from app.models import SalesInterpretation
     from app.product_retrieval import score_catalog_candidates
 
@@ -234,13 +234,13 @@ def test_score_requires_chrono_feature_for_hamilton():
         domain="commerce",
         goal="find",
         subject={
-            "product_type": "relógio",
-            "brand": "Hamilton",
-            "model": "Intra-Matic Cronógrafo Preto",
+            "product_type": "produto",
+            "brand": "MarcaB",
+            "model": "Audio Pro Bluetooth Preto",
         },
         preferences={
             "color": "Preto",
-            "attributes": ["Cronógrafo"],
+            "attributes": ["Bluetooth"],
         },
         references_previous_context=False,
         needs_clarification=False,
@@ -249,14 +249,14 @@ def test_score_requires_chrono_feature_for_hamilton():
     products = [
         {
             "id": "1031",
-            "name": "Relógio Hamilton Khaki Navy Scuba Automático Preto H82335331",
-            "brand": "Hamilton",
+            "name": "produto MarcaB Power Navy Scuba sem fio Preto H82335331",
+            "brand": "MarcaB",
             "price": 7599.99,
         },
         {
             "id": "900",
-            "name": "Relógio Hamilton American Classic Intra-Matic Chrono Automático Preto H38446732",
-            "brand": "Hamilton",
+            "name": "produto MarcaB American Classic Audio Pro bluetooth sem fio Preto H38446732",
+            "brand": "MarcaB",
             "price": 19999.99,
         },
     ]
@@ -265,7 +265,7 @@ def test_score_requires_chrono_feature_for_hamilton():
 
 
 @pytest.mark.asyncio
-async def test_weak_hamilton_identity_prefers_visual_fallback(monkeypatch):
+async def test_weak_marcab_identity_prefers_visual_fallback(monkeypatch):
     from app import image_product_id as module
 
     message = IncomingMessage(
@@ -273,24 +273,24 @@ async def test_weak_hamilton_identity_prefers_visual_fallback(monkeypatch):
         text="[Imagem recebida via WhatsApp]",
         input_modality="image",
         attachment_type="image",
-        image_url="https://example.com/hamilton.jpg",
+        image_url="https://example.com/marcab.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
+        is_product=True,
+        brand="MarcaB",
         model=None,
         color="Preto",
         confidence=0.9,
     )
     visual_result = AgentResult(
-        reply_text="Pela foto, estes parecem os mais próximos no catálogo:\n1. Intra-Matic",
+        reply_text="Pela foto, estes parecem os mais próximos no catálogo:\n1. Audio Pro",
         intent="commerce",
         safety_reason="visual_nearest_neighbor",
         commercial_data={
             "products": [
                 {
                     "id": "900",
-                    "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto",
+                    "name": "produto MarcaB Audio Pro bluetooth sem fio Preto",
                 }
             ],
             "match_status": "ambiguous",
@@ -344,14 +344,14 @@ async def test_chrono_feature_mismatch_falls_back_to_visual(monkeypatch):
         text="[Imagem recebida via WhatsApp]",
         input_modality="image",
         attachment_type="image",
-        image_url="https://example.com/hamilton-chrono.jpg",
+        image_url="https://example.com/marcab-bluetooth.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
-        model="Intra-Matic",
+        is_product=True,
+        brand="MarcaB",
+        model="Audio Pro",
         color="Preto",
-        features=["chronograph"],
+        features=["bluetooth"],
         confidence=0.92,
     )
     tray_result = AgentResult(
@@ -361,8 +361,8 @@ async def test_chrono_feature_mismatch_falls_back_to_visual(monkeypatch):
             "products": [
                 {
                     "id": "1031",
-                    "name": "Relógio Hamilton Khaki Field Preto H70455733",
-                    "brand": "Hamilton",
+                    "name": "produto MarcaB Power Mini Preto H70455733",
+                    "brand": "MarcaB",
                 }
             ]
         },
@@ -376,7 +376,7 @@ async def test_chrono_feature_mismatch_falls_back_to_visual(monkeypatch):
             "products": [
                 {
                     "id": "900",
-                    "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto",
+                    "name": "produto MarcaB Audio Pro bluetooth sem fio Preto",
                 }
             ]
         },
@@ -387,7 +387,7 @@ async def test_chrono_feature_mismatch_falls_back_to_visual(monkeypatch):
         return identified
 
     async def fake_retrieval(interpretation):
-        assert "Cronógrafo" in (interpretation.subject.model or "")
+        assert "Bluetooth" in (interpretation.subject.model or "")
         return tray_result
 
     async def fake_visual(message, **kwargs):
@@ -417,7 +417,7 @@ async def test_chrono_feature_mismatch_falls_back_to_visual(monkeypatch):
     assert result.safety_reason == "visual_nearest_neighbor"
 
 
-def test_automatic_rejects_mechanical_intra_matic_sibling():
+def test_wireless_rejects_mechanical_intra_matic_sibling():
     from app.models import SalesInterpretation
     from app.product_retrieval import score_catalog_candidates
 
@@ -425,13 +425,13 @@ def test_automatic_rejects_mechanical_intra_matic_sibling():
         domain="commerce",
         goal="find",
         subject={
-            "product_type": "relógio",
-            "brand": "Hamilton",
-            "model": "Intra-Matic Cronógrafo Automático Preto",
+            "product_type": "produto",
+            "brand": "MarcaB",
+            "model": "Audio Pro Bluetooth sem fio Preto",
         },
         preferences={
             "color": "Preto",
-            "attributes": ["Cronógrafo", "Automático"],
+            "attributes": ["Bluetooth", "sem fio"],
         },
         references_previous_context=False,
         needs_clarification=False,
@@ -440,14 +440,14 @@ def test_automatic_rejects_mechanical_intra_matic_sibling():
     products = [
         {
             "id": "10333",
-            "name": "Relógio Hamilton American Classic Intra-Matic Chrono H Mecânico Preto H38429130",
-            "brand": "Hamilton",
+            "name": "produto MarcaB American Classic Audio Pro bluetooth H com fio Preto H38429130",
+            "brand": "MarcaB",
             "price": 20299.99,
         },
         {
             "id": "900",
-            "name": "Relógio Hamilton American Classic Intra-Matic Chrono Automático Preto H38446732",
-            "brand": "Hamilton",
+            "name": "produto MarcaB American Classic Audio Pro bluetooth sem fio Preto H38446732",
+            "brand": "MarcaB",
             "price": 19999.99,
         },
     ]
@@ -463,13 +463,13 @@ def test_merge_tray_with_visual_prefers_nearest_family_sibling():
         domain="commerce",
         goal="find",
         subject={
-            "product_type": "relógio",
-            "brand": "Hamilton",
-            "model": "Intra-Matic Cronógrafo Automático Preto",
+            "product_type": "produto",
+            "brand": "MarcaB",
+            "model": "Audio Pro Bluetooth sem fio Preto",
         },
         preferences={
             "color": "Preto",
-            "attributes": ["Cronógrafo", "Automático"],
+            "attributes": ["Bluetooth", "sem fio"],
         },
         references_previous_context=False,
         needs_clarification=False,
@@ -478,32 +478,32 @@ def test_merge_tray_with_visual_prefers_nearest_family_sibling():
     tray = [
         {
             "id": "10333",
-            "name": "Relógio Hamilton Intra-Matic Chrono H Mecânico Preto H38429130",
-            "brand": "Hamilton",
+            "name": "produto MarcaB Audio Pro bluetooth H com fio Preto H38429130",
+            "brand": "MarcaB",
         },
         {
             "id": "13428",
-            "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto H38446730",
-            "brand": "Hamilton",
+            "name": "produto MarcaB Audio Pro bluetooth sem fio Preto H38446730",
+            "brand": "MarcaB",
         },
     ]
     visual = [
         {
             "id": "900",
-            "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto H38446732",
-            "brand": "Hamilton",
+            "name": "produto MarcaB Audio Pro bluetooth sem fio Preto H38446732",
+            "brand": "MarcaB",
             "visual_distance": 0.12,
         },
         {
             "id": "13428",
-            "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto H38446730",
-            "brand": "Hamilton",
+            "name": "produto MarcaB Audio Pro bluetooth sem fio Preto H38446730",
+            "brand": "MarcaB",
             "visual_distance": 0.31,
         },
     ]
     merged = merge_tray_with_visual_neighbors(tray, visual, interpretation, limit=2)
     assert merged[0]["id"] == "900"
-    assert "Mecânico" not in merged[0]["name"]
+    assert "com fio" not in merged[0]["name"]
 
 
 @pytest.mark.asyncio
@@ -515,14 +515,14 @@ async def test_handle_image_disambiguates_siblings_visually(monkeypatch):
         text="[Imagem recebida via WhatsApp]",
         input_modality="image",
         attachment_type="image",
-        image_url="https://example.com/hamilton-orange.jpg",
+        image_url="https://example.com/marcab-orange.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Hamilton",
-        model="Intra-Matic Chronograph Automatic",
+        is_product=True,
+        brand="MarcaB",
+        model="Audio Pro bluetooth wireless",
         color="Preto",
-        features=["chronograph", "automatic"],
+        features=["bluetooth", "wireless"],
         confidence=0.94,
     )
     tray_result = AgentResult(
@@ -532,13 +532,13 @@ async def test_handle_image_disambiguates_siblings_visually(monkeypatch):
             "products": [
                 {
                     "id": "10333",
-                    "name": "Relógio Hamilton Intra-Matic Chrono H Mecânico Preto H38429130",
-                    "brand": "Hamilton",
+                    "name": "produto MarcaB Audio Pro bluetooth H com fio Preto H38429130",
+                    "brand": "MarcaB",
                 },
                 {
                     "id": "13428",
-                    "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto H38446730",
-                    "brand": "Hamilton",
+                    "name": "produto MarcaB Audio Pro bluetooth sem fio Preto H38446730",
+                    "brand": "MarcaB",
                 },
             ],
             "match_status": "ambiguous",
@@ -557,8 +557,8 @@ async def test_handle_image_disambiguates_siblings_visually(monkeypatch):
             [
                 {
                     "id": "900",
-                    "name": "Relógio Hamilton Intra-Matic Chrono Automático Preto H38446732",
-                    "brand": "Hamilton",
+                    "name": "produto MarcaB Audio Pro bluetooth sem fio Preto H38446732",
+                    "brand": "MarcaB",
                     "visual_distance": 0.11,
                 }
             ],
@@ -604,13 +604,13 @@ async def test_identify_product_from_image_uses_vision_parse(monkeypatch):
         text="[Imagem recebida via WhatsApp]",
         input_modality="image",
         attachment_type="image",
-        image_url="https://example.com/watch.jpg",
+        image_url="https://example.com/product.jpg",
         image_mime_type="image/jpeg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Christopher Ward",
-        model="C63 Sealander",
+        is_product=True,
+        brand="MarcaF",
+        model="C63 SoundMax",
         color="Rosa",
         confidence=0.88,
     )
@@ -640,7 +640,7 @@ async def test_identify_product_from_image_uses_vision_parse(monkeypatch):
     monkeypatch.setattr("app.openai_gateway.parse_structured_output", fake_parse)
 
     result = await identify_product_from_image(message)
-    assert result.brand == "Christopher Ward"
+    assert result.brand == "MarcaF"
     assert result.confidence == 0.88
 
 
@@ -653,23 +653,23 @@ async def test_handle_image_product_search_retrieves_catalog(monkeypatch):
         text="[Imagem recebida via WhatsApp]",
         input_modality="image",
         attachment_type="image",
-        image_url="https://example.com/watch.jpg",
+        image_url="https://example.com/product.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Certina",
-        model="DS Super PH2000M Automático Branco Titânio",
+        is_product=True,
+        brand="MarcaC",
+        model="DS Super PB20000 sem fio Branco Titânio",
         confidence=0.9,
     )
     tray_result = AgentResult(
-        reply_text="Encontrei o Certina DS Super PH2000M.",
+        reply_text="Encontrei o MarcaC DS Super PB20000.",
         intent="commerce",
         commercial_data={
             "products": [
                 {
                     "id": "9001",
-                    "name": "Relógio Certina DS Super PH2000M Automático Branco Titânio",
-                    "brand": "Certina",
+                    "name": "produto MarcaC DS Super PB20000 sem fio Branco Titânio",
+                    "brand": "MarcaC",
                 }
             ]
         },
@@ -680,8 +680,8 @@ async def test_handle_image_product_search_retrieves_catalog(monkeypatch):
         return identified
 
     async def fake_retrieval(interpretation):
-        assert interpretation.subject.brand == "Certina"
-        assert "PH2000M" in (interpretation.subject.model or "")
+        assert interpretation.subject.brand == "MarcaC"
+        assert "PB20000" in (interpretation.subject.model or "")
         return tray_result
 
     monkeypatch.setattr(module, "get_settings", lambda: SimpleNamespace(
@@ -705,7 +705,7 @@ async def test_handle_image_product_search_retrieves_catalog(monkeypatch):
     assert result.response_metadata.get("product_resolution_state") == (
         "plausible_matches"
     )
-    assert "Certina" in result.reply_text
+    assert "MarcaC" in result.reply_text
     assert "É esse que você procura?" in result.reply_text
     assert result.commercial_data["products"][0]["id"] == "9001"
 
@@ -719,13 +719,13 @@ async def test_handle_image_ambiguous_siblings_does_not_activate(monkeypatch):
         text="qual o preço desse?",
         input_modality="text_with_image",
         attachment_type="image",
-        image_url="https://example.com/beaubleu.jpg",
+        image_url="https://example.com/marcal.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Beaubleu",
-        model="Ecce",
-        color="branco prata pulseira bege",
+        is_product=True,
+        brand="MarcaL",
+        model="Sound",
+        color="branco prata acessório bege",
         confidence=0.9,
     )
     tray_result = AgentResult(
@@ -735,13 +735,13 @@ async def test_handle_image_ambiguous_siblings_does_not_activate(monkeypatch):
             "products": [
                 {
                     "id": "15522",
-                    "name": "Relógio Beaubleu Ecce Smalt Automático Prata 39 mm",
-                    "brand": "Beaubleu",
+                    "name": "produto MarcaL Sound Smalt sem fio Prata 39 mm",
+                    "brand": "MarcaL",
                 },
                 {
                     "id": "15860",
-                    "name": "Relógio Beaubleu Ecce Lys Automático Branco",
-                    "brand": "Beaubleu",
+                    "name": "produto MarcaL Sound Mini sem fio Branco",
+                    "brand": "MarcaL",
                 },
             ],
             "match_status": "ambiguous",
@@ -760,7 +760,7 @@ async def test_handle_image_ambiguous_siblings_does_not_activate(monkeypatch):
     async def fake_retrieval(interpretation):
         from app.product_retrieval import catalog_match_tokens, preference_color_tokens
 
-        assert "pulseira" not in catalog_match_tokens(interpretation)
+        assert "acessório" not in catalog_match_tokens(interpretation)
         assert "bege" not in catalog_match_tokens(interpretation)
         assert "prata" not in catalog_match_tokens(interpretation)
         assert preference_color_tokens(interpretation) == ("branco",)
@@ -797,12 +797,12 @@ async def test_handle_image_product_search_does_not_ask_for_sku(monkeypatch):
         text="qual o preço desse?",
         input_modality="text_with_image",
         attachment_type="image",
-        image_url="https://example.com/sealander.jpg",
+        image_url="https://example.com/SoundMax.jpg",
     )
     identified = ImageProductIdentification(
-        is_watch=True,
-        brand="Christopher Ward",
-        model="Sealander Automatic",
+        is_product=True,
+        brand="MarcaF",
+        model="SoundMax wireless",
         color="rosa claro",
         confidence=0.92,
     )
@@ -843,7 +843,7 @@ async def test_handle_image_product_search_does_not_ask_for_sku(monkeypatch):
     assert result is not None
     assert "referência" not in result.reply_text.casefold()
     assert "opções mais próximas" in result.reply_text.casefold()
-    assert "Christopher Ward" in result.reply_text
+    assert "MarcaF" in result.reply_text
 
 
 @pytest.mark.asyncio
@@ -860,8 +860,8 @@ async def test_handle_image_product_search_asks_when_confidence_low(monkeypatch)
 
     async def fake_identify(msg):
         return ImageProductIdentification(
-            is_watch=True,
-            brand="Certina",
+            is_product=True,
+            brand="MarcaC",
             model=None,
             confidence=0.2,
         )
@@ -888,10 +888,10 @@ def test_parser_detects_image_from_url_extension_without_type():
             {
                 "id": "msg-image-002",
                 "type": "visitor",
-                "text": "qual o preço do relogio da foto?",
+                "text": "qual o preço do produto da foto?",
                 "createdAt": 1785700000000,
                 "file": {
-                    "link": "https://cdn.example.com/watch.jpg",
+                    "link": "https://cdn.example.com/product.jpg",
                     "name": "attachment",
                     "type": "file",
                 },
@@ -905,5 +905,5 @@ def test_parser_detects_image_from_url_extension_without_type():
     }
     incoming = parse_brevo_conversations_payload(payload)
     assert incoming.attachment_type == "image"
-    assert incoming.image_url == "https://cdn.example.com/watch.jpg"
+    assert incoming.image_url == "https://cdn.example.com/product.jpg"
     assert incoming.input_modality == "text_with_image"

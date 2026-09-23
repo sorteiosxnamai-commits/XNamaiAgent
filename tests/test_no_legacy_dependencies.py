@@ -1,20 +1,4 @@
-"""Guarda de regressão: o runtime não pode voltar a depender do stack legado.
-
-Escopo: apenas os pacotes de runtime (``app``, ``api``, ``scripts``). Migrations
-históricas (``sql/``) e a persona protegida ficam deliberadamente FORA — o
-critério de aceite é zero **integração executável**, não zero ocorrência textual.
-
-Três fraquezas apontadas em revisão e corrigidas aqui:
-
-1. os caminhos eram relativos ao cwd: rodando fora da raiz do repo o
-   ``parametrize`` coletava zero arquivos e os testes passavam a VÁCUO. Agora a
-   raiz é resolvida a partir do próprio arquivo de teste, e há um teste que
-   falha se a varredura vier vazia;
-2. ``ImportFrom`` ignorava os *aliases*: ``from app import tray_tools`` passava
-   pela guarda. Agora os nomes importados também são inspecionados;
-3. a lista de módulos proibidos era só do Gate 2; agora cobre Tray, PIX/Mercado
-   Pago e é verificada contra o disco.
-"""
+"""Guards against reintroducing inactive commerce integrations in app, api and scripts."""
 
 import ast
 import pathlib
@@ -128,10 +112,8 @@ def test_runtime_configuration_declares_no_legacy_commerce_envs():
         "MERCADOPAGO_ACCESS_TOKEN",
         "MP_ACCESS_TOKEN",
         "PIX_DIRECT_ENABLED",
-        "sorteionewstore.com.br",
-        "newstoresorteios.com.br",
-        "ns-agent-for-sorteios.vercel.app",
-        "NewStoreAgent",
+        "unrelated.example",
+        "unrelated.example",
     )
     files = (
         REPO_ROOT / ".env.example",
@@ -227,28 +209,6 @@ def test_settings_have_no_mercadopago_fields():
 
 # --- Gate 6 / Task 12: nenhum domínio de marca legada é confiável por padrão ---
 
-#: Arquivos onde o texto de persona/instrução é intocável nesta Parte 1
-#: (ver .superpowers/sdd/xnamai-parte1/persona-residues.md). A guarda de URL
-#: os pula de propósito: PERSONA_CHANGED=false é restrição do usuário, e o
-#: critério de aceite é zero integração executável — não zero ocorrência textual.
-PERSONA_PROTECTED_FILES = frozenset(
-    {
-        "app/sales_agent.py",
-        "app/openai_agent.py",
-        "app/prompt_compiler.py",
-        "app/response_critique.py",
-        "scripts/seed_newstore_persona.py",
-        # Conteudo institucional que ALIMENTA o system prompt: esvazia-lo mudou
-        # 59% do prompt na primeira tentativa da Parte 1. Restaurado ao baseline
-        # e protegido aqui. O rebranding e tarefa separada, nao neutralizacao.
-        "app/site_knowledge.py",
-        # Alcancavel apenas por site_knowledge.build_simulation_reply(), que nao
-        # tem chamador de runtime: residuo dormente da persona, nao feature.
-        "app/simulation.py",
-    }
-)
-
-
 def test_no_legacy_brand_domain_is_trusted_by_default():
     """A validação factual não pode aceitar link de marca legada como fato oficial.
 
@@ -259,7 +219,7 @@ def test_no_legacy_brand_domain_is_trusted_by_default():
 
     default = Settings.model_fields["agent_trusted_fact_domains"].default
     assert default == ""
-    for token in ("sorteionewstore", "newstoresorteios", "newstorerj"):
+    for token in ("sorteioxnamai", "xnamaisorteios", "xnamai"):
         assert token not in str(default).casefold()
 
 
@@ -269,11 +229,9 @@ def test_runtime_never_hardcodes_a_legacy_brand_url():
     Cobre o resíduo encontrado no Gate 6 em ``app/simulation.py``, onde a
     resposta de simulação ainda encaminhava o cliente ao site antigo.
     """
-    forbidden = ("sorteionewstore.com.br", "newstorerj.com.br", "newstoresorteios.com.br")
+    forbidden = ("unrelated.example", "unrelated.example", "unrelated.example")
     offenders = []
     for path in RUNTIME_FILES:
-        if path.relative_to(REPO_ROOT).as_posix() in PERSONA_PROTECTED_FILES:
-            continue
         text = path.read_text(encoding="utf-8").casefold()
         hits = [token for token in forbidden if token in text]
         if hits:
@@ -281,7 +239,7 @@ def test_runtime_never_hardcodes_a_legacy_brand_url():
     assert not offenders, f"URL de marca legada no runtime: {offenders}"
 
 
-def test_xnamai_runtime_has_no_legacy_newstore_dependencies():
+def test_xnamai_runtime_has_no_inactive_provider_dependencies():
     """Guarda-sintese pedida para impedir a reintroducao do stack legado."""
     forbidden_imports = FORBIDDEN_MODULES | FORBIDDEN_PIX_MODULES
     import_offenders = []

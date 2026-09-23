@@ -38,6 +38,7 @@ _API_HINTS: dict[str, str] = {
     "get_payment_options": "Opções de pagamento de carrinho/pedido",
     "search_customer": "Localizar cliente por CPF/e-mail",
     "get_customer": "Detalhes do cliente",
+    "create_customer": "Criar cadastro após revisão e confirmação explícita",
     "list_orders": "Listar pedidos do cliente/sessão",
     "get_order": "Consultar pedido",
     "get_order_complete": "Status completo do pedido",
@@ -115,7 +116,7 @@ _ORDER_CAPABILITIES = frozenset({
 })
 
 #: Idem para dado cadastral de cliente.
-_CUSTOMER_CAPABILITIES = frozenset({"search_customer", "get_customer"})
+_CUSTOMER_CAPABILITIES = frozenset({"search_customer", "get_customer", "create_customer"})
 
 
 def runtime_commerce_capabilities() -> frozenset[str]:
@@ -131,6 +132,9 @@ def runtime_commerce_capabilities() -> frozenset[str]:
         provider = get_commerce_provider()
     except Exception:  # noqa: BLE001 - capacidade nunca derruba o turno
         return frozenset()
+    operational = getattr(provider, "runtime_capabilities", None)
+    if operational is not None:
+        return frozenset(operational)
     if not getattr(provider, "available", False):
         return frozenset()
     return frozenset(getattr(provider, "llm_capabilities", None) or ())
@@ -178,7 +182,7 @@ def _restrictions_for(commerce_apis: list[str]) -> list[str]:
         )
     if not (disponiveis & _CUSTOMER_CAPABILITIES):
         linhas.append(
-            "- NAO ha consulta de cadastro de cliente neste atendimento."
+            "- NAO ha consulta nem criacao de cadastro de cliente neste atendimento."
         )
     if linhas:
         linhas.insert(0, "NAO disponivel agora (nunca anuncie o que esta abaixo):")

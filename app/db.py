@@ -453,7 +453,7 @@ def ensure_tables() -> None:
                 ON public.ai_catalog_cache (expires_at);
 
                 CREATE TABLE IF NOT EXISTS public.ai_catalog_index (
-                    tenant_id text NOT NULL DEFAULT 'newstore',
+                    tenant_id text NOT NULL DEFAULT 'xnamai',
                     catalog_item_key text NOT NULL DEFAULT '',
                     product_id text NOT NULL,
                     variant_id text NULL,
@@ -466,12 +466,7 @@ def ensure_tables() -> None:
                     title_normalized text NOT NULL DEFAULT '',
                     category text NULL,
                     gender text NULL,
-                    mechanism text NULL,
-                    case_size text NULL,
-                    dial_color text NULL,
-                    strap_color text NULL,
                     material text NULL,
-                    strap_type text NULL,
                     colors_normalized jsonb NOT NULL DEFAULT '[]'::jsonb,
                     aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
                     price numeric NULL,
@@ -1322,7 +1317,19 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
     safe_data.setdefault("safety_reason", None)
     safe_data.setdefault("provider_send_ok", False)
 
-    safe_data["provider_response"] = to_jsonb(safe_data.get("provider_response") or {})
+    provider_response = dict(safe_data.get("provider_response") or {})
+    metadata = safe_data.get("response_metadata")
+    if isinstance(metadata, dict):
+        provider_response["_agent_metadata"] = metadata
+        # Keep the history contract identical for synchronous and queued turns.
+        context = dict(provider_response.get("_agent_context") or {})
+        for key in ("commerce_state", "decision_snapshot", "factual_validation", "quality_judge"):
+            if isinstance(metadata.get(key), dict):
+                context[key] = metadata[key]
+        if context:
+            provider_response["_agent_context"] = context
+    provider_response["_agent_tenant_id"] = settings.agent_persona_tenant_id
+    safe_data["provider_response"] = to_jsonb(provider_response)
 
     with get_conn() as conn:
         with conn.cursor() as cur:

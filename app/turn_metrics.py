@@ -17,7 +17,7 @@ def hash_conversation_key(conversation_key: str | None) -> str | None:
     settings = get_settings()
     secret = str(getattr(settings, "agent_obs_hash_secret", "") or "").strip()
     if not secret:
-        secret = "ns-agent-obs-local"
+        secret = "xnamai-agent-obs-local"
     digest = hmac.new(
         secret.encode("utf-8"),
         value.encode("utf-8"),

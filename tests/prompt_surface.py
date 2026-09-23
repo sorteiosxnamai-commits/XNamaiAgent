@@ -74,11 +74,7 @@ def render_prompt_surface() -> dict[str, str]:
 
     _grab(out, greeting_policy, "greeting_policy", ("_GREETING_VARIANTS",))
 
-    # --- conhecimento institucional ---------------------------------------
-    # `site_knowledge` NAO entra mais aqui: e conteudo da marca legada e deixou
-    # de ser injetado no caminho XNamai. O arquivo segue intocado no repositorio
-    # (legado protegido), mas o que nao chega ao modelo nao pertence a esta
-    # superficie. `tests/test_xnamai_identity.py` guarda a nao-injecao.
+    # Official institutional knowledge is included in openai.SYSTEM_INSTRUCTIONS.
 
     # --- catalogo de capacidades (texto injetado no prompt) ----------------
     from app.capability_catalog import (

@@ -22,7 +22,7 @@ def _settings(api_key: str = "") -> SimpleNamespace:
 def _interpretation(
     *,
     goal: str = "recommend",
-    product_type: str | None = "relógio",
+    product_type: str | None = "fone",
     brand: str | None = None,
     model: str | None = None,
     preferences: dict | None = None,
@@ -51,13 +51,13 @@ async def test_category_resolver_matches_real_plural_category(monkeypatch):
     async def execute(name, arguments):
         calls.append((name, arguments))
         if name == "list_categories":
-            return {"categories": [{"id": 10, "name": "Relógios"}]}
-        return {"tree": {"id": 10, "name": "Relógios", "children": []}}
+            return {"categories": [{"id": 10, "name": "fones"}]}
+        return {"tree": {"id": 10, "name": "fones", "children": []}}
 
     monkeypatch.setattr("app.category_resolver.get_settings", lambda: _settings())
-    resolution = await CategoryResolver(execute).resolve("relógio")
+    resolution = await CategoryResolver(execute).resolve("fone")
 
-    assert normalize_category_name("Relógios") == normalize_category_name("relógio")
+    assert normalize_category_name("fones") == normalize_category_name("fone")
     assert resolution.selected_category_ids == ("10",)
     assert resolution.source == "normalized"
     assert calls[0] == ("list_categories", {"limit": 50, "page": 1})
@@ -86,14 +86,14 @@ async def test_category_resolver_paginates_until_a_match(monkeypatch):
                         {"id": index, "name": f"Categoria {index}"}
                         for index in range(50, 69)
                     ],
-                    {"id": 200, "name": "Relógios"},
+                    {"id": 200, "name": "fones"},
                 ],
                 "paging": {"total": 70, "page": 2, "limit": 50},
             }
-        return {"tree": {"id": 200, "name": "Relógios"}}
+        return {"tree": {"id": 200, "name": "fones"}}
 
     monkeypatch.setattr("app.category_resolver.get_settings", lambda: _settings())
-    resolution = await CategoryResolver(execute).resolve("relógio")
+    resolution = await CategoryResolver(execute).resolve("fone")
 
     assert resolution.selected_category_ids == ("200",)
     assert resolution.categories_loaded == 70
@@ -117,7 +117,7 @@ async def test_category_paging_total_stops_after_single_partial_page(monkeypatch
         raise AssertionError(name)
 
     monkeypatch.setattr("app.category_resolver.get_settings", lambda: _settings())
-    resolution = await CategoryResolver(execute).resolve("produto ausente")
+    resolution = await CategoryResolver(execute).resolve("fone ausente")
 
     assert resolution.failure_reason == "category_not_found"
     assert len([call for call in calls if call[0] == "list_categories"]) == 1
@@ -131,13 +131,13 @@ async def test_unambiguous_first_page_match_stops_before_second_page(monkeypatch
         calls.append((name, arguments))
         if name == "list_categories":
             return {
-                "categories": [{"id": 123, "name": "Relógios"}],
+                "categories": [{"id": 123, "name": "fones"}],
                 "paging": {"total": 70, "page": 1, "limit": 50},
             }
-        return {"tree": {"id": 123, "name": "Relógios"}}
+        return {"tree": {"id": 123, "name": "fones"}}
 
     monkeypatch.setattr("app.category_resolver.get_settings", lambda: _settings())
-    resolution = await CategoryResolver(execute).resolve("relógio")
+    resolution = await CategoryResolver(execute).resolve("fone")
 
     assert resolution.selected_category_ids == ("123",)
     assert [args["page"] for name, args in calls if name == "list_categories"] == [1]
@@ -147,10 +147,10 @@ async def test_unambiguous_first_page_match_stops_before_second_page(monkeypatch
 async def test_category_descendants_are_limited_to_five_product_queries(monkeypatch):
     async def execute(name, arguments):
         if name == "list_categories":
-            return {"categories": [{"id": 10, "name": "Relógios"}]}
+            return {"categories": [{"id": 10, "name": "fones"}]}
         return {"tree": {
             "id": 10,
-            "name": "Relógios",
+            "name": "fones",
             "children": [
                 {"id": child_id, "name": f"Filha {child_id}"}
                 for child_id in range(11, 21)
@@ -158,7 +158,7 @@ async def test_category_descendants_are_limited_to_five_product_queries(monkeypa
         }}
 
     monkeypatch.setattr("app.category_resolver.get_settings", lambda: _settings())
-    resolution = await CategoryResolver(execute).resolve("relógio")
+    resolution = await CategoryResolver(execute).resolve("fone")
 
     assert len(resolution.product_category_ids) == 5
     assert resolution.product_category_ids[0] == "10"
@@ -190,9 +190,9 @@ async def test_category_children_contribute_candidates_and_products_are_deduplic
     async def execute(name, arguments):
         calls.append((name, arguments))
         if name == "list_categories":
-            return {"categories": [{"id": 10, "name": "Relógios"}]}
+            return {"categories": [{"id": 10, "name": "fones"}]}
         if name == "get_category_tree":
-            return {"tree": {"id": 10, "name": "Relógios", "children": [{"id": 11, "name": "Masculinos"}]}}
+            return {"tree": {"id": 10, "name": "fones", "children": [{"id": 11, "name": "Masculinos"}]}}
         if name == "search_products":
             if arguments.get("category_id") == "10":
                 return {"products": [{"id": "A", "name": "A"}, {"id": "B", "name": "B"}]}
@@ -225,9 +225,9 @@ async def test_candidate_pool_never_exceeds_twenty(monkeypatch):
 
     async def execute(name, arguments):
         if name == "list_categories":
-            return {"categories": [{"id": 10, "name": "Relógios"}]}
+            return {"categories": [{"id": 10, "name": "fones"}]}
         if name == "get_category_tree":
-            return {"tree": {"id": 10, "name": "Relógios"}}
+            return {"tree": {"id": 10, "name": "fones"}}
         if name == "search_products":
             return {"products": [{"id": str(index), "name": str(index)} for index in range(30)]}
         if name == "get_product":
@@ -267,13 +267,13 @@ async def test_catalog_request_retrieves_immediately_by_category(monkeypatch):
     async def execute(name, arguments):
         calls.append((name, arguments))
         if name == "list_categories":
-            return {"categories": [{"id": 10, "name": "Relógios"}]}
+            return {"categories": [{"id": 10, "name": "fones"}]}
         if name == "get_category_tree":
-            return {"tree": {"id": 10, "name": "Relógios"}}
+            return {"tree": {"id": 10, "name": "fones"}}
         if name == "search_products":
-            return {"products": [{"id": "1", "name": "Citizen Tsuyosa", "current_price": 5000}]}
+            return {"products": [{"id": "1", "name": "MarcaG AudioMini", "current_price": 5000}]}
         if name == "get_product":
-            return {"id": "1", "name": "Citizen Tsuyosa", "current_price": 5000}
+            return {"id": "1", "name": "MarcaG AudioMini", "current_price": 5000}
         raise AssertionError(name)
 
     settings = _settings()
@@ -295,7 +295,7 @@ async def test_catalog_request_retrieves_immediately_by_category(monkeypatch):
 
 def test_specific_product_keeps_exact_strategy_without_category():
     plan = ProductRetrievalCompiler.compile(
-        _interpretation(goal="find", product_type=None, brand="Tissot", model="Seastar")
+        _interpretation(goal="find", product_type=None, brand="MarcaA", model="ChargeMax")
     )
     assert plan.mode == "exact"
     strategies = [request.strategy for request in plan.requests]
@@ -305,8 +305,8 @@ def test_specific_product_keeps_exact_strategy_without_category():
         request for request in plan.requests
         if request.strategy == "exact_model_with_brand"
     )
-    assert exact.name == "Seastar"
-    assert exact.brand == "Tissot"
+    assert exact.name == "ChargeMax"
+    assert exact.brand == "MarcaA"
     assert all(request.category_id is None for request in plan.requests)
 
 
@@ -367,14 +367,14 @@ async def test_category_selector_discards_invented_id(monkeypatch):
     async def execute(name, arguments):
         if name == "list_categories":
             return {"categories": [
-                {"id": 10, "name": "Relógios"},
-                {"id": 11, "name": "Relógios"},
+                {"id": 10, "name": "fones"},
+                {"id": 11, "name": "fones"},
             ]}
         return {"tree": {}}
 
     monkeypatch.setattr(resolver_module, "get_settings", lambda: _settings("key"))
     install_fake_openai_client(monkeypatch, FakeClient)
-    resolution = await CategoryResolver(execute).resolve("relógio")
+    resolution = await CategoryResolver(execute).resolve("fone")
 
     assert resolution.selected_category_ids == ()
     assert resolution.source == "openai"
@@ -391,16 +391,16 @@ async def test_category_api_failure_uses_name_fallback_without_false_catalog_emp
         if name == "list_categories":
             return {"error": "unavailable"}
         if name == "search_products":
-            return {"products": [{"id": "1", "name": "Relógio real", "current_price": 3000}]}
+            return {"products": [{"id": "1", "name": "fone real", "current_price": 3000}]}
         if name == "get_product":
-            return {"id": "1", "name": "Relógio real", "current_price": 3000}
+            return {"id": "1", "name": "fone real", "current_price": 3000}
         raise AssertionError(name)
 
     monkeypatch.setattr(sales_agent, "execute_tool", execute)
     result = await sales_agent._execute_compiled_product_retrieval(_interpretation())
 
     search = next(args for name, args in calls if name == "search_products")
-    assert search.get("name") == "relógio"
+    assert search.get("name") == "fone"
     assert result.safety_reason != "category_lookup_failed"
     assert result.safety_reason != "recommendation_no_match"
 

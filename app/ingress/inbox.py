@@ -135,18 +135,22 @@ def claim_pending_inbox(
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("""UPDATE public.ai_inbound_inbox
+                SET status = 'dead', last_error = 'attempts_exhausted',
+                    lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
+                WHERE attempts >= max_attempts AND
+                    (status IN ('pending', 'failed') OR
+                     (status = 'leased' AND lease_expires_at < now()))""")
             cur.execute(
                 """
                 WITH next_rows AS (
                   SELECT id
                   FROM public.ai_inbound_inbox
-                  WHERE status IN ('pending', 'failed')
+                  WHERE (status IN ('pending', 'failed') OR
+                         (status = 'leased' AND lease_expires_at < now()))
                     AND attempts < max_attempts
-                    AND (
-                      lease_expires_at IS NULL
-                      OR lease_expires_at < now()
-                      OR status = 'pending'
-                    )
+                    AND (status <> 'failed' OR updated_at + make_interval(secs =>
+                      LEAST(300, 30 * power(2, LEAST(GREATEST(attempts - 1, 0), 10)))::int) <= now())
                   ORDER BY created_at ASC
                   FOR UPDATE SKIP LOCKED
                   LIMIT %(limit)s
@@ -163,7 +167,7 @@ def claim_pending_inbox(
                   inbox.id, inbox.provider, inbox.channel, inbox.message_id,
                   inbox.idempotency_key, inbox.conversation_key, inbox.visitor_id,
                   inbox.sender_key, inbox.event_name, inbox.payload_json,
-                  inbox.attempts
+                  inbox.attempts, inbox.lease_owner, inbox.max_attempts
                 """,
                 {
                     "limit": max(1, min(int(limit), 25)),
@@ -190,15 +194,30 @@ def claim_pending_inbox(
                     "event_name": row[8],
                     "payload_json": row[9],
                     "attempts": row[10],
+                    "lease_owner": row[11],
+                    "max_attempts": row[12],
                 }
             )
     return claimed
+
+
+def renew_inbox_lease(row: dict[str, Any], *, lease_seconds: int = 120) -> bool:
+    """Do not begin a queued turn after another worker can reclaim its lease."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE public.ai_inbound_inbox
+                SET lease_expires_at = now() + (%s * interval '1 second')
+                WHERE id = %s AND status = 'leased' AND lease_owner = %s
+                  AND lease_expires_at > now()""",
+                (max(15, lease_seconds), row["id"], row["lease_owner"]))
+            return cur.rowcount == 1
 
 
 def mark_inbox_processed(
     inbox_id: int,
     *,
     processed_inbound_id: int | None = None,
+    owner: str | None = None,
 ) -> None:
     settings = get_settings()
     if not settings.database_url:
@@ -216,13 +235,15 @@ def mark_inbox_processed(
                     lease_expires_at = NULL,
                     last_error = NULL
                 WHERE id = %(id)s
+                  AND (%(owner)s::text IS NULL OR
+                       (status = 'leased' AND lease_owner = %(owner)s AND lease_expires_at > now()))
                 """,
-                {"id": inbox_id, "inbound_id": processed_inbound_id},
+                {"id": inbox_id, "inbound_id": processed_inbound_id, "owner": owner},
             )
     log_event("inbox.processed", {"inbox_id": inbox_id})
 
 
-def mark_inbox_failed(inbox_id: int, *, error: str, dead: bool = False) -> None:
+def mark_inbox_failed(inbox_id: int, *, error: str, dead: bool = False, owner: str | None = None) -> None:
     settings = get_settings()
     if not settings.database_url:
         return
@@ -238,11 +259,15 @@ def mark_inbox_failed(inbox_id: int, *, error: str, dead: bool = False) -> None:
                     lease_owner = NULL,
                     lease_expires_at = NULL
                 WHERE id = %(id)s
+                  AND status NOT IN ('processed', 'dead', 'skipped')
+                  AND (%(owner)s::text IS NULL OR
+                       (status = 'leased' AND lease_owner = %(owner)s AND lease_expires_at > now()))
                 """,
                 {
                     "id": inbox_id,
                     "status": status,
                     "error": (error or "")[:500],
+                    "owner": owner,
                 },
             )
     log_event(

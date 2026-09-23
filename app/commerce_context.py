@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from .models import AgentResult, PurchaseItem, SalesInterpretation
 
 def normalize_variant_identity(value: Any) -> str | None:
-    """Return the canonical NSAgent identity for an optional provider variant."""
+    """Return the canonical XNamaiAgent identity for an optional provider variant."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -158,6 +158,8 @@ class CommerceConversationState(BaseModel):
     # lembrar a ultima acao, o agente reinterpreta cada turno como busca nova.
     last_commerce_action: str | None = None
     last_requested_fact: str | None = None
+    last_catalog_query: str | None = None
+    conversation_repair_attempts: int = Field(default=0, ge=0)
     # Acao conversacional simples aguardando sim/nao ("posso mostrar alguns
     # produtos?"). Deliberadamente separado de `pending_action` do checkout:
     # um e pergunta de conversa, o outro e etapa de compra com efeito real.
@@ -166,6 +168,12 @@ class CommerceConversationState(BaseModel):
     # a revisao tem um estado proprio para a ausencia em vez de listar o campo
     # junto com os outros que faltam.
     mercos_customer_id: str | None = None
+    # Cadastro solicitado no atendimento. O rascunho atravessa turnos para que
+    # o cliente possa revisar antes de qualquer mutação na fonte comercial.
+    customer_registration: dict[str, Any] = Field(default_factory=dict)
+    # Oferta institucional do Club é mostrada no máximo uma vez por contexto.
+    club_offer_shown: bool = False
+    club_membership_status: Literal["member", "non_member"] | None = None
     # Condicao COMERCIAL (prazo) da fonte, distinta de `selected_payment_option`,
     # que modela FORMA de pagamento (pix/cartao/boleto, parcelas, desconto).
     # Dois escalares em vez de um modelo novo: o pedido so precisa do id, e o
@@ -247,6 +255,8 @@ class CommerceConversationState(BaseModel):
         "awaiting_order_confirmation",
         "awaiting_payment",
         "awaiting_order_customer_document",
+        "awaiting_customer_registration_data",
+        "awaiting_customer_registration_confirmation",
     ] | None = None
     pending_action_product_ids: list[str] = Field(default_factory=list)
 
@@ -713,6 +723,8 @@ def evolve_commerce_state(
         "awaiting_order_confirmation",
         "awaiting_payment",
         "awaiting_order_customer_document",
+        "awaiting_customer_registration_data",
+        "awaiting_customer_registration_confirmation",
     }:
         state.pending_action = pending_action
         pending_ids = metadata.get("pending_action_product_ids")
@@ -803,6 +815,17 @@ def evolve_commerce_state(
                 state.checkout_draft = CheckoutDraft.model_validate(draft)
             except (TypeError, ValueError):
                 pass
+    registration_state = metadata.get("customer_registration_state")
+    if isinstance(registration_state, dict):
+        state.customer_registration = dict(registration_state)
+        customer_id = registration_state.get("customer_id")
+        if customer_id is not None:
+            state.mercos_customer_id = str(customer_id)
+    if metadata.get("club_offer_shown") is True:
+        state.club_offer_shown = True
+    membership_status = metadata.get("club_membership_status")
+    if membership_status in {"member", "non_member"}:
+        state.club_membership_status = membership_status
     order_state = metadata.get("order_state")
     if isinstance(order_state, dict):
         for field in (
@@ -864,6 +887,7 @@ def evolve_commerce_state(
     if isinstance(turn_state, dict):
         for field in (
             "last_commerce_action", "last_requested_fact",
+            "last_catalog_query", "conversation_repair_attempts",
             "last_media_product_id", "last_media_index",
             "pending_commerce_action",
         ):

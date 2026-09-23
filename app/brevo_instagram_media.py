@@ -25,14 +25,14 @@ UNVIEWABLE_MEDIA_GUIDE_REPLY = (
     "Recebi que você mandou uma mídia pelo Instagram, mas o Brevo não me entrega "
     "a imagem pra eu analisar (limitação do Instagram/Brevo com Stories e alguns "
     "anexos).\n\n"
-    "Pode reenviar a foto do relógio aqui no chat como imagem normal? Assim eu "
+    "Pode reenviar a foto do produto aqui no chat como imagem normal? Assim eu "
     "identifico o modelo e te passo o valor certinho."
 )
 
 PRICE_WITHOUT_IMAGE_INSTAGRAM_REPLY = (
     "Não consigo ver a imagem/Story que você mandou pelo Instagram — o Brevo "
     "não entrega esse anexo pro agente.\n\n"
-    "Reenvia a foto do relógio aqui no chat (imagem normal) ou me fala a marca "
+    "Reenvia a foto do produto aqui no chat (imagem normal) ou me fala a marca "
     "e o modelo que eu confirmo o valor no catálogo."
 )
 

@@ -20,13 +20,13 @@ from app.sales_agent import SALES_INTERPRETER_INSTRUCTIONS
 
 
 def _reference():
-    return CommerceProductReference(product_id="803", name="Relogio")
+    return CommerceProductReference(product_id="803", name="produto")
 
 
 def _cart_state(*, quantity=1, channel="whatsapp"):
     return CommerceConversationState(
         active_domain="commerce",
-        active_product={"product_id": "803", "name": "Relogio"},
+        active_product={"product_id": "803", "name": "produto"},
         cart_id="C1",
         cart_session_id="S1",
         cart_url="https://loja.example/redirect_cart_service.php?session=S1",
@@ -52,18 +52,18 @@ def _contains_key(value, target):
 
 
 def test_interpreter_examples_distinguish_interest_context_and_explicit_retrieval():
-    assert '"quero comprar um relogio"' in SALES_INTERPRETER_INSTRUCTIONS
+    assert '"quero comprar um produto"' in SALES_INTERPRETER_INSTRUCTIONS
     assert "enough_information_to_search=false" in SALES_INTERPRETER_INSTRUCTIONS
     assert "ready_for_retrieval=false" in SALES_INTERPRETER_INSTRUCTIONS
-    assert '"quero um relogio casual ate uns R$ 5.000"' in SALES_INTERPRETER_INSTRUCTIONS
-    assert '"me mostre os relogios disponiveis"' in SALES_INTERPRETER_INSTRUCTIONS
+    assert '"quero um carregador USB-C ate R$ 100"' in SALES_INTERPRETER_INSTRUCTIONS
+    assert '"me mostre os produtos disponiveis"' in SALES_INTERPRETER_INSTRUCTIONS
 
 
 def test_quantity_action_is_semantic_and_does_not_accept_session_id():
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="buy",
-        subject={"product_type": "relogio"},
+        subject={"product_type": "produto"},
         preferences={},
         information_needed=[],
         references_previous_context=True,
@@ -198,7 +198,7 @@ async def test_repeated_yes_while_waiting_zipcode_does_not_readd_or_clear_requir
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="buy",
-        subject={"product_type": "relogio"},
+        subject={"product_type": "produto"},
         preferences={},
         information_needed=[],
         references_previous_context=True,

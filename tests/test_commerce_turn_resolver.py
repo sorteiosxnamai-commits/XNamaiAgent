@@ -427,5 +427,5 @@ def test_the_resolver_knows_no_vendor():
     from app.commerce import turn_resolver
 
     fonte = inspect.getsource(turn_resolver).casefold()
-    for marca in ("mercos", "tray", "newstore"):
+    for marca in ("mercos", "tray", "xnamai"):
         assert marca not in fonte

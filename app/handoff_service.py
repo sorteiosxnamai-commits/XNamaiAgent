@@ -32,9 +32,7 @@ def build_human_handoff_result(
 ) -> AgentResult:
     text = (reply_text or "").strip()
     if not text:
-        # Copy neutra: `site_knowledge` guarda contato e politica da marca
-        # legada. Encaminhar para la mandaria o cliente da XNamai para outra
-        # empresa. O arquivo legado segue intocado.
+        # Encaminhe sem inventar contato ou política comercial.
         if reason == "trade_in_or_appraisal":
             text = (
                 "Para avaliação, troca ou compra de usados, vou encaminhar seu "

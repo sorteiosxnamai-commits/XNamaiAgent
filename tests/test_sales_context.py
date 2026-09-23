@@ -39,13 +39,13 @@ def _fake_openai(monkeypatch, interpretation: SalesInterpretation, captured: dic
         (
             "esportivo",
             [
-                {"role": "user", "content": "quero comprar um relógio"},
+                {"role": "user", "content": "quero comprar um produto"},
                 {"role": "assistant", "content": "Você procura algo esportivo, social ou casual?"},
             ],
             SalesInterpretation(
                 domain="commerce",
                 goal="discover",
-                subject={"product_type": "relógio"},
+                subject={"product_type": "produto"},
                 preferences={"style": "esportivo"},
                 references_previous_context=True,
                 needs_clarification=False,
@@ -57,13 +57,13 @@ def _fake_openai(monkeypatch, interpretation: SalesInterpretation, captured: dic
         (
             "menos de 5 mil reais",
             [
-                {"role": "user", "content": "quero um relógio esportivo"},
+                {"role": "user", "content": "quero um produto esportivo"},
                 {"role": "assistant", "content": "Qual faixa de preço você prefere?"},
             ],
             SalesInterpretation(
                 domain="commerce",
                 goal="recommend",
-                subject={"product_type": "relógio"},
+                subject={"product_type": "produto"},
                 preferences={"style": "esportivo", "budget_max": 5000},
                 references_previous_context=True,
                 needs_clarification=False,
@@ -75,13 +75,13 @@ def _fake_openai(monkeypatch, interpretation: SalesInterpretation, captured: dic
         (
             "social",
             [
-                {"role": "user", "content": "me recomende relógios"},
+                {"role": "user", "content": "me recomende produtos"},
                 {"role": "assistant", "content": "Qual estilo você prefere?"},
             ],
             SalesInterpretation(
                 domain="commerce",
                 goal="recommend",
-                subject={"product_type": "relógio"},
+                subject={"product_type": "produto"},
                 preferences={"style": "social"},
                 references_previous_context=True,
                 needs_clarification=False,
@@ -112,7 +112,7 @@ async def test_interpreter_uses_recent_turns_for_short_followups(
     )
 
     assert result.domain == "commerce"
-    assert result.subject.product_type == "relógio"
+    assert result.subject.product_type == "produto"
     assert result.preferences.style == expected_style
     assert result.preferences.budget_max == expected_budget
     assert result.references_previous_context is True
@@ -129,11 +129,11 @@ async def test_interpreter_uses_recent_turns_for_short_followups(
         ("quem ganhou o jogo ontem?", SalesInterpretation(domain="out_of_scope", references_previous_context=False, needs_clarification=False, confidence=0.99), "out_of_scope"),
         ("como funciona o sorteio?", SalesInterpretation(domain="raffle", references_previous_context=False, needs_clarification=False, confidence=0.99), "raffle"),
         (
-            "preciso de um relógio para dar de presente, não queria gastar muito",
+            "preciso de um produto para dar de presente, não queria gastar muito",
             SalesInterpretation(
                 domain="commerce",
                 goal="discover",
-                subject={"product_type": "relógio"},
+                subject={"product_type": "produto"},
                 preferences={"occasion": "presente"},
                 references_previous_context=False,
                 needs_clarification=True,
@@ -184,7 +184,7 @@ async def test_openai_is_attempted_before_deterministic_fallback(monkeypatch):
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="discover",
-        subject={"product_type": "relógio"},
+        subject={"product_type": "produto"},
         preferences={"style": "esportivo"},
         references_previous_context=True,
         needs_clarification=False,
@@ -196,7 +196,7 @@ async def test_openai_is_attempted_before_deterministic_fallback(monkeypatch):
 
     result = await sales_agent.interpret_message(
         IncomingMessage(text="esportivo"),
-        recent_turns=[{"role": "user", "content": "quero um relógio"}],
+        recent_turns=[{"role": "user", "content": "quero um produto"}],
     )
 
     assert captured
@@ -212,7 +212,7 @@ def test_load_recent_conversation_turns_prefers_conversation_and_delivered_repli
         {"id": 12, "text": "menos de 5 mil", "reply_text": None, "safety_reason": None},
         {
             "id": 10,
-            "text": "quero comprar um relógio",
+            "text": "quero comprar um produto",
             "reply_text": "Qual estilo você prefere?",
             "safety_reason": "commerce_clarification",
         },
@@ -260,7 +260,7 @@ def test_load_recent_conversation_turns_prefers_conversation_and_delivered_repli
     )
 
     assert turns == [
-        {"role": "user", "content": "quero comprar um relógio"},
+        {"role": "user", "content": "quero comprar um produto"},
         {
             "role": "assistant",
             "content": "Qual estilo você prefere?",
@@ -288,14 +288,14 @@ async def test_async_agent_passes_loaded_history_to_interpreter(monkeypatch):
     from app.models import AgentResult
 
     history = [
-        {"role": "user", "content": "quero comprar um relógio"},
+        {"role": "user", "content": "quero comprar um produto"},
         {"role": "assistant", "content": "Você prefere esportivo ou social?"},
     ]
     captured = {}
     interpretation = SalesInterpretation(
         domain="commerce",
         goal="discover",
-        subject={"product_type": "relógio"},
+        subject={"product_type": "produto"},
         preferences={"style": "esportivo"},
         references_previous_context=True,
         needs_clarification=True,

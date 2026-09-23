@@ -17,7 +17,7 @@ def _interpretation(**overrides) -> SalesInterpretation:
     payload = {
         "domain": "commerce",
         "goal": "inspect",
-        "subject": {"product_type": "relógio"},
+        "subject": {"product_type": "fone"},
         "preferences": {},
         "information_needed": ["catalog"],
         "references_previous_context": True,
@@ -31,7 +31,7 @@ def _interpretation(**overrides) -> SalesInterpretation:
 def _state() -> CommerceConversationState:
     return CommerceConversationState(
         active_domain="commerce",
-        active_topic="watch_case_size",
+        active_topic="product_dimensions",
         active_product={
             "product_id": "202",
             "reference": "REF-202",
@@ -40,7 +40,7 @@ def _state() -> CommerceConversationState:
         last_presented_products=[
             {"position": 1, "product_id": "101", "reference": "REF-101", "name": "Produto um"},
             {"position": 2, "product_id": "202", "reference": "REF-202", "name": "Produto dois"},
-            {"position": 3, "product_id": "303", "reference": "REF-303", "name": "Tissot SuperSport Rugby"},
+            {"position": 3, "product_id": "303", "reference": "REF-303", "name": "MarcaA SuperSport Rugby"},
         ],
         purchase_stage="selection",
     )
@@ -71,7 +71,7 @@ def test_current_product_reference_resolves_active_product():
 
 def test_explicit_product_name_resolves_against_latest_presented_list():
     interpretation = _interpretation(
-        subject={"brand": "Tissot", "model": "SuperSport Rugby"},
+        subject={"brand": "MarcaA", "model": "SuperSport Rugby"},
         reference_type="explicit_product",
     )
 
@@ -223,7 +223,7 @@ async def test_consultative_request_can_clarify_before_catalog(monkeypatch):
     )
 
     result = await sales_agent.handle_sales_message(
-        IncomingMessage(text="qual relógio combina comigo?"),
+        IncomingMessage(text="qual fone combina comigo?"),
         {"primary_intent": "commerce"},
         {},
         interpretation,

@@ -50,10 +50,7 @@ from .order_service import (
 from .payment_service import inspect_order_payment
 from .privacy_scope import is_personal_account_scope
 from .repository import detect_third_party_account_inquiry
-# `site_knowledge` e conhecimento institucional da marca LEGADA. O arquivo
-# continua intocado no repositorio, mas o caminho XNamai nao injeta mais nada
-# dele no prompt: reutiliza-lo como conhecimento atual faria o agente falar em
-# nome de uma empresa que nao e esta.
+from .site_knowledge import build_site_knowledge_text
 from .vip_profiles import build_vip_openai_context, get_vip_profile, pick_vip_nickname
 from .user_preferences import detect_preferred_name_update
 from .commerce.tools import TOOL_SCHEMAS, execute_tool, commerce_tools_available
@@ -95,7 +92,9 @@ Fatos comerciais:
 Privacidade e segurança:
 - Nunca consulte nem revele dados de outra pessoa.
 - Nunca peça ou registre cartão, CVV, senha, token ou código de autenticação.
-- Não altere cadastro do cliente por mensagem.
+- Só crie cadastro quando a capacidade estiver ativa, após validar os dados,
+  mostrar a revisão ao cliente e receber confirmação explícita. Nunca altere
+  cadastro existente sem um fluxo específico de revisão e confirmação.
 
 Conversa:
 - Responda primeiro o que o cliente perguntou; só depois complemente se fizer
@@ -107,7 +106,7 @@ Conversa:
   falado.
 - Se não souber, diga que não tem a informação e ofereça encaminhar o
   atendimento, sem inventar contato ou endereço.
-""".strip()
+""".strip() + "\n\n" + build_site_knowledge_text()
 
 STORE_LOOKUP_UNAVAILABLE = "N\u00e3o consegui consultar as informa\u00e7\u00f5es da loja neste momento. Tente novamente em instantes."
 GENERAL_GREETING_FALLBACK = "Ol\u00e1! Como posso ajudar?"
@@ -205,7 +204,7 @@ def _third_party_guardrail(message: IncomingMessage, primary_intent: str) -> Age
     sem rota, sem fonte de dados.
 
     Manter as duas condicoes importa nos dois sentidos: so o detector de
-    terceiro recusaria "voces tem Tissot para o 4899...?" (mais estrito que o
+    terceiro recusaria "voces tem cabo USB-C para o 4899...?" (mais estrito que o
     baseline); so o escopo pessoal recusaria "qual o meu saldo" (a propria
     conta do cliente).
 
@@ -838,6 +837,47 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_interpreter=False,
             used_openai_responder=False,
             used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
+        )
+
+    # Club e cadastro são determinísticos e devem acontecer antes de qualquer
+    # interpretação por modelo: coleta, valida, revisa e só então confirma a
+    # mutação no provedor comercial.
+    from .club_xnamai import handle_club_turn
+    from .capability_catalog import runtime_commerce_capabilities
+    from .customer_registration import handle_customer_registration_turn
+
+    club_result = handle_club_turn(message.text, state=commerce_state)
+    if club_result is not None:
+        return _annotate_agent_result(
+            club_result,
+            domain="commerce",
+            goal="discover",
+            response_source="deterministic_fallback",
+            used_openai_interpreter=False,
+            used_openai_responder=False,
+            used_commerce_provider=False,
+        )
+
+    registration_result = await handle_customer_registration_turn(
+        message.text,
+        state=commerce_state,
+        execute=execute_tool,
+        registration_enabled=(
+            "create_customer" in runtime_commerce_capabilities()
+        ),
+    )
+    if registration_result is not None:
+        return _annotate_agent_result(
+            registration_result,
+            domain="commerce",
+            goal="buy",
+            response_source="deterministic_fallback",
+            used_openai_interpreter=False,
+            used_openai_responder=False,
+            used_commerce_provider=bool(
+                registration_result.response_metadata.get("used_commerce_provider")
+            ),
+            fallback_reason=registration_result.safety_reason,
         )
     # Instagram Story reply → associated product (feature-flagged / rollout).
     try:

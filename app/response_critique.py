@@ -29,8 +29,7 @@ from .quality_judge import (
     is_low_risk_judge_skip,
 )
 from .runtime_context import get_current_turn
-#: Dica de resposta para pedido de avaliacao/troca. Texto proprio: reaproveitar
-#: `site_knowledge` traria o contato da marca legada para a boca do agente.
+#: Encaminhamento sem presumir política comercial.
 TRADE_IN_HANDOFF_MESSAGE = (
     "Para avaliação, troca ou compra de usados, vou encaminhar seu atendimento "
     "para a equipe da XNamai."
@@ -49,14 +48,14 @@ CRITIQUE_JUDGE_SYSTEM_PROMPT = (
     "existentes no histórico, inventar fatos, ignorar contexto, "
     "ou deixar de consultar API necessária. "
     "Também reprove (pass_check=false) quando o cliente pediu um "
-    "tipo, função ou atributo de produto (ex.: cronógrafo, diver, GMT, "
-    "automático, cor, orçamento, gênero, marca) e os itens em "
+    "tipo, função ou atributo de produto (ex.: Bluetooth, portable, com fio, "
+    "sem fio, cor, orçamento, gênero, marca) e os itens em "
     "commercial_data.products / a resposta NÃO evidenciam esse "
     "requisito nos nomes ou fatos disponíveis — mesmo que sejam "
     "produtos reais da categoria genérica. "
     "Nesses casos, recommended_apis DEVE incluir search_products com "
     "arguments.query refinada em termos de catálogo (português quando "
-    "fizer sentido, ex.: 'cronógrafo', 'mergulho', 'GMT'), sem inventar "
+    "fizer sentido, ex.: 'Bluetooth', 'portátil', 'com fio'), sem inventar "
     "produtos. "
     "Quando reprovar, liste recommended_apis (somente retryable) "
     "com arguments concretos e retry_instruction objetiva. "

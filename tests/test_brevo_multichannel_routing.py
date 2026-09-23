@@ -66,7 +66,7 @@ async def test_instagram_without_phone_runs_pipeline_and_replies_to_visitor(monk
         "message": {
             "id": "msg-instagram-001",
             "type": "visitor",
-            "text": "Vocês têm relógio Tissot?",
+            "text": "Vocês têm produto MarcaA?",
             "createdAt": 1785700000000,
         },
         "visitor": {
@@ -160,7 +160,7 @@ async def test_own_agent_message_is_skipped_without_response(monkeypatch):
         "messages": [{
             "id": "agent-1",
             "type": "agent",
-            "receivedFrom": "NewStoreAgent",
+            "receivedFrom": "XNamaiAgent",
             "text": "Resposta enviada",
         }],
         "visitor": {"id": "visitor-fb", "source": "facebook"},

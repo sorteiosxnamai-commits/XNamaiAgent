@@ -15,7 +15,7 @@ def _interp(**kwargs) -> SalesInterpretation:
     data = {
         "domain": "commerce",
         "goal": "recommend",
-        "subject": {"product_type": "relógio", "brand": "Seiko"},
+        "subject": {"product_type": "produto", "brand": "MarcaD"},
         "preferences": {"color": "azul"},
         "information_needed": ["catalog"],
         "references_previous_context": False,
@@ -42,8 +42,8 @@ def test_product_with_blue_matches_azul_preference():
     assert tokens == ("azul",)
     product = {
         "id": "1",
-        "name": "Relógio Seiko Presage Blue Dial",
-        "brand": "Seiko",
+        "name": "produto MarcaD CaboFlex Blue primary",
+        "brand": "MarcaD",
         "color": "Blue",
         "price": 2500,
         "available": True,
@@ -56,16 +56,16 @@ def test_recommendation_keeps_brand_pool_for_llm_even_without_literal_azul():
     products = [
         {
             "id": "blue-1",
-            "name": "Seiko 5 Sports Blue",
-            "brand": "Seiko",
+            "name": "MarcaD 5 Sports Blue",
+            "brand": "MarcaD",
             "price": 1800,
             "available": True,
             "available_in_store": True,
         },
         {
             "id": "black-1",
-            "name": "Seiko 5 Sports Black",
-            "brand": "Seiko",
+            "name": "MarcaD 5 Sports Black",
+            "brand": "MarcaD",
             "price": 1800,
             "available": True,
             "available_in_store": True,
@@ -78,21 +78,21 @@ def test_recommendation_keeps_brand_pool_for_llm_even_without_literal_azul():
 
 
 def test_exact_mode_still_requires_color_match_with_aliases():
-    interpretation = _interp(goal="find", subject={"product_type": "relógio", "brand": "Seiko", "model": "Presage"})
+    interpretation = _interp(goal="find", subject={"product_type": "produto", "brand": "MarcaD", "model": "CaboFlex"})
     products = [
         {
             "id": "blue-1",
-            "name": "Seiko Presage Blue",
-            "brand": "Seiko",
-            "model": "Presage",
+            "name": "MarcaD CaboFlex Blue",
+            "brand": "MarcaD",
+            "model": "CaboFlex",
             "price": 3000,
             "available": True,
         },
         {
             "id": "black-1",
-            "name": "Seiko Presage Black",
-            "brand": "Seiko",
-            "model": "Presage",
+            "name": "MarcaD CaboFlex Black",
+            "brand": "MarcaD",
+            "model": "CaboFlex",
             "price": 3000,
             "available": True,
         },

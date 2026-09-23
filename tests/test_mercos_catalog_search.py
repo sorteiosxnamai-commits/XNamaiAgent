@@ -80,10 +80,10 @@ def test_supported_filters_reach_the_index():
     search_products(
         reader,
         tenant_id="t",
-        arguments={"query": " relogio ", "reference": " REF-1 ", "available": True, "limit": 3},
+        arguments={"query": " produto ", "reference": " REF-1 ", "available": True, "limit": 3},
     )
     assert reader.calls[0] == {
-        "text": "relogio", "reference": "REF-1", "category_id": None,
+        "text": "produto", "reference": "REF-1", "category_id": None,
         "available": True, "limit": 3,
     }
 

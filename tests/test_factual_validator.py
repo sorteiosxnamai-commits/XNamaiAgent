@@ -18,11 +18,28 @@ def _decision(result: AgentResult):
     )
 
 
+def test_official_institutional_links_are_supported_without_catalog_tools():
+    from app.site_knowledge import SITE_URL, STORE_URL
+    result = AgentResult(reply_text=f"Site: {SITE_URL} Catálogo: {STORE_URL}", intent="general")
+    report = validate_factual_response(result, decision=_decision(result), mode="shadow")
+    assert report.valid
+    assert report.checked_claims == 2
+
+
+def test_official_domain_does_not_authorize_invented_product_or_payment_paths():
+    from app.site_knowledge import STORE_URL
+    for path in ("produto/inventado", "checkout/inventado"):
+        result = AgentResult(reply_text=STORE_URL + path, intent="commerce")
+        report = validate_factual_response(result, decision=_decision(result), mode="shadow")
+        assert not report.valid
+        assert any(item.kind == "url" for item in report.violations)
+
+
 def test_verified_product_url_and_price_are_accepted():
     result = AgentResult(
         reply_text=(
             "O produto custa R$ 199,90. "
-            "Veja: https://www.sorteionewstore.com.br/produto/1"
+            "Veja: https://xnamai.meuspedidos.com.br/produto/1"
         ),
         intent="commerce",
         commercial_data={
@@ -30,7 +47,7 @@ def test_verified_product_url_and_price_are_accepted():
                 {
                     "id": "1",
                     "current_price": "199.90",
-                    "url": "https://www.sorteionewstore.com.br/produto/1",
+                    "url": "https://xnamai.meuspedidos.com.br/produto/1",
                 }
             ]
         },
@@ -194,7 +211,7 @@ def test_promo_without_promotional_price_is_unsupported():
 
 def test_stock_conflict_and_payment_missing_evidence():
     stock_result = AgentResult(
-        reply_text="O relógio está em estoque agora.",
+        reply_text="O produto está em estoque agora.",
         intent="commerce",
         commercial_data={
             "products": [{"id": "1", "stock": 0, "current_price": "10.00"}],

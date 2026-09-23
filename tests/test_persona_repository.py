@@ -5,7 +5,7 @@ from tests.persona_fakes import InMemoryPersonaStore
 
 
 def test_hash_instructions_stable():
-    text = "Você é o assistente comercial oficial da NewStore.\n"
+    text = "Você é o assistente comercial oficial da XNamai.\n"
     assert repo.hash_instructions(text) == repo.hash_instructions(text)
     assert repo.hash_instructions(text) != repo.hash_instructions(text + "x")
 

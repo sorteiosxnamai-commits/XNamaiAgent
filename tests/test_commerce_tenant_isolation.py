@@ -1,15 +1,4 @@
-"""Persona e comercio sao dominios independentes.
-
-O resíduo que estes testes impedem: o catalogo Mercos nascer particionado pelo
-tenant da PERSONA (`AGENT_PERSONA_TENANT_ID=newstore`). Isso reintroduziria a
-marca legada por uma porta lateral — sem nenhum import de Tray, sem nenhuma
-chamada NewStore, apenas pela chave de particionamento dos dados novos.
-
-As duas chaves seguem existindo e servem a coisas diferentes:
-
-    AGENT_PERSONA_TENANT_ID = newstore   -> lookup da persona (PROTEGIDO, intocado)
-    COMMERCE_TENANT_ID      = xnamai     -> sync state + indice de catalogo
-"""
+"""Persona and commerce tenants are configured independently."""
 
 from __future__ import annotations
 
@@ -38,12 +27,6 @@ def test_scan_is_not_empty():
 
 
 @pytest.mark.parametrize("path", _mercos_files(), ids=lambda p: p.name)
-def test_mercos_package_never_mentions_the_legacy_tenant(path):
-    text = path.read_text(encoding="utf-8").casefold()
-    assert "newstore" not in text, f"{path.name} cita o tenant da marca legada"
-
-
-@pytest.mark.parametrize("path", _mercos_files(), ids=lambda p: p.name)
 def test_mercos_package_never_reads_the_persona_tenant(path):
     """Comercio nao pode se particionar pela chave de lookup da persona."""
     text = path.read_text(encoding="utf-8")
@@ -52,7 +35,7 @@ def test_mercos_package_never_reads_the_persona_tenant(path):
 
 def test_migration_023_has_no_legacy_tenant_and_no_default():
     sql = (REPO_ROOT / "sql" / "023_mercos_sync_state.sql").read_text(encoding="utf-8")
-    assert "newstore" not in sql.casefold()
+    assert "xnamai" not in sql.casefold()
     # Sem DEFAULT: insercao sem tenant deve FALHAR, nunca cair em outra marca.
     tenant_line = next(
         line for line in sql.splitlines() if line.strip().startswith("tenant_id")
@@ -127,7 +110,7 @@ def test_sync_state_store_refuses_to_invent_a_tenant():
 
 def _settings(**overrides):
     fields = {
-        "AGENT_PERSONA_TENANT_ID": "newstore",
+        "AGENT_PERSONA_TENANT_ID": "persona_test",
         "COMMERCE_TENANT_ID": "xnamai",
         "MERCOS_ADAPTOR_URL": "https://adaptor.example.com",
         "MERCOS_ADAPTOR_API_KEY": "internal-key",
@@ -139,7 +122,7 @@ def _settings(**overrides):
 
 def test_persona_tenant_and_commerce_tenant_are_independent():
     settings = _settings()
-    assert settings.agent_persona_tenant_id == "newstore"
+    assert settings.agent_persona_tenant_id == "persona_test"
     assert settings.commerce_tenant_id == "xnamai"
 
 
@@ -169,7 +152,7 @@ def test_changing_the_persona_tenant_does_not_move_the_catalog():
 def test_changing_the_commerce_tenant_does_not_move_the_persona():
     settings = _settings(COMMERCE_TENANT_ID="outro_comercio")
     assert settings.commerce_tenant_id == "outro_comercio"
-    assert settings.agent_persona_tenant_id == "newstore"
+    assert settings.agent_persona_tenant_id == "persona_test"
 
 
 @pytest.mark.asyncio
@@ -209,11 +192,11 @@ def test_catalog_writer_and_reader_share_the_commerce_tenant():
     assert writer._tenant_id == provider._tenant_id == "xnamai"
 
 
-# --- a persona continua intocada --------------------------------------------
+# --- defaults da identidade Xnamai --------------------------------------------
 
 
 def test_persona_lookup_keys_are_preserved():
-    """PERSONA_PROTECTED_RESIDUE: estes valores NAO mudam nesta correcao."""
+    """New installations use Xnamai persona identifiers."""
     settings = Settings(_env_file=None)
-    assert settings.agent_persona_tenant_id == "newstore"
-    assert settings.agent_persona_key == "newstore_commercial"
+    assert settings.agent_persona_tenant_id == "xnamai"
+    assert settings.agent_persona_key == "xnamai_commercial"

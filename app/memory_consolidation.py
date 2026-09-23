@@ -12,7 +12,7 @@ from .db import get_conn
 def expire_contact_memories(*, tenant_id: str | None = None) -> int:
     """Mark expired active memories as expired. Returns affected rows."""
     settings = get_settings()
-    tenant = tenant_id or str(getattr(settings, "agent_persona_tenant_id", "newstore"))
+    tenant = tenant_id or str(getattr(settings, "agent_persona_tenant_id", "xnamai"))
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -83,7 +83,7 @@ def consolidate_contact_memories(
 ) -> dict[str, Any]:
     """Run safe consolidation steps. Never touches persona versions."""
     settings = get_settings()
-    tenant = tenant_id or str(getattr(settings, "agent_persona_tenant_id", "newstore"))
+    tenant = tenant_id or str(getattr(settings, "agent_persona_tenant_id", "xnamai"))
     expired = expire_contact_memories(tenant_id=tenant)
     pruned = 0
     if sender_key:

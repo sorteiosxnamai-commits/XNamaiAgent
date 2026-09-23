@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from .product_vocabulary import mentions_product_category
 
 HUMAN_SUPPORT_KEYWORDS = (
     "falar com atendente",
@@ -22,8 +23,8 @@ HUMAN_SUPPORT_KEYWORDS = (
     "numero da loja",
     "número da loja",
     "telefone da loja",
-    "contato da new store",
-    "contato new store",
+    "contato da xnamai",
+    "contato xnamai",
 )
 
 TRADE_IN_KEYWORDS = (
@@ -45,8 +46,8 @@ TRADE_IN_KEYWORDS = (
     "voces compram",
     "vocês compram",
     "vcs compram",
-    "compram relogio",
-    "compram relógio",
+    "compram produto",
+    "compram produto",
     "aceitam troca",
     "aceita troca",
     "trade in",
@@ -63,14 +64,17 @@ def detect_commerce_inquiry(text: str | None) -> bool:
         "vende", "quanto custa", "qual o preço", "qual o preco", "preço",
         "preco", "quanto fica", "disponibilidade", "referência", "referencia", "sku", "ean",
         "pix", "parcelamento", "parcelar", "promoção", "promocao",
-        "cupom comercial", "produto", "produtos", "relógio", "relogio",
-        "marca", "modelo",
+        "cupom comercial", "produto", "produtos", "produto", "produto",
+        "marca", "modelo", "me cadastrar", "fazer cadastro", "criar meu cadastro",
+        "cadastro de cliente", "cadastrar cliente", "confirmo o cadastro",
+        "club xnamai", "clube xnamai", "xnamai club", "preço de membro",
+        "preco de membro", "quero ser membro", "quero assinar o club",
     )
     unicode_phrases = (
         "voc\u00eas t\u00eam", "voc\u00eas tem", "qual o pre\u00e7o", "pre\u00e7o",
-        "disponibilidade", "refer\u00eancia", "promo\u00e7\u00e3o", "rel\u00f3gio",
+        "disponibilidade", "refer\u00eancia", "promo\u00e7\u00e3o", "produto",
     )
-    return any(phrase in normalized for phrase in phrases + unicode_phrases)
+    return mentions_product_category(text) or any(phrase in normalized for phrase in phrases + unicode_phrases)
 
 
 def detect_human_support_request(text: str) -> bool:
@@ -79,7 +83,7 @@ def detect_human_support_request(text: str) -> bool:
 
 
 def detect_trade_in_or_appraisal_request(text: str) -> bool:
-    """Customer wants to sell, trade or appraise a watch — human sales handoff."""
+    """Customer wants to sell, trade or appraise a product — human sales handoff."""
     normalized = (text or "").lower()
     if not normalized:
         return False
@@ -88,14 +92,11 @@ def detect_trade_in_or_appraisal_request(text: str) -> bool:
         commerce_cue = any(
             term in normalized
             for term in (
-                "relogio",
-                "relógio",
-                "certina",
-                "tissot",
-                "seiko",
-                "omega",
-                "tag",
-                "kuoe",
+                "produto",
+                "celular",
+                "fone",
+                "carregador",
+                "acessório",
                 "marca",
                 "modelo",
                 "peca",
@@ -117,7 +118,7 @@ def detect_trade_in_or_appraisal_request(text: str) -> bool:
     if re.search(
         r"\b(est[aã]o|vcs|voc[eê]s?)\s+comprando\b",
         normalized,
-    ) and any(term in normalized for term in ("relogio", "relógio", "seminovo", "usado")):
+    ) and any(term in normalized for term in ("produto", "produto", "seminovo", "usado")):
         return True
     return False
 
@@ -143,12 +144,7 @@ def detect_blocked_request(text: str) -> str | None:
 
 
 def default_safe_handoff() -> str:
-    """Recusa segura de topico bloqueado.
-
-    Nao usa `site_knowledge`: aquele modulo carrega o contato e a URL da marca
-    legada, e encaminhar o cliente da XNamai para la seria mandar gente para a
-    empresa errada. O arquivo continua intocado no repositorio.
-    """
+    """Recusa segura com encaminhamento à equipe da Xnamai."""
     return (
         "Para sua segurança, não posso seguir com esse assunto por aqui. "
         "Vou encaminhar seu atendimento para a equipe da XNamai."

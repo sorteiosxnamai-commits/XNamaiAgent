@@ -51,7 +51,7 @@ def test_sanitize_strips_claimed_internal_ids():
         language="pt-BR",
         user_goal="",
         entities=ExtractedEntities(
-            brand="Casio",
+            brand="MarcaE",
             claimed_product_id="550e8400-e29b-41d4-a716-446655440000",
             claimed_variant_id="prod_123456",
             previously_mentioned_product="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -72,13 +72,13 @@ def test_sanitize_strips_claimed_internal_ids():
     assert cleaned.entities.claimed_product_id is None
     assert cleaned.entities.claimed_variant_id is None
     assert cleaned.entities.previously_mentioned_product is None
-    assert cleaned.entities.brand == "Casio"
+    assert cleaned.entities.brand == "MarcaE"
     assert cleaned.required_tools == ["search_products"]
 
 
 def test_looks_like_internal_id():
     assert looks_like_internal_id("550e8400-e29b-41d4-a716-446655440000")
-    assert not looks_like_internal_id("MTP-1374D")
+    assert not looks_like_internal_id("PD20-1374D")
     assert not looks_like_internal_id("7891234567890")  # EAN-like handled separately
 
 
@@ -90,17 +90,17 @@ def test_clarification_suppressed_when_brand_and_budget_present():
         clarification_question="Qual cor?",
         answer_strategy="clarify",
         hard_constraints=ProductHardConstraints(
-            brand="Casio",
+            brand="MarcaE",
             budget_max=500,
         ),
-        entities=ExtractedEntities(brand="Casio", budget_max=500, category="relógio"),
+        entities=ExtractedEntities(brand="MarcaE", budget_max=500, category="produto"),
         ambiguity=[
             Ambiguity(kind="missing_budget", blocking=True, detail="unnecessary"),
         ],
     )
     result = apply_clarification_policy(
         understanding,
-        message_text="quero relógios Casio até R$ 500",
+        message_text="quero produtos MarcaE até R$ 500",
     )
     assert result.clarification_required is False
     assert result.answer_strategy == "search_catalog"
@@ -147,17 +147,17 @@ def test_roundtrip_adapters_preserve_commerce_fields():
     understanding = TurnUnderstanding(
         language="pt-BR",
         primary_intent="commerce_recommend",
-        user_goal="relógio feminino até 3000",
+        user_goal="produto feminino até 3000",
         confidence=0.93,
         references_previous_context=True,
         entities=ExtractedEntities(
             brand=None,
-            category="relógio",
+            category="produto",
             gender="feminino",
             budget_max=3000,
         ),
         hard_constraints=ProductHardConstraints(
-            category="relógio",
+            category="produto",
             gender="feminino",
             budget_max=3000,
         ),
@@ -188,16 +188,16 @@ def test_exclusive_marker_maps_to_hard_constraints():
     sales = SalesInterpretation(
         domain="commerce",
         goal="find",
-        subject={"brand": "Seiko", "product_type": "relógio"},
-        preferences={"attributes": ["somente:Seiko"]},
+        subject={"brand": "MarcaD", "product_type": "produto"},
+        preferences={"attributes": ["somente:MarcaD"]},
         references_previous_context=False,
         needs_clarification=False,
         confidence=0.9,
     )
-    turn = sales_to_turn_understanding(sales, message_text="somente Seiko")
+    turn = sales_to_turn_understanding(sales, message_text="somente MarcaD")
     assert turn.hard_constraints.brand_exclusive is True
     assert turn.hard_constraints.exact_only is True
-    assert turn.hard_constraints.brand == "Seiko"
+    assert turn.hard_constraints.brand == "MarcaD"
 
 
 @pytest.mark.asyncio
@@ -209,16 +209,16 @@ async def test_interpret_message_uses_turn_understanding_schema(monkeypatch):
     parsed = TurnUnderstanding(
         primary_intent="commerce_recommend",
         confidence=0.94,
-        user_goal="Casio até 500",
+        user_goal="MarcaE até 500",
         entities=ExtractedEntities(
-            brand="Casio",
-            category="relógio",
+            brand="MarcaE",
+            category="produto",
             budget_max=500,
         ),
         hard_constraints=ProductHardConstraints(
-            brand="Casio",
+            brand="MarcaE",
             budget_max=500,
-            category="relógio",
+            category="produto",
         ),
         soft_preferences=ProductSoftPreferences(),
         required_tools=["search_products"],
@@ -284,10 +284,10 @@ async def test_interpret_message_uses_turn_understanding_schema(monkeypatch):
     install_fake_openai_client(monkeypatch, FakeClient)
 
     result = await sales_agent.interpret_message(
-        IncomingMessage(text="quero relógios Casio até 500"),
+        IncomingMessage(text="quero produtos MarcaE até 500"),
     )
     assert result.domain == "commerce"
-    assert result.subject.brand == "Casio"
+    assert result.subject.brand == "MarcaE"
     assert result.preferences.budget_max == 500
     assert result.needs_clarification is False
     assert result._turn_understanding is not None

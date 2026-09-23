@@ -1,4 +1,4 @@
-"""Identidade de produto para catalogo comum, sem a logica de relogios.
+"""Identidade de produto para catalogo comum, sem a logica de produtos.
 
 Dois erros distintos motivaram este modulo, e o segundo e o grave.
 

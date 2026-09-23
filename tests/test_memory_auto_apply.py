@@ -28,7 +28,7 @@ def _settings(**overrides):
         agent_max_active_contact_memories=20,
         agent_max_conversation_summary_chars=2500,
         agent_max_contact_memory_chars=3000,
-        agent_persona_tenant_id="newstore",
+        agent_persona_tenant_id="xnamai",
         agent_db_persona_enabled=False,
     )
     base.update(overrides)
@@ -62,7 +62,7 @@ def test_allowlist_empty_blocks_auto_apply(monkeypatch):
     )
     assert is_sender_auto_apply_allowed("whatsapp:1") is False
     decision = evaluate_memory_proposal(
-        proposal=_brand("Tissot"),
+        proposal=_brand("MarcaA"),
         sender_key="whatsapp:1",
     )
     assert decision.accepted is True
@@ -95,14 +95,14 @@ def test_explicit_brand_auto_applies_for_allowlisted_sender(monkeypatch):
     )
 
     result = process_agent_memory_proposals(
-        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("Tissot")]),
-        tenant_id="newstore",
+        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("MarcaA")]),
+        tenant_id="xnamai",
         conversation_key="c1",
         sender_key="whatsapp:allowed",
         inbound_id=1,
     )
     assert result.proposals_applied == 1
-    assert store.memories[0]["value"]["value"] == "Tissot"
+    assert store.memories[0]["value"]["value"] == "MarcaA"
     assert store.memories[0]["use_in_instructions"] is True
 
 
@@ -115,8 +115,8 @@ def test_sender_outside_allowlist_stays_pending(monkeypatch):
     monkeypatch.setattr(policy, "get_settings", lambda: _settings())
 
     result = process_agent_memory_proposals(
-        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("Tissot")]),
-        tenant_id="newstore",
+        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("MarcaA")]),
+        tenant_id="xnamai",
         conversation_key="c1",
         sender_key="whatsapp:other",
         inbound_id=2,
@@ -142,8 +142,8 @@ def test_correction_supersedes_previous_brand(monkeypatch):
     )
 
     process_agent_memory_proposals(
-        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("Tissot")]),
-        tenant_id="newstore",
+        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("MarcaA")]),
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
         inbound_id=1,
@@ -152,10 +152,10 @@ def test_correction_supersedes_previous_brand(monkeypatch):
         envelope=AgentTurnEnvelope(
             reply="ok",
             memory_proposals=[
-                _brand("Hamilton", reason="explicit_user_correction"),
+                _brand("MarcaB", reason="explicit_user_correction"),
             ],
         ),
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
         inbound_id=2,
@@ -163,9 +163,9 @@ def test_correction_supersedes_previous_brand(monkeypatch):
     active = [m for m in store.memories if m["status"] == "active"]
     superseded = [m for m in store.memories if m["status"] == "superseded"]
     assert len(active) == 1
-    assert active[0]["value"]["value"] == "Hamilton"
+    assert active[0]["value"]["value"] == "MarcaB"
     assert len(superseded) == 1
-    assert superseded[0]["value"]["value"] == "Tissot"
+    assert superseded[0]["value"]["value"] == "MarcaA"
 
 
 def test_explicit_no_preference_structured(monkeypatch):
@@ -213,8 +213,8 @@ def test_forget_removes_active_memory(monkeypatch):
     )
 
     process_agent_memory_proposals(
-        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("Tissot")]),
-        tenant_id="newstore",
+        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("MarcaA")]),
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
         inbound_id=1,
@@ -234,7 +234,7 @@ def test_forget_removes_active_memory(monkeypatch):
                 )
             ],
         ),
-        tenant_id="newstore",
+        tenant_id="xnamai",
         conversation_key="c",
         sender_key="whatsapp:1",
         inbound_id=2,
@@ -259,23 +259,23 @@ def test_channel_memories_are_isolated(monkeypatch):
     )
 
     process_agent_memory_proposals(
-        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("Tissot")]),
-        tenant_id="newstore",
+        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("MarcaA")]),
+        tenant_id="xnamai",
         conversation_key="ig",
         sender_key="instagram:123",
         inbound_id=1,
     )
     process_agent_memory_proposals(
-        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("Hamilton")]),
-        tenant_id="newstore",
+        envelope=AgentTurnEnvelope(reply="ok", memory_proposals=[_brand("MarcaB")]),
+        tenant_id="xnamai",
         conversation_key="fb",
         sender_key="facebook:123",
         inbound_id=2,
     )
     ig = [m for m in store.memories if m["sender_key"] == "instagram:123" and m["status"] == "active"]
     fb = [m for m in store.memories if m["sender_key"] == "facebook:123" and m["status"] == "active"]
-    assert ig[0]["value"]["value"] == "Tissot"
-    assert fb[0]["value"]["value"] == "Hamilton"
+    assert ig[0]["value"]["value"] == "MarcaA"
+    assert fb[0]["value"]["value"] == "MarcaB"
 
 
 def test_prompt_injects_active_memory_when_auto_apply_enabled(monkeypatch):
@@ -288,12 +288,12 @@ def test_prompt_injects_active_memory_when_auto_apply_enabled(monkeypatch):
     store.memories.append(
         {
             "id": 9,
-            "tenant_id": "newstore",
+            "tenant_id": "xnamai",
             "sender_key": "whatsapp:allowed",
             "memory_key": "preferred_brands",
             "memory_kind": "brand_preference",
-            "value": {"value": "Tissot"},
-            "safe_summary": "Tissot",
+            "value": {"value": "MarcaA"},
+            "safe_summary": "MarcaA",
             "status": "active",
             "importance": 0.9,
             "confidence": 0.9,
@@ -323,7 +323,7 @@ def test_prompt_injects_active_memory_when_auto_apply_enabled(monkeypatch):
         ),
     )
     assert text.startswith("BASE_PROMPT")
-    assert "preferred_brands: Tissot" in text
+    assert "preferred_brands: MarcaA" in text
 
 
 def test_below_threshold_does_not_auto_apply(monkeypatch):
@@ -340,7 +340,7 @@ def test_below_threshold_does_not_auto_apply(monkeypatch):
             scope=MemoryScope.contact,
             kind=MemoryKind.brand_preference,
             key="preferred_brands",
-            value="Tissot",
+            value="MarcaA",
             importance=0.4,
             confidence=0.5,
             reason_code="explicit_user_preference",

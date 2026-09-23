@@ -254,7 +254,7 @@ async def _stream_once(
         "GET",
         url,
         follow_redirects=False,
-        headers={"User-Agent": "NSAgentStoryMedia/2.0"},
+        headers={"User-Agent": "XNamaiAgentStoryMedia/2.0"},
     ) as response:
         status = response.status_code
         if status in {301, 302, 303, 307, 308}:
