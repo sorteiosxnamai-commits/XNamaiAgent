@@ -343,6 +343,13 @@ class Settings(BaseSettings):
         alias="AGENT_MAX_LLM_CALLS_PER_TURN_COMPLEX",
         ge=0,
     )
+    # Real HTTP attempts per turn: primary + Responses->Chat fallback + SDK
+    # internal retries (OPENAI_MAX_RETRIES). Fallback and retries are never free.
+    agent_max_llm_transport_attempts_per_turn: int = Field(
+        default=8,
+        alias="AGENT_MAX_LLM_TRANSPORT_ATTEMPTS_PER_TURN",
+        ge=1,
+    )
     # Etapa 3: unified TurnUnderstanding as interpreter schema (adapted to SalesInterpretation).
     agent_turn_understanding_enabled: bool = Field(
         default=True,
@@ -585,6 +592,8 @@ class Settings(BaseSettings):
     )
     mercos_adaptor_url: str = Field(default="", alias="MERCOS_ADAPTOR_URL")
     mercos_adaptor_api_key: str = Field(default="", alias="MERCOS_ADAPTOR_API_KEY")
+    customer_document_hmac_key: str = Field(default="", alias="CUSTOMER_DOCUMENT_HMAC_KEY")
+    club_api_url: str = Field(default="", alias="CLUB_API_URL")
     mercos_adaptor_timeout_seconds: float = Field(
         default=90.0, alias="MERCOS_ADAPTOR_TIMEOUT_SECONDS", gt=0
     )
@@ -702,6 +711,51 @@ class Settings(BaseSettings):
         alias="AGENT_INBOX_LEASE_SECONDS",
         ge=30,
         le=600,
+    )
+    # Durable queue retry policy (inbox + outbox). Delay before attempt N+1 is
+    # min(max, base * 2**(N-1)). These names were already read by the queues via
+    # getattr but had no Settings field, so they could never be configured.
+    agent_queue_retry_base_seconds: int = Field(
+        default=30,
+        alias="AGENT_QUEUE_RETRY_BASE_SECONDS",
+        ge=1,
+        le=3600,
+    )
+    agent_queue_retry_max_seconds: int = Field(
+        default=300,
+        alias="AGENT_QUEUE_RETRY_MAX_SECONDS",
+        ge=1,
+        le=86400,
+    )
+    # A reply older than this is dead-lettered instead of retried: the
+    # conversation has moved on. Was hardcoded as 15 minutes.
+    agent_outbox_retry_window_seconds: int = Field(
+        default=900,
+        alias="AGENT_OUTBOX_RETRY_WINDOW_SECONDS",
+        ge=60,
+        le=86400,
+    )
+    agent_outbox_lease_seconds: int = Field(
+        default=180,
+        alias="AGENT_OUTBOX_LEASE_SECONDS",
+        ge=15,
+        le=900,
+    )
+    # Ambiguous send (request reached the provider, confirmation lost): no
+    # provider here offers idempotency, so retrying can duplicate the message.
+    # false = at-most-once for ambiguous sends (dead-letter delivery_unknown);
+    # true  = at-least-once (retry, accepting possible duplicates).
+    agent_outbox_retry_unknown_delivery: bool = Field(
+        default=False,
+        alias="AGENT_OUTBOX_RETRY_UNKNOWN_DELIVERY",
+    )
+    # Status callbacks older than this (by their signed timestamp) are not
+    # used to reconcile deliveries: replay protection on top of the HMAC.
+    ycloud_status_webhook_max_age_seconds: int = Field(
+        default=86400,
+        alias="YCLOUD_STATUS_WEBHOOK_MAX_AGE_SECONDS",
+        ge=60,
+        le=604800,
     )
 
     # Meta Instagram Messaging (FASE 3) — direct media, not Brevo CDN.

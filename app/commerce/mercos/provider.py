@@ -105,6 +105,14 @@ CAPABILITY_MATRIX: tuple[CapabilitySupport, ...] = (
         "endpoint existe; mapeamento de campos desconhecido (MERCOS_ADAPTOR_GAP)",
     ),
     _cap(
+        "lookup_customer_by_document",
+        "SUPPORTED_LOCAL",
+        "GET /v1/customers?alterado_apos= (sync) -> ai_mercos_customer_document_index",
+        False,
+        "indice local de HMAC dos documentos, alimentado por sync incremental; "
+        "somente um sync completo e recente permite distinguir NOT_FOUND de falha",
+    ),
+    _cap(
         "create_customer",
         "SUPPORTED_DIRECTLY",
         "POST /v1/customers",
@@ -207,6 +215,7 @@ class MercosCommerceProvider:
         index: Any | None = None,
         tenant_id: str,
         sync_state: Any | None = None,
+        customer_index: Any | None = None,
     ) -> None:
         """`tenant_id` e obrigatorio: fonte unica de verdade e o Settings.
 
@@ -220,6 +229,7 @@ class MercosCommerceProvider:
         self._index = index
         self._tenant_id = str(tenant_id).strip()
         self._sync_state = sync_state
+        self._customer_index = customer_index
 
     @property
     def sync_ready(self) -> bool:
@@ -264,7 +274,9 @@ class MercosCommerceProvider:
     def runtime_capabilities(self) -> frozenset[str]:
         """Capabilities usable by deterministic flows in this environment."""
         capabilities = set(self.llm_capabilities)
-        if self._client.customer_mutations_enabled:
+        if self._customer_index is not None and self._customer_index.ready:
+            capabilities.add("lookup_customer_by_document")
+        if self._client.customer_mutations_enabled and "lookup_customer_by_document" in capabilities:
             capabilities.add("create_customer")
         return frozenset(capabilities)
 
@@ -354,16 +366,56 @@ class MercosCommerceProvider:
         return check_inventory(self._index, tenant_id=self._tenant_id, product_id=product_id)
 
     async def _do_create_customer(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from .client import MercosMutationDisabled
+        """Exactly one POST per tenant + document, decided under the document lock.
+
+        The caller's earlier lookup is only UX: the decision to create is the
+        re-lookup done by ``claim_creation`` inside the per-document lock. A
+        concurrent confirmation for the same document (another conversation or
+        worker) finds the claim and never POSTs.
+        """
+        from .client import MercosAdaptorError, MercosMutationDisabled
 
         required = ("tipo", "razao_social", "nome_fantasia", "cnpj")
         missing = [field for field in required if not arguments.get(field)]
         if missing:
             return {"ok": False, "error": "missing_argument", "arguments": missing}
+        if not self._client.customer_mutations_enabled:
+            return {"ok": False, "error": "mutation_disabled", "code": "mutation_disabled"}
+        index = self._customer_index
+        if index is None:
+            return {"ok": False, "error": "creation_blocked", "code": "lookup_index_not_ready",
+                    "lookup_status": "INDEX_NOT_READY"}
+        document = str(arguments["cnpj"])
+        claim = index.claim_creation(document)
+        if not claim.claimed:
+            lookup = claim.result
+            if lookup.status.value == "FOUND" and lookup.customer_id:
+                return {"ok": True, "customer_id": lookup.customer_id, "linked_existing": True}
+            return {"ok": False, "error": "creation_blocked",
+                    "code": f"lookup_{lookup.status.value.lower()}", "lookup_status": lookup.status.value}
+
+        def _finish(outcome: str, customer_id: str | None = None) -> None:
+            try:
+                index.finish_creation(document, outcome=outcome, customer_id=customer_id)
+            except Exception:  # noqa: BLE001 - claim stays 'creating' and keeps blocking
+                pass
+
         try:
             raw = await self._client.create_customer(arguments)
         except MercosMutationDisabled:
+            _finish("released")
             return {"ok": False, "error": "mutation_disabled", "code": "mutation_disabled"}
+        except MercosAdaptorError as exc:
+            # Definitive rejections mean nothing was created; anything else
+            # (transport, 5xx, unreadable body) may have created the customer.
+            if exc.code in {"bad_request", "unauthorized", "not_found", "rate_limited"}:
+                _finish("released")
+            else:
+                _finish("unknown")
+            raise
+        except Exception:
+            _finish("unknown")
+            return {"ok": False, "error": "commerce_provider_error", "code": "mutation_state_unknown"}
         payload = raw if isinstance(raw, dict) else {}
         nested = payload.get("data") if isinstance(payload.get("data"), dict) else {}
         customer_id = (
@@ -371,8 +423,24 @@ class MercosCommerceProvider:
             or payload.get("mercos_id") or nested.get("id")
         )
         if customer_id is None:
-            return {"ok": False, "error": "customer_id_missing"}
+            _finish("unknown")
+            return {"ok": False, "error": "customer_id_missing", "code": "mutation_state_unknown"}
+        _finish("created", str(customer_id))
         return {"ok": True, "customer_id": str(customer_id)}
+
+    async def _do_lookup_customer_by_document(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self._customer_index is None:
+            from .customer_index import CustomerLookupResult, CustomerLookupStatus
+
+            return CustomerLookupResult(CustomerLookupStatus.PROVIDER_UNAVAILABLE).as_tool_result()
+        return self._customer_index.lookup_customer_by_document(
+            str(arguments.get("document") or "")
+        ).as_tool_result()
+
+    async def run_customer_sync(self) -> dict[str, Any]:
+        from .customer_index import run_customer_sync
+
+        return await run_customer_sync()
 
     async def list_payment_conditions(self) -> list[dict[str, Any]]:
         """Condicoes de pagamento cadastradas na fonte comercial.
@@ -430,6 +498,7 @@ def build_mercos_provider(settings: Any, *, index: Any | None = None) -> MercosC
     tenant_id = settings.commerce_tenant_id
     resolved_index = index
     sync_state = None
+    customer_index = None
     if getattr(settings, "database_url", ""):
         if resolved_index is None:
             from .catalog_index_reader import CatalogIndexProductReader
@@ -438,9 +507,17 @@ def build_mercos_provider(settings: Any, *, index: Any | None = None) -> MercosC
         from .sync_state import DatabaseSyncStateStore
 
         sync_state = DatabaseSyncStateStore(tenant_id=tenant_id)
+        from .customer_index import CustomerDocumentIndex
+
+        customer_index = CustomerDocumentIndex(
+            tenant_id=tenant_id,
+            hmac_key=getattr(settings, "customer_document_hmac_key", ""),
+            state_store=sync_state,
+        )
     return MercosCommerceProvider(
         client,
         index=resolved_index,
         tenant_id=tenant_id,
         sync_state=sync_state,
+        customer_index=customer_index,
     )

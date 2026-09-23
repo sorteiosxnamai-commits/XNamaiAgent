@@ -1,0 +1,20 @@
+{
+  "_source": "Resposta REAL de GET /api/plans do xnamai-club-backend (createApp + SQLite temporario, um plano ativo e um inativo semeados). Campos = entidade Plan (TypeORM).",
+  "status": 200,
+  "body": [
+    {
+      "id": "1f5de0aa-0739-48b5-b316-8187ff5dd83c",
+      "code": "LAUNCH",
+      "name": "Plano Club",
+      "monthlyPriceCents": 14997,
+      "compareAtPriceCents": null,
+      "purchaseLimitCents": null,
+      "description": "",
+      "active": true,
+      "sortOrder": 1,
+      "stripePriceId": null,
+      "createdAt": "2026-09-23T18:47:18.000Z",
+      "updatedAt": "2026-09-23T18:47:18.000Z"
+    }
+  ]
+}

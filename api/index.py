@@ -102,6 +102,7 @@ async def turn_runtime_middleware(request: Request, call_next):
         trace_id=_request_trace_id(request),
         llm_budget=LLMCallBudget(
             max_calls=int(budget_cfg.get("max_calls", 2)),
+            max_transport_attempts=int(budget_cfg.get("max_transport_attempts", 8)),
             enforce=bool(budget_cfg.get("enforce", True)),
         ),
     )
@@ -1139,6 +1140,30 @@ async def commerce_product_sync_cron():
     return result
 
 
+@app.post(
+    "/api/admin/commerce/sync/customers",
+    dependencies=[Depends(verify_admin_token)],
+)
+async def commerce_customer_sync_admin():
+    from app.commerce.health import run_configured_customer_sync
+
+    result = await run_configured_customer_sync()
+    log_event("commerce.sync.customers", {**result, "trigger": "admin"})
+    return result
+
+
+@app.post(
+    "/api/cron/commerce/sync/customers",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def commerce_customer_sync_cron():
+    from app.commerce.health import run_configured_customer_sync
+
+    result = await run_configured_customer_sync()
+    log_event("commerce.sync.customers", {**result, "trigger": "cron"})
+    return result
+
+
 #: Frase exata que o corpo precisa trazer para o full refresh rodar.
 FULL_REFRESH_CONFIRMATION = "FULL_REFRESH_PRODUCTS"
 
@@ -1505,11 +1530,38 @@ async def ycloud_whatsapp_webhook(request: Request):
     )
 
     if event == YCLOUD_STATUS_EVENT:
-        log_event(
-            "ycloud.message_status_updated",
-            parse_ycloud_status_update(payload) or {"status": None},
+        status_update = parse_ycloud_status_update(payload) or {"status": None}
+        log_event("ycloud.message_status_updated", status_update)
+        external_id = status_update.get("external_id")
+        if not external_id:
+            return JSONResponse({"ok": True, "event": event, "skipped": "status_only"})
+        from app.channels.ycloud_whatsapp import (
+            ycloud_signature_age_seconds,
+            ycloud_status_recipient,
         )
-        return JSONResponse({"ok": True, "event": event, "skipped": "status_only"})
+
+        # Replay protection on top of the HMAC: an old signed callback is not
+        # allowed to move delivery state.
+        age = ycloud_signature_age_seconds(signature_header)
+        max_age = int(getattr(settings, "ycloud_status_webhook_max_age_seconds", 86400))
+        if age is None or age > max_age or age < -300:
+            log_event("ycloud.status.reconciliation_skipped", {"reason": "stale_or_future_signature"})
+            return JSONResponse({"ok": True, "event": event, "skipped": "stale_signature"})
+        from app.ingress.delivery_reconciliation import reconcile_provider_status
+
+        try:
+            reconciliation = reconcile_provider_status(
+                provider="ycloud",
+                external_id=external_id,
+                provider_status=status_update.get("status"),
+                event_id=status_update.get("event_id"),
+                recipient=ycloud_status_recipient(payload),
+                error_code=status_update.get("error_code"),
+            )
+        except Exception as exc:  # noqa: BLE001 — never 5xx a status callback
+            log_exception("ycloud.status.reconciliation_failed", exc)
+            reconciliation = {"outcome": "error"}
+        return JSONResponse({"ok": True, "event": event, "reconciliation": reconciliation.get("outcome")})
 
     if event != YCLOUD_INBOUND_EVENT:
         return JSONResponse(
@@ -1999,6 +2051,29 @@ async def cron_process_inbox():
 )
 async def cron_process_inbox_get():
     return await cron_process_inbox()
+
+
+@app.post(
+    "/api/cron/process-outbox",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def cron_process_outbox():
+    """Outbox-only drain: same consumer as process-inbox, no LLM work.
+
+    Retries die after AGENT_OUTBOX_RETRY_WINDOW_SECONDS (default 15 min), so a
+    frequent scheduler must reach this — the daily process-inbox cron cannot.
+    """
+    from app.ingress.outbox_worker import process_outbox_batch
+
+    return await process_outbox_batch()
+
+
+@app.get(
+    "/api/cron/process-outbox",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def cron_process_outbox_get():
+    return await cron_process_outbox()
 
 
 @app.post("/api/test/agent")

@@ -51,6 +51,20 @@ async def run_configured_product_sync() -> dict[str, Any]:
     return await runner()
 
 
+async def run_configured_customer_sync() -> dict[str, Any]:
+    """Update the private customer index through the active provider."""
+    try:
+        from .provider import get_commerce_provider
+
+        provider = get_commerce_provider()
+    except Exception:
+        return {"ok": False, "error": "commerce_provider_unavailable"}
+    runner = getattr(provider, "run_customer_sync", None)
+    if not callable(runner):
+        return {"ok": False, "error": "sync_not_supported_by_provider"}
+    return await runner()
+
+
 async def run_configured_product_full_refresh() -> dict[str, Any]:
     """Reconstroi o catalogo do provider ativo, sem mover o cursor incremental.
 

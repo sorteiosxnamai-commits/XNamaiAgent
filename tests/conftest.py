@@ -11,12 +11,27 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _no_real_database_connections(monkeypatch):
+def _no_real_database_connections(monkeypatch, request):
+    import os
+
     import psycopg
 
     def blocked(*args, **kwargs):
         raise AssertionError("teste tentou abrir conexão real de banco — use um fake")
 
+    # Excecao unica: testes `integration` falam com o banco DESCARTAVEL de
+    # TEST_DATABASE_URL — e somente com ele, nunca com DATABASE_URL de verdade.
+    disposable = os.getenv("TEST_DATABASE_URL", "").strip()
+    if disposable and request.node.get_closest_marker("integration"):
+        real_connect = psycopg.connect
+
+        def only_disposable(conninfo="", *args, **kwargs):
+            if conninfo != disposable:
+                raise AssertionError("teste de integracao so pode usar TEST_DATABASE_URL")
+            return real_connect(conninfo, *args, **kwargs)
+
+        monkeypatch.setattr(psycopg, "connect", only_disposable)
+        return
     monkeypatch.setattr(psycopg, "connect", blocked)
 
 @pytest.fixture(autouse=True, scope="session")
