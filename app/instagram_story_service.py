@@ -19,6 +19,7 @@ from .instagram_story_media import (
     download_story_media,
     extract_video_frames_best_effort,
 )
+from .commerce.errors import COMMERCE_UNAVAILABLE_CODE
 from .instagram_story_models import (
     InstagramStoryContext,
     StoryConversationReference,
@@ -31,7 +32,7 @@ from .models import AgentResult, IncomingMessage
 from .observability import log_event
 from .request_principal import RequestPrincipal, principal_from_internal
 from .story_commercial_policy import (
-    evidence_from_tray_product,
+    evidence_from_commerce_product,
     validate_commercial_answer,
 )
 from .story_product_matcher import classify_match, match_story_to_catalog
@@ -98,11 +99,11 @@ async def _revalidate_product(
     execute_tool: Any,
     variant_id: str | None = None,
 ) -> tuple[dict[str, Any] | None, bool, str | None]:
-    """Revalidate on Tray. Returns (product, tray_failed, failure_code)."""
+    """Revalidate on the commerce provider. Returns (product, provider_failed, failure_code)."""
     try:
         result = await execute_tool("get_product", {"product_id": str(product_id)})
     except Exception:
-        return None, True, "tray_unavailable"
+        return None, True, COMMERCE_UNAVAILABLE_CODE
     if not isinstance(result, dict) or result.get("error"):
         return None, True, "product_revalidation_failed"
     product = dict(result)
@@ -114,7 +115,7 @@ async def _revalidate_product(
                 {"product_id": str(product_id), "variant_id": str(variant_id)},
             )
         except Exception:
-            return None, True, "tray_unavailable"
+            return None, True, COMMERCE_UNAVAILABLE_CODE
         if not isinstance(variant, dict) or variant.get("error"):
             return None, True, "variant_revalidation_failed"
         # Prefer variant commercial fields when present.
@@ -205,7 +206,7 @@ def _compose_reply(
     product: dict[str, Any] | None,
     status: str,
     candidates: list[StoryProductCandidate],
-    tray_failed: bool = False,
+    provider_failed: bool = False,
     expired: bool = False,
     clarification_reply: str | None = None,
     variant_lines: list[str] | None = None,
@@ -227,13 +228,13 @@ def _compose_reply(
             "Não consegui identificar com segurança o produto desse Story. "
             "Se puder enviar um print mais nítido ou a referência, eu confirmo."
         )
-    if tray_failed and product is not None:
+    if provider_failed and product is not None:
         name = str(product.get("name") or "o modelo")
         return (
             f"Identifiquei {name}, mas não consegui confirmar o preço atualizado agora. "
             "Posso tentar novamente em instantes ou encaminhar para o atendimento."
         )
-    if tray_failed and product is None:
+    if provider_failed and product is None:
         return (
             "Não consegui confirmar os dados comerciais atualizados na loja agora. "
             "Posso tentar novamente em instantes ou encaminhar para o atendimento."
@@ -290,7 +291,7 @@ def _reuse_assoc_result(
     shadow_only: bool,
     metrics: dict[str, Any],
     product: dict[str, Any] | None,
-    tray_failed: bool,
+    provider_failed: bool,
     evidence: list[dict[str, Any]],
     candidates: list[StoryProductCandidate] | None = None,
     clarification_options: list[str] | None = None,
@@ -299,7 +300,7 @@ def _reuse_assoc_result(
 ) -> StoryResolutionResult:
     status = assoc.match_status
     return StoryResolutionResult(
-        resolved=bool(product) and not tray_failed and status in {"matched", "manually_confirmed"},
+        resolved=bool(product) and not provider_failed and status in {"matched", "manually_confirmed"},
         tenant_id=tenant,
         story_media_id=media_id,
         match_status=status,
@@ -318,7 +319,7 @@ def _reuse_assoc_result(
             product=product,
             status=status if status != "manually_confirmed" else "matched",
             candidates=candidates or [],
-            tray_failed=tray_failed,
+            provider_failed=provider_failed,
             clarification_reply=clarification_reply,
             variant_lines=variant_lines,
         ),
@@ -459,20 +460,20 @@ async def resolve_story_product_question(
         if execute_tool is None:
             return None, False, None, []
         log_event("story_revalidation", {"product_id": product_id, "has_variant": bool(variant_id)})
-        product, tray_failed, code = await _revalidate_product(
+        product, provider_failed, code = await _revalidate_product(
             product_id=product_id,
             execute_tool=execute_tool,
             variant_id=variant_id,
         )
         evidence: list[dict[str, Any]] = []
-        if product and not tray_failed:
+        if product and not provider_failed:
             authorized, grounded = authorize_products_for_responder(
                 [product],
                 tenant_id=tenant,
             )
             product = authorized[0] if authorized else product
             evidence = [g.model_dump(mode="json") for g in grounded]
-        if tray_failed and code == "variant_revalidation_failed":
+        if provider_failed and code == "variant_revalidation_failed":
             log_event("story_variant_revalidation", {"ok": False, "code": code})
             repo.mark_failed(
                 tenant_id=tenant,
@@ -482,7 +483,7 @@ async def resolve_story_product_question(
                 explanation={"reason": code},
                 failure_code=code,
             )
-        return product, tray_failed, code, evidence
+        return product, provider_failed, code, evidence
 
     # Already matched / manually confirmed → revalidate only (zero vision).
     if assoc and assoc.match_status in {"matched", "manually_confirmed"} and assoc.product_id:
@@ -493,7 +494,7 @@ async def resolve_story_product_question(
             instagram_account_id=account,
             story_media_id=media_id,
         )
-        product, tray_failed, _code, evidence = await _maybe_revalidate(
+        product, provider_failed, _code, evidence = await _maybe_revalidate(
             assoc.product_id, assoc.variant_id
         )
         variant_lines: list[str] | None = None
@@ -501,7 +502,7 @@ async def resolve_story_product_question(
             question_type.value == "color_options"
             and execute_tool is not None
             and product is not None
-            and not tray_failed
+            and not provider_failed
         ):
             variants = await _list_real_variants(
                 product_id=assoc.product_id, execute_tool=execute_tool
@@ -522,7 +523,7 @@ async def resolve_story_product_question(
             shadow_only=shadow_only,
             metrics=metrics,
             product=product,
-            tray_failed=tray_failed,
+            provider_failed=provider_failed,
             evidence=evidence,
             variant_lines=variant_lines,
         )
@@ -552,7 +553,7 @@ async def resolve_story_product_question(
             shadow_only=shadow_only,
             metrics=metrics,
             product=None,
-            tray_failed=False,
+            provider_failed=False,
             evidence=[],
             candidates=cands[:5],
             clarification_options=options,
@@ -569,7 +570,7 @@ async def resolve_story_product_question(
             shadow_only=shadow_only,
             metrics=metrics,
             product=None,
-            tray_failed=False,
+            provider_failed=False,
             evidence=[],
         )
 
@@ -624,7 +625,7 @@ async def resolve_story_product_question(
             )
         # Fall through to reuse matched/ambiguous after wait.
         if assoc and assoc.match_status in {"matched", "manually_confirmed"} and assoc.product_id:
-            product, tray_failed, _code, evidence = await _maybe_revalidate(
+            product, provider_failed, _code, evidence = await _maybe_revalidate(
                 assoc.product_id, assoc.variant_id
             )
             return _reuse_assoc_result(
@@ -635,7 +636,7 @@ async def resolve_story_product_question(
                 shadow_only=shadow_only,
                 metrics=metrics,
                 product=product,
-                tray_failed=tray_failed,
+                provider_failed=provider_failed,
                 evidence=evidence,
             )
 
@@ -675,7 +676,7 @@ async def resolve_story_product_question(
                 metrics=metrics,
             )
         if current and current.match_status in {"matched", "manually_confirmed"} and current.product_id:
-            product, tray_failed, _code, evidence = await _maybe_revalidate(
+            product, provider_failed, _code, evidence = await _maybe_revalidate(
                 current.product_id, current.variant_id
             )
             return _reuse_assoc_result(
@@ -686,7 +687,7 @@ async def resolve_story_product_question(
                 shadow_only=shadow_only,
                 metrics=metrics,
                 product=product,
-                tray_failed=tray_failed,
+                provider_failed=provider_failed,
                 evidence=evidence,
             )
         # Do not start vision without the lock.
@@ -780,11 +781,11 @@ async def resolve_story_product_question(
                 explanation={"via": "media_sha256"},
             )
             metrics["story_deterministic_matches"] = 1
-            product, tray_failed, _code, evidence = await _maybe_revalidate(
+            product, provider_failed, _code, evidence = await _maybe_revalidate(
                 prior.product_id, prior.variant_id
             )
             return StoryResolutionResult(
-                resolved=bool(product) and not tray_failed,
+                resolved=bool(product) and not provider_failed,
                 tenant_id=tenant,
                 story_media_id=media_id,
                 match_status="matched",
@@ -800,7 +801,7 @@ async def resolve_story_product_question(
                     product=product,
                     status="matched",
                     candidates=[],
-                    tray_failed=tray_failed,
+                    provider_failed=provider_failed,
                 ),
                 shadow_only=shadow_only,
                 metrics=metrics,
@@ -1059,11 +1060,11 @@ async def resolve_story_product_question(
             match_confidence=top.score,
             explanation={"reasons": top.match_reasons},
         )
-        product, tray_failed, _code, evidence = await _maybe_revalidate(
+        product, provider_failed, _code, evidence = await _maybe_revalidate(
             top.product_id, top.variant_id
         )
         return StoryResolutionResult(
-            resolved=bool(product) and not tray_failed,
+            resolved=bool(product) and not provider_failed,
             tenant_id=tenant,
             story_media_id=media_id,
             match_status="matched",
@@ -1080,7 +1081,7 @@ async def resolve_story_product_question(
                 product=product,
                 status="matched",
                 candidates=candidates,
-                tray_failed=tray_failed,
+                provider_failed=provider_failed,
             ),
             shadow_only=shadow_only,
             metrics=metrics,
@@ -1168,11 +1169,11 @@ def story_result_to_agent_result(
     evidence = None
     if resolution.product_payload and tenant:
         try:
-            evidence = evidence_from_tray_product(
+            evidence = evidence_from_commerce_product(
                 resolution.product_payload,
                 tenant_id=tenant,
                 confidence=float(resolution.confidence or 0.0),
-                source="tray_api",
+                source="commerce_api",
             )
         except Exception:
             evidence = None

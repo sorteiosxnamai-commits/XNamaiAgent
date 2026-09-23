@@ -126,7 +126,7 @@ async def match_story_to_catalog(
     execute_tool: Any | None = None,
     media_bytes: bytes | None = None,
 ) -> list[StoryProductCandidate]:
-    """Build candidates from exact identifiers → visual index → lexical → Tray.
+    """Build candidates from exact identifiers → visual index → lexical → provider.
 
     Never invents product IDs. Scores reflect real evidence components.
     """
@@ -323,7 +323,7 @@ async def match_story_to_catalog(
     except Exception as exc:  # noqa: BLE001
         print("[story.matcher.visual.error]", {"error_type": type(exc).__name__})
 
-    # Level 3 — Tray complementary search (evidence-based score, never flat 0.7).
+    # Level 3 — provider complementary search (evidence-based score, never flat 0.7).
     if execute_tool is not None and len(candidates) < 3:
         query_bits = [
             *analysis.visible_brands[:1],
@@ -366,12 +366,12 @@ async def match_story_to_catalog(
                                 variant_id=vid,
                                 lexical=max(0.0, lexical - rank_penalty),
                                 quality_penalty=quality_penalty,
-                                reasons=[f"tray_query_overlap:{query[:40]}"],
+                                reasons=[f"provider_query_overlap:{query[:40]}"],
                                 source="commerce_search",
                             ),
                         )
             except Exception as exc:  # noqa: BLE001
-                print("[story.matcher.tray.error]", {"error_type": type(exc).__name__})
+                print("[story.matcher.provider.error]", {"error_type": type(exc).__name__})
 
     ordered = sorted(candidates, key=lambda c: (-c.score, c.product_id))[:limit]
     log_event(

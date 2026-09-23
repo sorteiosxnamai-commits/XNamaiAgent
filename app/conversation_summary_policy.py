@@ -222,7 +222,7 @@ def format_conversation_summary_block(row: dict[str, Any] | None) -> str:
     lines = [
         "<conversation_summary>",
         "Contexto de continuidade apenas. NÃO use como fonte de preço, estoque,",
-        "frete, URL, pedido ou pagamento — esses fatos vêm só de tools/Tray/FACTS.",
+        "frete, URL, pedido ou pagamento — esses fatos vêm só de tools/FACTS.",
     ]
     if goal:
         lines.append(f"- goal: {goal[:200]}")

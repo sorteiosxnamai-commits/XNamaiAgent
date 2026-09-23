@@ -39,7 +39,7 @@ async def resolve_product_reference(
 ) -> ProductResolution:
     """Resolve a product for objective questions without inventing IDs.
 
-    Order: confirmed Story association → exact index → lexical → Tray search.
+    Order: confirmed Story association → exact index → lexical → provider search.
     """
     tid = str(tenant_id or "").strip()
     if not tid:
@@ -159,7 +159,7 @@ async def resolve_product_reference(
                 )
         except Exception as exc:  # noqa: BLE001
             log_event(
-                "product_reference_tray_error",
+                "product_reference_provider_error",
                 {"error_type": type(exc).__name__},
             )
 

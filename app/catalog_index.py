@@ -2,7 +2,7 @@
 
 The LLM never searches the catalog freely. It may only rerank IDs that already
 exist in a deterministic candidate pool. Commercial facts are revalidated from
-Tray before display (see ``revalidate_products``).
+the commerce provider before display (see ``revalidate_products``).
 """
 
 from __future__ import annotations
@@ -664,7 +664,7 @@ def hybrid_rank_products(
     factual_source: FactualSource = "commerce_search",
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return Tray product dicts in hybrid order, with retrieval metadata attached."""
+    """Return provider product dicts in hybrid order, with retrieval metadata attached."""
     candidates = hybrid_rank_candidates(
         products,
         interpretation,

@@ -11,8 +11,8 @@ from .models import IncomingMessage
 from .user_preferences import get_user_preferences, resolve_display_name
 
 
-# Parte 1: os intents do dominio de sorteio (simulation, balance, coupon_code,
-# raffle_history, current_raffle, rules) sairam do runtime junto com a feature.
+# Parte 1: os intents de conta do produto anterior (saldo, cupom pessoal,
+# simulacao, historico) sairam do runtime junto com a feature.
 INTENT_PRIORITY = (
     "human_support",
     "commerce",
@@ -42,7 +42,7 @@ def _primary_intent(intents: list[str]) -> str:
 
 
 def detect_primary_intent(text: str | None) -> str:
-    """Classify intent without loading account, raffle, or customer data."""
+    """Classify intent without loading account or customer data."""
     return _primary_intent(detect_customer_intents(text))
 
 
@@ -68,7 +68,7 @@ def gather_customer_facts(message: IncomingMessage, customer_context: dict[str, 
     intents = detect_customer_intents(text)
     primary_intent = _primary_intent(intents)
 
-    # Parte 1: a conta de saldo/Cartao Presente vinha do banco de sorteio, que
+    # Parte 1: a conta de saldo vinha do banco do produto anterior, que
     # saiu do runtime. Nao ha fonte para consultar: "nao encontrado", sempre.
     account: dict[str, Any] = {"found": False}
     facts: dict[str, Any] = {
@@ -94,8 +94,8 @@ def gather_customer_facts(message: IncomingMessage, customer_context: dict[str, 
             "recent_topics": (preferences.get("recent_topics") or [])[-6:],
         }
 
-    # Parte 1: participacoes, cupom pessoal, simulacao de Cartao Presente,
-    # historico e rodada aberta eram o dominio de sorteio. A feature saiu do
+    # Parte 1: participacoes, cupom pessoal, simulacao de saldo e historico
+    # eram o dominio do produto anterior. A feature saiu do
     # runtime — nenhum desses fatos e montado, e nenhuma fonte e consultada.
 
     if customer_context.get("memory_context"):

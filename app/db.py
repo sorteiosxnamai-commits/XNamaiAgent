@@ -56,7 +56,7 @@ def ensure_tables() -> None:
         return
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # Dedicated agent DB must not require sorteio public.users.
+            # Dedicated agent DB must not require the former product's public.users.
             cur.execute(
                 """
                 ALTER TABLE IF EXISTS public.ai_user_preferences

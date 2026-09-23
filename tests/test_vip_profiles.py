@@ -9,8 +9,7 @@ determinística de apelido e montagem das respostas personalizadas.
 from app.vip_profiles import (
     VIP_PROFILES,
     VipProfile,
-    build_vip_balance_reply,
-    build_vip_greeting,
+    build_vip_openai_context,
     get_vip_profile,
     pick_vip_nickname,
 )
@@ -53,9 +52,16 @@ def test_pick_vip_nickname_falls_back_to_first_name_without_nicknames():
     assert pick_vip_nickname(bare) == "Fulano"
 
 
-def test_build_vip_balance_reply_is_personalized():
-    reply = build_vip_balance_reply(_PROFILE, "Chefe", "R$ 50,00")
-    assert "Chefe" in reply
-    assert "Cliente Exemplo" in reply
-    assert "R$ 50,00" in reply
-    assert build_vip_greeting(_PROFILE, "Chefe") in reply
+def test_vip_context_is_customer_data_not_style():
+    """Reconhecimento e dado; tom/humor vem da persona publicada."""
+    context = build_vip_openai_context(_PROFILE, "Chefe")
+    assert "Cliente Exemplo" in context and "Chefe" in context
+    for style in ("Tom:", "humor", "Respostas curtas", "WhatsApp"):
+        assert style not in context
+
+
+def test_vip_module_carries_no_legacy_account_domain():
+    import app.vip_profiles as vip
+
+    for legacy in ("build_vip_balance_reply", "build_vip_coupon_reply", "build_vip_general_reply"):
+        assert not hasattr(vip, legacy)

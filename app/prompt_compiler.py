@@ -91,20 +91,39 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text) // 4) if text else 0
 
 
+#: Sinais de IDENTIDADE do produto anterior. Categoria de produto nao e sinal:
+#: "relogio", "smartwatch" ou "Apple Watch" podem estar no catalogo atual.
+_LEGACY_IDENTITY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # marca antiga e derivados: NewStore, New Store, NewStoreAgent,
+    # newstore_commercial, dominios como sorteionewstore.com.br
+    re.compile(r"new[\s_-]*store"),
+    re.compile(r"\bnsagent"),
+)
+#: O dominio anterior so identifica a persona quando aparece COMBINADO: sorteio
+#: sozinho pode ser uma frase legitima ("nao fazemos sorteios").
+_LEGACY_DOMAIN_ANCHOR = re.compile(r"\bsorteios?\b")
+_LEGACY_DOMAIN_COMPANIONS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"cartao[\s_-]*presente"),
+    re.compile(r"\blotomania\b"),
+    re.compile(r"\brifas?\b"),
+    re.compile(r"\bnumeros? da sorte\b"),
+)
+
+
 def _has_legacy_store_identity(text: str | None) -> bool:
-    """Reject a stale published persona from the store that preceded Xnamai."""
+    """Reject a stale published persona from the store that preceded Xnamai.
+
+    Only identity signals count — the former brand/agent name, or the former
+    domain combined with its own vocabulary. A product word on its own
+    never invalidates a persona.
+    """
     folded = unicodedata.normalize("NFKD", text or "")
     folded = "".join(char for char in folded if not unicodedata.combining(char))
     folded = folded.casefold()
-    former_category = "relo" + "gio"
-    english_category = "wa" + "tch"
-    former_store = "new" + r"[\s_-]*" + "store"
-    return bool(
-        re.search(
-            rf"\b(?:{former_category}s?|{english_category}(?:es)?)\b",
-            folded,
-        )
-        or re.search(rf"\b{former_store}\b", folded)
+    if any(pattern.search(folded) for pattern in _LEGACY_IDENTITY_PATTERNS):
+        return True
+    return bool(_LEGACY_DOMAIN_ANCHOR.search(folded)) and any(
+        pattern.search(folded) for pattern in _LEGACY_DOMAIN_COMPANIONS
     )
 
 
@@ -159,9 +178,11 @@ def compile_agent_prompt(
     if not persona_text:
         persona_text = (fallback_instructions or "").strip()
         if not persona_text:
+            # Sem persona publicada nem contrato do chamador: somente regras
+            # técnicas. Tom e identidade comportamental nunca nascem no código.
             persona_text = (
-                "Você é o assistente virtual da XNamai. "
-                "Responda em português do Brasil de forma natural, segura e factual. "
+                "Nenhuma persona publicada está ativa neste atendimento. "
+                "Atenda em português do Brasil, de forma segura e factual. "
                 "Não afirme fato comercial sem fonte disponível e não anuncie "
                 "capacidade que não esteja ativa neste atendimento."
             )

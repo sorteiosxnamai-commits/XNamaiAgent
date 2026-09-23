@@ -1,6 +1,6 @@
 """Deterministic commercial truth policy for Story product answers.
 
-Vision and LLMs never authorize price/stock. Tray/catalog evidence does.
+Vision and LLMs never authorize price/stock. Commerce provider/catalog evidence does.
 Money is represented in integer cents — never float for authority.
 """
 
@@ -12,6 +12,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+#: Evidencia lida ao vivo do provider comercial. ``tray_api`` e o nome gravado
+#: pelo produto anterior em ``product_evidence`` ja persistido: somente leitura,
+#: nunca mais produzido.
+LIVE_EVIDENCE_SOURCES: frozenset[str] = frozenset({"commerce_api", "tray_api"})
+PRICED_EVIDENCE_SOURCES: frozenset[str] = LIVE_EVIDENCE_SOURCES | {"catalog_database"}
+
+
 class ProductEvidence(BaseModel):
     tenant_id: str
     product_id: str
@@ -19,6 +26,7 @@ class ProductEvidence(BaseModel):
     source: Literal[
         "confirmed_story_association",
         "exact_catalog_match",
+        "commerce_api",
         "tray_api",
         "catalog_database",
         "visual_candidate",
@@ -34,13 +42,13 @@ class ProductEvidence(BaseModel):
     currency: str = "BRL"
 
     def authorizes_price(self) -> bool:
-        return self.source in {"tray_api", "catalog_database"} and self.price_cents is not None
+        return self.source in PRICED_EVIDENCE_SOURCES and self.price_cents is not None
 
     def authorizes_stock(self) -> bool:
-        return self.source == "tray_api" and self.stock_quantity is not None
+        return self.source in LIVE_EVIDENCE_SOURCES and self.stock_quantity is not None
 
     def authorizes_url(self) -> bool:
-        return self.source in {"tray_api", "catalog_database"} and bool(self.product_url)
+        return self.source in PRICED_EVIDENCE_SOURCES and bool(self.product_url)
 
 
 class CommercialValidationError(ValueError):
@@ -59,19 +67,19 @@ def price_to_cents(value: Any) -> int | None:
         # that send integer reais — treat plain int as reais when small, else cents if tagged.
         return int(value) * 100
     try:
-        # Accept decimal reais from Tray adapters as float/str, convert once to cents.
+        # Accept decimal reais from commerce adapters as float/str, convert once to cents.
         as_float = float(value)
     except (TypeError, ValueError):
         return None
     return int(round(as_float * 100))
 
 
-def evidence_from_tray_product(
+def evidence_from_commerce_product(
     product: dict[str, Any],
     *,
     tenant_id: str,
     confidence: float = 1.0,
-    source: Literal["tray_api", "catalog_database"] = "tray_api",
+    source: Literal["commerce_api", "catalog_database"] = "commerce_api",
 ) -> ProductEvidence:
     pid = str(product.get("id") or product.get("product_id") or "").strip()
     if not pid:

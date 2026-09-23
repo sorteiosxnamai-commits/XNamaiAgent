@@ -5,7 +5,8 @@ Fails closed on real secrets. Never prints secret values.
 
 - Forbidden paths: files **tracked by git** matching `.env*` / `.vercel`
   (local gitignored `.env.local` is allowed on developer machines).
-- Assignments: same classifier as `package_release.py` over release files.
+- Assignments: same classifier as `package_release.py` over every repository
+  file (broader than the release: local notes and logs are scanned too).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from package_release import (  # noqa: E402
     SecretFinding,
     _ASSIGNMENT_RE,
     classify_secret_value,
-    iter_release_files,
+    iter_repository_files,
 )
 
 FORBIDDEN_BASENAMES = frozenset(
@@ -77,7 +78,7 @@ def scan_forbidden_tracked_paths(root: Path) -> list[str]:
 
 def scan_secret_assignments(root: Path) -> list[SecretFinding]:
     findings: list[SecretFinding] = []
-    for path in iter_release_files(root):
+    for path in iter_repository_files(root):
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:

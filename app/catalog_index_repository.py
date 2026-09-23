@@ -363,7 +363,7 @@ class CatalogIndexRepository:
 
 
 def row_to_product_dict(row: dict[str, Any]) -> dict[str, Any]:
-    """Map index row to Tray-like product dict for discovery (not final authority)."""
+    """Map index row to provider-shaped product dict for discovery (not final authority)."""
     freshness = row.get("freshness_at")
     return {
         "id": row.get("product_id"),

@@ -1,6 +1,6 @@
 """Offline eval fixtures for high-signal agent behaviors.
 
-These cases intentionally avoid live OpenAI/Tray calls and assert the
+These cases intentionally avoid live OpenAI/commerce provider calls and assert the
 deterministic contracts that must remain stable across refactors.
 """
 

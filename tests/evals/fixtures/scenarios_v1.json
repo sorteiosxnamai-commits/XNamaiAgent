@@ -334,8 +334,8 @@
       }
     },
     {
-      "id": "s15_tray_timeout",
-      "category": "tray_timeout",
+      "id": "s15_commerce_timeout",
+      "category": "commerce_timeout",
       "input": "tem power bank?",
       "channel": "whatsapp",
       "tool_fixtures": {},

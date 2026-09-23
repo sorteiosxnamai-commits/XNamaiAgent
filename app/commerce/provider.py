@@ -45,7 +45,7 @@ def _build_configured_provider() -> CommerceProvider:
     """Provider a partir da configuracao. Sem fallback para fornecedor legado.
 
     So existem dois desfechos: adaptador comercial configurado -> provider real;
-    nada configurado -> Null. Nunca Tray, nunca XNamai, nunca Mercos direto.
+    nada configurado -> Null. Nunca fornecedor legado, nunca Mercos direto.
     """
     from ..config import get_settings
 

@@ -1,7 +1,7 @@
 """Layered factual authorities (Etapa 5).
 
 PolicyAuthority — absolute (security / deterministic rules).
-CommerceDataAuthority — Tray live > TTL local/index > snapshot/cache >
+CommerceDataAuthority — provider live > TTL local/index > snapshot/cache >
   conversation reference. Never persona or memory for price/stock/URL.
 ConversationStateAuthority — stage, references, pending actions (not price).
 PersonaAuthority — tone/identity only; never commercial numbers.
@@ -92,7 +92,7 @@ class CommercialClaim(BaseModel):
 
 
 class PolicyAuthority:
-    """Absolute rules — never overridden by persona, memory, or Tray."""
+    """Absolute rules — never overridden by persona, memory, or the commerce provider."""
 
     layer = AuthorityLayer.POLICY
 
@@ -111,8 +111,8 @@ class CommerceDataAuthority:
     """Commercial numbers and product identity.
 
     Priority:
-    1. Tray live revalidation
-    2. Tray adapter / search (same turn)
+    1. Commerce provider live revalidation
+    2. Commerce provider search (same turn)
     3. Local DB / catalog index within TTL
     4. Snapshot / cache
     5. Conversation reference (identity only — not price/stock as absolute)

@@ -192,9 +192,7 @@ def admin_prompt_preview(
         incoming=incoming,
         tenant_id=tenant_id,
         persona_key=persona_key,
-        fallback_instructions=(
-            "Você é o assistente virtual da XNamai."
-        ),
+        fallback_instructions=None,
         audit=False,
     )
     return {

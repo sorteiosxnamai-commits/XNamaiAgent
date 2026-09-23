@@ -51,8 +51,6 @@ async def run_replay_case(
 
     get_settings.cache_clear()
     monkeypatch.setenv("OPENAI_API_KEY", "")
-    monkeypatch.setenv("TRAY_ADAPTER_URL", "")
-    monkeypatch.setenv("TRAY_ADAPTER_TOKEN", "")
     get_settings.cache_clear()
 
     monkeypatch.setattr(
@@ -78,12 +76,6 @@ async def run_replay_case(
         return {"success": True, "products": list(payload)}
 
     monkeypatch.setattr(sales_agent, "execute_tool", fake_execute)
-    try:
-        import app.tray_tools as tray_tools
-
-        monkeypatch.setattr(tray_tools, "execute_tool", fake_execute)
-    except Exception:
-        pass
     try:
         import app.product_retrieval as product_retrieval
 

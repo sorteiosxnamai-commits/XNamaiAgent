@@ -21,7 +21,7 @@ sem banco e sem modelo — e o mesmo raciocinio vale se a fonte comercial mudar.
 uma foto significa outra foto, depois de detalhes significa disponibilidade. Por
 isso a resolucao le texto E ultima acao E produto ativo E lista apresentada.
 
-*Nunca escolher por sorteio.* Havendo dois carregadores plausiveis, afirmar um
+*Nunca escolher ao acaso.* Havendo dois carregadores plausiveis, afirmar um
 deles produz preco e estoque do produto errado — e o cliente nao tem como
 perceber a troca. Ambiguidade vira pergunta, sempre.
 """

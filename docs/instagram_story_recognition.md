@@ -39,8 +39,8 @@ Webhook Brevo → InstagramStoryContext
 → associação DB / lease processing
 → download streaming (URL assinada completa)
 → SHA-256 → match confirmado / L1 cache / L2 DB → OpenAI visão
-→ matching (EAN/SKU/ref → índice visual → Tray com score evidenciado)
-→ revalidação Tray (produto + variante)
+→ matching (EAN/SKU/ref → índice visual → provider comercial com score evidenciado)
+→ revalidação no provider comercial (produto + variante)
 → AgentResult + active_product / last_story_product
 ```
 
@@ -74,7 +74,7 @@ Webhook Brevo → InstagramStoryContext
 
 1. Diagnostics (recognition off)  
 2. Shadow (analisa/registra, não muda resposta)  
-3. Canary só após payload real + revalidação Tray  
+3. Canary só após payload real + revalidação no provider comercial
 4. Expandir 5→25→50→100  
 
 `full` permanece desabilitado por padrão.

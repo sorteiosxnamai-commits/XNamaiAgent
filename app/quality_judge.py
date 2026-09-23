@@ -38,7 +38,6 @@ _LOW_RISK_SOURCES = {
     "handoff",
     "guardrail",
     "out_of_scope",
-    "local_raffle",
 }
 
 
@@ -84,6 +83,14 @@ def is_low_risk_judge_skip(
         result.commercial_data or {}
     ):
         return True, "non_commercial_intent"
+    # A clarification ASKS; it asserts no commercial fact. Low interpretation
+    # confidence is exactly why it was asked, so judging it spends a third LLM
+    # call (budget 2: decision + clarification) for nothing. Still judged when
+    # the question carries a price/link or commercial data.
+    if result.safety_reason == "commerce_clarification":
+        reply = result.reply_text or ""
+        if not (_MONEY_RE.search(reply) or _URL_RE.search(reply) or (result.commercial_data or {})):
+            return True, "clarification_without_facts"
     # Deterministic reply with no commercial claims/facts.
     if (
         source.startswith("deterministic")

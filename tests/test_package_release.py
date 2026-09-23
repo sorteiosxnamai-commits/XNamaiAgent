@@ -114,3 +114,96 @@ def test_validate_no_secrets_clean(tmp_path: Path):
     f = tmp_path / "readme.md"
     f.write_text("Set OPENAI_API_KEY in Vercel only.\n", encoding="utf-8")
     assert validate_no_secrets([f], root=tmp_path) == []
+
+
+def _touch(root: Path, rel: str, text: str = "x\n") -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def test_release_is_an_allowlist_of_top_level_entries(tmp_path: Path):
+    """Pasta ou arquivo novo na raiz fica FORA ate ser liberado de proposito."""
+    for rel in (
+        "app/a.py",
+        "api/index.py",
+        "sql/001.sql",
+        "README.md",
+        "requirements.txt",
+        "vercel.json",
+        ".env.example",
+        # locais / sessao / editor / novidade desconhecida
+        ".superpowers/sdd/report.md",
+        ".remember/today.md",
+        ".cursor/mcp.json",
+        ".idea/workspace.xml",
+        "notes-from-agent.md",
+        "scratch/anything.py",
+    ):
+        _touch(tmp_path, rel)
+
+    files = {p.relative_to(tmp_path).as_posix() for p in iter_release_files(tmp_path)}
+
+    assert {"app/a.py", "api/index.py", "sql/001.sql", "README.md", "requirements.txt",
+            "vercel.json", ".env.example"} <= files
+    for leaked in (".superpowers/sdd/report.md", ".remember/today.md", ".cursor/mcp.json",
+                   ".idea/workspace.xml", "notes-from-agent.md", "scratch/anything.py"):
+        assert leaked not in files, leaked
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "debug-38b290.log",
+        "app/debug-session.json",
+        "app/worker.log",
+        "docs/trace.tmp",
+        "app/module.py.bak",
+        "app/.module.py.swp",
+        "scripts/deploy.pem",
+        "scripts/private.key",
+        "app/credentials.json",
+        "app/service-account-prod.json",
+        "app/id_rsa",
+        "app/local.sqlite3",
+        ".coverage",
+        ".coverage.worker1",
+        "app/.env.production",
+        "app/logs/today.txt",
+        "app/tmp/partial.txt",
+    ],
+)
+def test_release_excludes_logs_debug_temp_and_credentials(tmp_path: Path, rel: str):
+    _touch(tmp_path, "app/a.py")
+    _touch(tmp_path, rel)
+    files = {p.relative_to(tmp_path).as_posix() for p in iter_release_files(tmp_path)}
+    assert rel not in files
+    assert "app/a.py" in files
+
+
+def test_secret_scan_is_broader_than_the_release(tmp_path: Path):
+    """Nota local fora do pacote continua sendo varrida por segredo."""
+    from scripts.package_release import iter_repository_files
+    from scripts.scan_secrets import scan_secret_assignments
+
+    _touch(tmp_path, "app/a.py")
+    _touch(tmp_path, ".superpowers/notes.md", "OPENAI_API_KEY=sk-real-looking-value-123456\n")
+
+    released = {p.relative_to(tmp_path).as_posix() for p in iter_release_files(tmp_path)}
+    scanned = {p.relative_to(tmp_path).as_posix() for p in iter_repository_files(tmp_path)}
+    assert ".superpowers/notes.md" not in released
+    assert ".superpowers/notes.md" in scanned
+    blocking = [f for f in scan_secret_assignments(tmp_path) if f.blocking]
+    assert [(f.path, f.variable) for f in blocking] == [(".superpowers/notes.md", "OPENAI_API_KEY")]
+
+
+def test_real_repository_release_keeps_runtime_and_drops_local_state():
+    root = Path(__file__).resolve().parents[1]
+    files = {p.relative_to(root).as_posix() for p in iter_release_files(root)}
+    for required in ("api/index.py", "app/config.py", "vercel.json", "requirements.txt", ".env.example"):
+        assert required in files
+    assert not any(
+        name.startswith((".superpowers/", ".remember/", ".cursor/", ".git/")) or name.endswith(".log")
+        or name == ".env"
+        for name in files
+    )
