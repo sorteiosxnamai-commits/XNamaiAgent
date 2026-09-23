@@ -528,8 +528,8 @@ def filter_products_to_interpretation_family(
     return kept
 
 
-def merge_tray_with_visual_neighbors(
-    tray_products: list[dict[str, Any]],
+def merge_provider_with_visual_neighbors(
+    provider_products: list[dict[str, Any]],
     visual_products: list[dict[str, Any]],
     interpretation: SalesInterpretation,
     *,
@@ -540,12 +540,12 @@ def merge_tray_with_visual_neighbors(
         visual_products,
         interpretation,
     )
-    family_tray = filter_products_to_interpretation_family(
-        tray_products,
+    family_provider = filter_products_to_interpretation_family(
+        provider_products,
         interpretation,
     )
-    if not family_visual and not family_tray:
-        return tray_products[:limit]
+    if not family_visual and not family_provider:
+        return provider_products[:limit]
 
     by_id: dict[str, dict[str, Any]] = {}
     order: list[str] = []
@@ -567,10 +567,10 @@ def merge_tray_with_visual_neighbors(
             merged["visual_distance"] = product.get("visual_distance")
             by_id[product_id] = merged
 
-    # Visual family first (true photo similarity), then tray leftovers.
+    # Visual family first (true photo similarity), then provider leftovers.
     for product in family_visual:
         _add(product)
-    for product in family_tray:
+    for product in family_provider:
         _add(product)
 
     ranked = [by_id[product_id] for product_id in order]
@@ -590,20 +590,20 @@ async def _disambiguate_with_visual(
     *,
     identified: ImageProductIdentification,
     interpretation: SalesInterpretation,
-    tray_products: list[dict[str, Any]],
+    provider_products: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Re-rank / replace Tray siblings using visual nearest neighbors."""
+    """Re-rank / replace provider siblings using visual nearest neighbors."""
     settings = get_settings()
     if not bool(getattr(settings, "agent_visual_search_enabled", True)):
-        filtered = filter_products_to_interpretation_family(tray_products, interpretation)
-        return (filtered or tray_products), None
+        filtered = filter_products_to_interpretation_family(provider_products, interpretation)
+        return (filtered or provider_products), None
     if not str(getattr(settings, "database_url", "") or "").strip():
-        filtered = filter_products_to_interpretation_family(tray_products, interpretation)
-        return (filtered or tray_products), None
+        filtered = filter_products_to_interpretation_family(provider_products, interpretation)
+        return (filtered or provider_products), None
     image_url = (message.image_url or "").strip()
     if not image_url:
-        filtered = filter_products_to_interpretation_family(tray_products, interpretation)
-        return (filtered or tray_products), None
+        filtered = filter_products_to_interpretation_family(provider_products, interpretation)
+        return (filtered or provider_products), None
 
     try:
         from .product_image_index import visual_search_from_image_url
@@ -620,21 +620,21 @@ async def _disambiguate_with_visual(
             "error_type": type(exc).__name__,
             "error": str(exc)[:240],
         })
-        filtered = filter_products_to_interpretation_family(tray_products, interpretation)
-        return (filtered or tray_products), None
+        filtered = filter_products_to_interpretation_family(provider_products, interpretation)
+        return (filtered or provider_products), None
 
     if not visual_products:
-        filtered = filter_products_to_interpretation_family(tray_products, interpretation)
-        return (filtered or tray_products), None
+        filtered = filter_products_to_interpretation_family(provider_products, interpretation)
+        return (filtered or provider_products), None
 
-    merged = merge_tray_with_visual_neighbors(
-        tray_products,
+    merged = merge_provider_with_visual_neighbors(
+        provider_products,
         visual_products,
         interpretation,
         limit=2,
     )
     print("[sales.image.visual.disambiguate]", {
-        "tray_count": len(tray_products),
+        "provider_count": len(provider_products),
         "visual_count": len(visual_products),
         "merged_ids": [_product_id(item) for item in merged],
         "best_distance": merged[0].get("visual_distance") if merged else None,
@@ -645,7 +645,7 @@ async def _disambiguate_with_visual(
 async def handle_image_product_search(
     message: IncomingMessage,
 ) -> AgentResult | None:
-    """Identify a product from an inbound image and search the Tray catalog."""
+    """Identify a product from an inbound image and search the commerce catalog."""
     if not image_search_eligible(message):
         return None
 
@@ -723,7 +723,7 @@ async def handle_image_product_search(
         )
 
     # Brand+color (or color-only model) keyword hits invent wrong siblings.
-    # Prefer visual nearest-neighbor before Tray when identity is thin.
+    # Prefer visual nearest-neighbor before the provider when identity is thin.
     if not identification_has_catalog_identity(identified):
         print("[sales.image.weak_identity]", {
             "brand": identified.brand,
@@ -755,8 +755,8 @@ async def handle_image_product_search(
         _mark_sales_result,
     )
 
-    tray_result = await _execute_compiled_product_retrieval(interpretation)
-    if tray_result is None:
+    provider_result = await _execute_compiled_product_retrieval(interpretation)
+    if provider_result is None:
         visual = await _try_visual_fallback(
             message,
             identified=identified,
@@ -769,16 +769,16 @@ async def handle_image_product_search(
             identified=identified,
         )
 
-    tray_products = (
-        (tray_result.commercial_data or {}).get("products")
-        if isinstance(tray_result.commercial_data, dict)
+    provider_products = (
+        (provider_result.commercial_data or {}).get("products")
+        if isinstance(provider_result.commercial_data, dict)
         else None
     )
     if (
-        isinstance(tray_products, list)
-        and tray_products
+        isinstance(provider_products, list)
+        and provider_products
         and not products_match_required_features(
-            tray_products,
+            provider_products,
             list(interpretation.preferences.attributes or []),
         )
     ):
@@ -790,25 +790,25 @@ async def handle_image_product_search(
         if visual is not None:
             return visual
 
-    # Keyword Tray often returns several siblings of the same line. Re-rank with
+    # Keyword provider search often returns several siblings of the same line. Re-rank with
     # visual nearest neighbors so we don't send the wired/wrong SKU.
-    if isinstance(tray_products, list) and tray_products:
+    if isinstance(provider_products, list) and provider_products:
         disambiguated, visual_trigger = await _disambiguate_with_visual(
             message,
             identified=identified,
             interpretation=interpretation,
-            tray_products=tray_products,
+            provider_products=provider_products,
         )
         if disambiguated:
-            tray_products = disambiguated
-            if isinstance(tray_result.commercial_data, dict):
-                tray_result.commercial_data["products"] = disambiguated
+            provider_products = disambiguated
+            if isinstance(provider_result.commercial_data, dict):
+                provider_result.commercial_data["products"] = disambiguated
                 if visual_trigger:
-                    tray_result.commercial_data["visual_disambiguated"] = True
-                    tray_result.response_metadata["visual_trigger"] = visual_trigger
+                    provider_result.commercial_data["visual_disambiguated"] = True
+                    provider_result.response_metadata["visual_trigger"] = visual_trigger
                     # One clear visual winner → treat as exact for assertive reply.
                     if len(disambiguated) == 1:
-                        tray_result.commercial_data["match_status"] = "exact"
+                        provider_result.commercial_data["match_status"] = "exact"
                     elif (
                         disambiguated[0].get("visual_distance") is not None
                         and (
@@ -818,9 +818,9 @@ async def handle_image_product_search(
                             < float(disambiguated[1].get("visual_distance") or 99)
                         )
                     ):
-                        tray_result.commercial_data["products"] = disambiguated[:1]
-                        tray_products = disambiguated[:1]
-                        tray_result.commercial_data["match_status"] = "exact"
+                        provider_result.commercial_data["products"] = disambiguated[:1]
+                        provider_products = disambiguated[:1]
+                        provider_result.commercial_data["match_status"] = "exact"
 
     label = " ".join(
         part
@@ -830,20 +830,20 @@ async def handle_image_product_search(
         )
         if part
     ).strip()
-    if tray_result.safety_reason in {
+    if provider_result.safety_reason in {
         "product_not_found",
         "exact_product_ambiguous_brand",
     }:
         visual = await _try_visual_fallback(
             message,
             identified=identified,
-            trigger=str(tray_result.safety_reason),
+            trigger=str(provider_result.safety_reason),
         )
         if visual is not None:
             return visual
         products = (
-            (tray_result.commercial_data or {}).get("products")
-            if isinstance(tray_result.commercial_data, dict)
+            (provider_result.commercial_data or {}).get("products")
+            if isinstance(provider_result.commercial_data, dict)
             else None
         )
         if isinstance(products, list) and products:
@@ -857,31 +857,31 @@ async def handle_image_product_search(
                     start=1,
                 )
             ]
-            tray_result.reply_text = (
-                f"Pela foto, identifiquei {label or 'esse modelo'}, "
+            provider_result.reply_text = (
+                f"Pela foto, parece ser {label or 'esse modelo'}, "
                 "mas não confirmei a combinação exata. Opções próximas:\n"
                 + "\n".join(numbered_lines)
                 + "\n\nQuer ver alguma dessas?"
             )
-            if isinstance(tray_result.commercial_data, dict):
-                tray_result.commercial_data["match_status"] = "ambiguous"
+            if isinstance(provider_result.commercial_data, dict):
+                provider_result.commercial_data["match_status"] = "ambiguous"
         else:
             color_hint = (identified.color or "").strip()
-            tray_result.reply_text = (
-                f"Pela foto, identifiquei {label or 'esse modelo'}"
+            provider_result.reply_text = (
+                f"Pela foto, parece ser {label or 'esse modelo'}"
                 f"{f' ({color_hint})' if color_hint else ''}, "
                 "mas ainda não localizei essa combinação exata no catálogo. "
                 "Quer que eu mostre as opções mais próximas dessa linha?"
             )
-    elif tray_result.commercial_data and isinstance(
-        tray_result.commercial_data.get("products"),
+    elif provider_result.commercial_data and isinstance(
+        provider_result.commercial_data.get("products"),
         list,
-    ) and tray_result.commercial_data["products"]:
+    ) and provider_result.commercial_data["products"]:
         # Exact/ambiguous catalog hit after Vision — confirm with the customer.
         from .commerce_router import _product_lines
 
-        products = tray_result.commercial_data["products"][:2]
-        match_status = tray_result.commercial_data.get("match_status")
+        products = provider_result.commercial_data["products"][:2]
+        match_status = provider_result.commercial_data.get("match_status")
         color_tokens = (
             (identified.color or "").strip().casefold()
         )
@@ -906,24 +906,42 @@ async def handle_image_product_search(
             or not color_matched
         )
         if multi:
-            tray_result.reply_text = (
+            provider_result.reply_text = (
                 f"Pela foto, parece {label or 'este modelo'}. "
                 "Encontrei estas opções próximas:\n"
                 + "\n".join(numbered_lines)
                 + "\n\nÉ algum desses?"
             )
-            if isinstance(tray_result.commercial_data, dict):
-                tray_result.commercial_data["match_status"] = "ambiguous"
+            if isinstance(provider_result.commercial_data, dict):
+                provider_result.commercial_data["match_status"] = "ambiguous"
         else:
-            tray_result.reply_text = (
+            provider_result.reply_text = (
                 f"Pela foto, parece {label or 'este modelo'}. "
                 "Encontrei no catálogo:\n"
                 + "\n".join(numbered_lines)
                 + "\n\nÉ esse que você procura?"
             )
 
+    # Four separate layers — a visual hypothesis is never an identification,
+    # an identification is never a catalog product, and only the commerce
+    # provider states price/stock/availability.
+    commercial = provider_result.commercial_data if isinstance(provider_result.commercial_data, dict) else {}
+    catalog_products = commercial.get("products") if isinstance(commercial.get("products"), list) else []
+    provider_result.response_metadata["visual_evidence"] = {
+        "hypothesis": {
+            "label": label or None,
+            "product_type": identified.product_type,
+            "confidence": float(identified.confidence or 0.0),
+            "source": "vision",
+        },
+        "identification": "unconfirmed_until_customer_confirms",
+        "catalog_match": (
+            str(commercial.get("match_status") or "candidates") if catalog_products else "none"
+        ),
+        "commercial_facts": "commerce_provider" if catalog_products else "none",
+    }
     # Vision turns never activate a SKU — wait for explicit confirmation.
-    tray_result.response_metadata.update({
+    provider_result.response_metadata.update({
         "image_search": True,
         "image_identify": identified.model_dump(mode="json"),
         "domain": "commerce",
@@ -934,11 +952,11 @@ async def handle_image_product_search(
     })
     # Skip OpenAI responder here: Vision already spent the critical latency budget.
     return _mark_sales_result(
-        tray_result,
+        provider_result,
         interpretation=interpretation,
         goal="find",
         response_source="image_vision",
         used_openai_responder=False,
         used_commerce_provider=True,
-        fallback_reason=tray_result.safety_reason,
+        fallback_reason=provider_result.safety_reason,
     )

@@ -62,6 +62,20 @@ CRITIQUE_JUDGE_SYSTEM_PROMPT = (
     "Não reescreva a resposta final aqui."
 )
 
+#: Contrato TECNICO da regeneracao. Tom e estilo vem da persona publicada,
+#: injetada por ``resolve_system_instructions``.
+REGENERATION_CONTRACT = (
+    "Você regenera a resposta ao cliente da XNamai usando o histórico, os fatos "
+    "já conhecidos e os novos resultados de API. "
+    "Não invente dados. Se houver payment_url nos fatos, envie o link. "
+    "Se commercial_data.products foi atualizado pela reconsulta, "
+    "apresente SOMENTE esses produtos (não os da resposta anterior). "
+    "Se a reconsulta search_products veio vazia, diga com honestidade "
+    "que não encontrou o que o cliente pediu — nunca reenvie a lista "
+    "anterior inadequada. "
+    "Responda em português do Brasil, respeitando o formato do canal."
+)
+
 
 class RecommendedApiCall(BaseModel):
     name: str
@@ -588,23 +602,31 @@ async def _regenerate_reply(
             and len(products) == 0
         )
 
+        from .channel_profiles import channel_system_hint
+        from .prompt_compiler import (
+            legacy_contract_extra_blocks,
+            resolve_system_instructions,
+        )
+
+        regeneration_contract = (
+            f"{REGENERATION_CONTRACT}\n\n"
+            f"{channel_system_hint(incoming.channel)}\n\n"
+            f"{format_capability_catalog_for_prompt()}"
+        )
+        # A resposta regenerada vai ao cliente: recebe a persona publicada pela
+        # mesma fonte do responder, nunca uma voz propria deste modulo.
+        system_instructions = resolve_system_instructions(
+            fallback_instructions=regeneration_contract,
+            incoming=incoming,
+            conversation_state=commerce_state,
+            recent_turns=recent_turns,
+            extra_system_blocks=legacy_contract_extra_blocks(
+                regeneration_contract,
+                tag="critique_regeneration_contract",
+            ),
+        )
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Você é o agente de RESPOSTA da XNamai. "
-                    "Regenera a resposta ao cliente usando o histórico, os fatos "
-                    "já conhecidos e os novos resultados de API. "
-                    "Não invente dados. Se houver payment_url nos fatos, envie o link. "
-                    "Se commercial_data.products foi atualizado pela reconsulta, "
-                    "apresente SOMENTE esses produtos (não os da resposta anterior). "
-                    "Se a reconsulta search_products veio vazia, diga com honestidade "
-                    "que não encontrou o que o cliente pediu — nunca reenvie a lista "
-                    "anterior inadequada. "
-                    "Resposta curta em português do Brasil para WhatsApp.\n\n"
-                    + format_capability_catalog_for_prompt()
-                ),
-            },
+            {"role": "system", "content": system_instructions},
             {
                 "role": "user",
                 "content": json.dumps(

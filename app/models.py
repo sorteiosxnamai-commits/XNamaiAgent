@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 from typing import Any, Literal
 
 
@@ -53,10 +53,14 @@ class CheckoutDataInput(BaseModel):
     state: str | None = None
 
 
+#: Dominios que existiram apenas no produto anterior. Nao sao oferecidos ao
+#: modelo; um valor antigo (cache/estado persistido) e lido como fora de escopo.
+LEGACY_INTERPRETATION_DOMAINS: frozenset[str] = frozenset({"raffle"})
+
+
 class SalesInterpretation(BaseModel):
     domain: Literal[
         "commerce",
-        "raffle",
         "store_general",
         "greeting",
         "out_of_scope",
@@ -165,6 +169,13 @@ class SalesInterpretation(BaseModel):
     ] | None = None
     domain_change_explicit: bool = Field(default_factory=bool)
     confidence: float = Field(ge=0.0, le=1.0)
+
+    @field_validator("domain", mode="before")
+    @classmethod
+    def _read_legacy_domain(cls, value: Any) -> Any:
+        if isinstance(value, str) and value in LEGACY_INTERPRETATION_DOMAINS:
+            return "out_of_scope"
+        return value
 
     _source: str = PrivateAttr(default="openai")
     _fallback_reason: str | None = PrivateAttr(default=None)

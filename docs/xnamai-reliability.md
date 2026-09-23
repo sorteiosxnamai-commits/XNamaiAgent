@@ -7,13 +7,13 @@ Implementação de 16/09/2026, a partir da comparação com o XNamaiAgent. Mant�
 - O worker grava a resposta completa aceita na outbox **antes** de chamar o canal. Uma retomada reutiliza texto, destino, URL de áudio e metadados de mídia/contexto, sem gerar outra resposta.
 - O envelope não guarda bytes de áudio nem uma cópia completa do webhook. A auditoria mantém o estado comercial e o resumo redigido da execução.
 - As filas recuperam leases expirados, usam `FOR UPDATE SKIP LOCKED`, respeitam o dono da execução e aplicam espera exponencial entre falhas (30 até 300 segundos).
-- A outbox para de tentar após o limite da linha, 15 minutos ou uma mensagem posterior da mesma conversa. Antes do envio também verifica mensagens ainda na inbox e o atendimento humano. Meta preserva seu tratamento próprio de takeover.
+- A outbox para de tentar após o limite da linha, a janela `AGENT_OUTBOX_RETRY_WINDOW_SECONDS` ou uma mensagem posterior da mesma conversa. Antes do envio também verifica mensagens ainda na inbox e o atendimento humano. Meta preserva seu tratamento próprio de takeover.
 - Uma execução que perdeu o lease não pode confirmar a entrega de outro worker. Se já existe auditoria de envio bem-sucedido, a retomada recupera o recibo sem reenviar.
 - Os locks de conversa usam transações e desabilitam prepared statements automáticos. Cancelar uma requisição também libera um lock adquirido tardiamente pela thread de banco.
 - Webhooks Brevo, Meta e YCloud rejeitam corpos acima de 1 MiB, inclusive sem `Content-Length` confiável. A assinatura usa os bytes originais.
 - Um webhook não confirma enfileiramento quando o banco não devolveu um ID persistido.
 
-`sent` significa que o transporte aceitou o envio. Não comprova leitura ou entrega ao dispositivo. Se o provedor aceitar uma mensagem e a conexão cair antes de devolver o recibo, uma retentativa ainda pode duplicá-la; não há garantia de entrega exatamente uma vez.
+`sent` significa que o transporte aceitou o envio. Não comprova leitura ou entrega ao dispositivo. Se o provedor aceitar uma mensagem e a conexão cair antes de devolver o recibo, o envio é ambíguo: por padrão não há retentativa (evita duplicata) e a linha fica `delivery_unknown` até um callback de status do YCloud reconciliá-la. Não há garantia de entrega exatamente uma vez.
 
 ### Ativação operacional
 
@@ -37,11 +37,40 @@ Escolha uma forma de consumir as filas continuamente:
 
 2. Em um agendador externo, chamar a cada minuto `POST /api/cron/process-inbox` com `Authorization: Bearer <CRON_SECRET>`. O endpoint GET também continua disponível. Ele processa inbox e outbox mesmo quando uma delas falha.
 
-O cron de `vercel.json` permanece diário e serve apenas como verificação tardia. **Ele não atende sozinho à janela de recuperação de 15 minutos.** Configure o worker ou o agendador frequente ao publicar esta versão. Nenhum serviço foi iniciado ou implantado por esta alteração.
+O cron de `vercel.json` permanece diário e serve apenas como verificação tardia. As retentativas da outbox rodam pelo workflow `.github/workflows/outbox-retry.yml` (a cada 5 min, item 3); veja a decisão em [outbox_runtime.md](outbox_runtime.md). Nenhum serviço foi iniciado ou implantado por esta alteração.
 
 `DRY_RUN=true` simula o envio, mas ainda pode registrar e consumir linhas das filas. Use um banco de homologação para testar: um dry-run não deixa as mesmas mensagens disponíveis para enviar depois.
 
-Monitoramento: os eventos `queue.worker_cycle`, `outbox.batch_processed`, `outbox.receipt_rejected` e `queue.dispatch_failed` mostram progresso e falhas. Linhas `dead` precisam de investigação; não as volte indiscriminadamente para `pending`.
+3. Somente a outbox, sem trabalho de LLM: `POST /api/cron/process-outbox` (mesma autenticação). Usa o mesmo consumidor (`process_outbox_batch`) do item 2; serve para um agendador frequente e barato quando a inbox já é processada inline.
+
+Monitoramento: os eventos `queue.worker_cycle`, `outbox.batch_processed`, `outbox.receipt_rejected`, `outbox.send_exception` e `queue.dispatch_failed` mostram progresso e falhas. Toda linha de log de uma entrega traz `trace_id` (`outbox-<id>-a<tentativa>` no worker), `inbound_id`, `outbox_id` e `delivery_attempt` — nunca telefone ou chave de conversa. Linhas `dead` precisam de investigação; não as volte indiscriminadamente para `pending`.
+
+### Política de entrega (retry, backoff, dead-letter, idempotência)
+
+Modelo de execução, estados e reconciliação: [outbox_runtime.md](outbox_runtime.md).
+
+Implementada em `app/ingress/delivery_policy.py`:
+
+| Configuração | Default | Efeito |
+| --- | --- | --- |
+| `AGENT_QUEUE_RETRY_BASE_SECONDS` | 30 | atraso antes da 2ª tentativa; dobra a cada falha |
+| `AGENT_QUEUE_RETRY_MAX_SECONDS` | 300 | teto do atraso |
+| `AGENT_OUTBOX_RETRY_WINDOW_SECONDS` | 900 | resposta mais velha que isto vai para `dead` (`outbox_retry_window_expired`) |
+| `AGENT_OUTBOX_LEASE_SECONDS` | 180 | lease de cada envio; lease vencido é recuperado por outro worker |
+| `AGENT_OUTBOX_RETRY_UNKNOWN_DELIVERY` | false | ver "entrega ambígua" abaixo |
+
+Com os defaults, cabem **6** das `max_attempts=8` do schema dentro da janela (0s, 30s, 90s, 210s, 450s, 750s); as tentativas restantes nunca ocorrem porque a janela expira antes.
+
+**Nenhum provider usado oferece chave de idempotência** (YCloud: `externalId` é só correlação, sem deduplicação documentada; Meta Graph e Brevo: nenhuma). Por isso não há garantia de entrega exatamente-uma-vez:
+
+- falha **definitiva** (conexão recusada, timeout de conexão, 429, 502, 503, 4xx de rejeição) → nova tentativa com backoff (ao menos uma vez); 4xx de rejeição vai direto para `dead`;
+- falha **ambígua** (timeout de leitura, conexão caída no meio da resposta, 500, 504) → a mensagem pode ter sido entregue. Por padrão **não** há reenvio automático: a linha vai para `dead` com `last_error = delivery_unknown:<motivo>`. O YCloud recebe `externalId = outbox:<id>` para conciliar pelo webhook de status. `AGENT_OUTBOX_RETRY_UNKNOWN_DELIVERY=true` troca para ao-menos-uma-vez, aceitando possível duplicata.
+
+Dentro de uma mesma tentativa o YCloud só repete o POST quando a requisição comprovadamente não saiu, e o Meta só tenta o endpoint alternativo após rejeição 4xx.
+
+### Orçamento de LLM por turno
+
+Além do teto de operações lógicas (`AGENT_MAX_LLM_CALLS_PER_TURN`), `AGENT_MAX_LLM_TRANSPORT_ATTEMPTS_PER_TURN` (default 8) limita as tentativas HTTP reais: chamada primária, fallback Responses→Chat e as repetições internas do SDK (`OPENAI_MAX_RETRIES`), contadas por um hook do cliente compartilhado. Esgotado o teto, nenhuma chamada nova começa; a requisição em andamento não é interrompida.
 
 ## Políticas publicadas com a persona
 

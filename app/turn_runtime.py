@@ -25,10 +25,39 @@ class LLMCallBudgetExceeded(RuntimeError):
 
 
 class LLMCallBudget(BaseModel):
+    """Per-turn LLM budget.
+
+    Two ceilings:
+    * ``max_calls`` — LOGICAL operations (interpret, respond, judge...). A
+      Responses->Chat fallback is the same logical operation, so it is refunded
+      here (Etapa 6);
+    * ``max_transport_attempts`` — every real HTTP attempt: the primary call,
+      the fallback, and the SDK's own internal retries (counted by the shared
+      client's event hook). Fallback and retries are never free: once this
+      ceiling is spent, no NEW logical call starts. An in-flight request is not
+      cut mid-way.
+    """
+
     max_calls: int = Field(default=3, ge=0)
     used_calls: int = Field(default=0, ge=0)
+    max_transport_attempts: int = Field(default=8, ge=1)
+    transport_attempts: int = Field(default=0, ge=0)
     enforce: bool = False
     allowed_call_types: set[str] = Field(default_factory=set)
+
+    @property
+    def limit(self) -> int:
+        return self.max_calls
+
+    @property
+    def used(self) -> int:
+        return self.used_calls
+
+    @property
+    def remaining(self) -> int:
+        logical = max(0, self.max_calls - self.used_calls)
+        transport = max(0, self.max_transport_attempts - self.transport_attempts)
+        return min(logical, transport)
 
     def reserve(self, call_type: str) -> None:
         blocked_type = bool(
@@ -36,10 +65,10 @@ class LLMCallBudget(BaseModel):
             and call_type not in self.allowed_call_types
         )
         exhausted = self.used_calls >= self.max_calls
-        if self.enforce and (blocked_type or exhausted):
-            raise LLMCallBudgetExceeded(
-                f"llm_call_budget_exceeded:{call_type}"
-            )
+        transport_spent = self.transport_attempts >= self.max_transport_attempts
+        if self.enforce and (blocked_type or exhausted or transport_spent):
+            reason = "llm_transport_budget_exceeded" if transport_spent and not exhausted else "llm_call_budget_exceeded"
+            raise LLMCallBudgetExceeded(f"{reason}:{call_type}")
         self.used_calls += 1
 
 
@@ -49,11 +78,16 @@ class TurnRuntimeContext(BaseModel):
     conversation_key: str = "unresolved"
     channel: str = "unknown"
     started_at: float = Field(default_factory=time.perf_counter)
+    # Set while an outbound row is being delivered (inline or by the worker).
+    outbox_id: int | None = None
+    delivery_attempt: int | None = None
 
     openai_call_count: int = 0
     # Logical ops vs transport attempts (Responses→Chat fallback = 1 logical, 2 transport).
     logical_llm_calls: int = 0
     openai_transport_attempts: int = 0
+    # Real HTTP requests seen by the shared OpenAI client (includes SDK retries).
+    sdk_http_requests: int = 0
     responses_attempts: int = 0
     chat_fallback_attempts: int = 0
     commerce_call_count: int = 0
@@ -130,6 +164,19 @@ class TurnRuntimeContext(BaseModel):
             self.responses_attempts += 1
         elif "chat" in name:
             self.chat_fallback_attempts += 1
+        self._sync_transport_budget()
+
+    def register_sdk_http_request(self) -> None:
+        """Every HTTP request the SDK really sends, internal retries included."""
+        self.sdk_http_requests += 1
+        self._sync_transport_budget()
+
+    def _sync_transport_budget(self) -> None:
+        # Gateway attempts and raw SDK requests overlap (the first request of
+        # each attempt is both); the larger one is the true transport spend.
+        self.llm_budget.transport_attempts = max(
+            self.openai_transport_attempts, self.sdk_http_requests
+        )
 
     def register_openai_call(
         self,
@@ -260,6 +307,9 @@ class TurnRuntimeContext(BaseModel):
             "llm_budget": {
                 "max_calls": self.llm_budget.max_calls,
                 "used_calls": self.llm_budget.used_calls,
+                "max_transport_attempts": self.llm_budget.max_transport_attempts,
+                "transport_attempts": self.llm_budget.transport_attempts,
+                "sdk_http_requests": self.sdk_http_requests,
                 "enforce": self.llm_budget.enforce,
             },
             "integration_failures": dict(self.integration_failures),

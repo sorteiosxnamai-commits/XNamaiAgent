@@ -12,40 +12,9 @@ import json
 from typing import Any
 
 from app.config import get_settings
+from app.http_resilience import classify_send_status
 from app.models import AgentResult, IncomingMessage
 from app.observability import log_event
-
-
-def _agent_debug_log(
-    *,
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, Any],
-) -> None:
-    # #region agent log
-    try:
-        import time
-        from pathlib import Path
-
-        payload = {
-            "sessionId": "38b290",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        Path("debug-38b290.log").open("a", encoding="utf-8").write(
-            json.dumps(payload, ensure_ascii=False) + "\n"
-        )
-        log_event(
-            "debug.meta",
-            {"hypothesisId": hypothesis_id, "message": message, **data},
-        )
-    except Exception:
-        pass
-    # #endregion
 
 
 def payload_skeleton(value: Any, *, depth: int = 0) -> Any:
@@ -175,12 +144,7 @@ async def probe_instagram_graph_subscriptions() -> dict[str, Any]:
         }
     except Exception as exc:  # noqa: BLE001
         result = {"ok": False, "error": type(exc).__name__}
-    _agent_debug_log(
-        hypothesis_id="B",
-        location="meta_instagram.py:probe_instagram_graph_subscriptions",
-        message="graph_subscribed_apps",
-        data=result,
-    )
+    log_event("meta.instagram.graph_subscriptions", result)
     return result
 
 
@@ -415,14 +379,11 @@ def parse_meta_instagram_messaging(payload: dict[str, Any]) -> list[IncomingMess
                 continue
             skip_reason = instagram_event_skip_reason(event)
             if skip_reason != "parsed":
-                _agent_debug_log(
-                    hypothesis_id="A",
-                    location="meta_instagram.py:parse_meta_instagram_messaging",
-                    message="event_skipped",
-                    data={
+                log_event(
+                    "meta.instagram.event_skipped",
+                    {
                         "reason": skip_reason,
                         "event_keys": sorted(str(key) for key in event.keys())[:16],
-                        "skeleton": payload_skeleton(event),
                         "has_standby_entry": "standby" in entry,
                     },
                 )
@@ -633,9 +594,22 @@ async def send_meta_instagram_reply(
                     )[:180],
                 },
             )
+            outcome = classify_send_status(last_status)
+            if outcome != "permanent":
+                # Only a definite 4xx rejection justifies trying the next
+                # endpoint. After 5xx/429 the message may already be out (or
+                # Meta asks to wait): another endpoint could duplicate it.
+                return {
+                    "ok": False,
+                    "status_code": last_status,
+                    "provider_response": last_body,
+                    "error": "meta_send_failed",
+                    "delivery_unknown": outcome == "unknown",
+                }
     return {
         "ok": False,
         "status_code": last_status,
         "provider_response": last_body,
         "error": "meta_send_failed",
+        "permanent": True,
     }

@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 from .observability import record_openai_observation
+from .openai_errors import classify_llm_error
 from .runtime_context import get_current_turn
 
 
@@ -97,6 +98,7 @@ def _finish_call(
     messages: list[dict[str, Any]] | None,
     ok: bool = True,
     error_type: str | None = None,
+    error_category: str | None = None,
 ) -> None:
     input_tokens, output_tokens, cached_tokens, reasoning_tokens = (
         _usage_tokens(response) if ok else (0, 0, 0, 0)
@@ -123,6 +125,7 @@ def _finish_call(
         elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
         ok=ok,
         error_type=error_type,
+        error_category=error_category,
         cached_tokens=cached_tokens,
         reasoning_tokens=reasoning_tokens,
     )
@@ -157,6 +160,7 @@ async def execute_openai_call(
             messages=messages,
             ok=False,
             error_type=type(exc).__name__,
+            error_category=classify_llm_error(exc),
         )
         raise
     _finish_call(
@@ -193,6 +197,7 @@ def execute_openai_call_sync(
             messages=messages,
             ok=False,
             error_type=type(exc).__name__,
+            error_category=classify_llm_error(exc),
         )
         raise
     _finish_call(

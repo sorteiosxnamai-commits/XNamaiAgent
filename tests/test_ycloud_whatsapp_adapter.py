@@ -656,8 +656,88 @@ async def test_outbound_network_timeout_is_translated(monkeypatch):
     incoming, result = _outgoing()
     send = await ycloud.send_ycloud_reply(incoming, result)
 
+    # A generic timeout may have happened after YCloud accepted the message:
+    # it is reported as ambiguous, never as a plain retryable network error.
     assert send["ok"] is False
+    assert send["error"] == "ycloud_delivery_unknown"
+    assert send["delivery_unknown"] is True
+
+
+def _counting_client(captured: dict, raises: BaseException):
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            captured["posts"] = captured.get("posts", 0) + 1
+            captured["json"] = json
+            raise raises
+
+    return Client
+
+
+@pytest.mark.asyncio
+async def test_read_timeout_is_never_reposted_inline(monkeypatch):
+    """B3: o POST pode ter chegado; repetir dentro da tentativa duplicaria a mensagem."""
+    import app.channels.ycloud_whatsapp as ycloud
+
+    captured: dict = {}
+    monkeypatch.setattr(ycloud, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        ycloud.httpx, "AsyncClient", _counting_client(captured, ycloud.httpx.ReadTimeout("read"))
+    )
+
+    send = await ycloud.send_ycloud_reply(*_outgoing())
+
+    assert captured["posts"] == 1
+    assert send["delivery_unknown"] is True
+
+
+@pytest.mark.asyncio
+async def test_connect_error_is_retried_inline_and_stays_retryable(monkeypatch):
+    """Falha de conexao prova que nada saiu: repetir e seguro."""
+    import app.channels.ycloud_whatsapp as ycloud
+
+    captured: dict = {}
+    monkeypatch.setattr(ycloud, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        ycloud.httpx, "AsyncClient", _counting_client(captured, ycloud.httpx.ConnectError("refused"))
+    )
+    monkeypatch.setattr("app.http_resilience.asyncio.sleep", _no_sleep)
+
+    send = await ycloud.send_ycloud_reply(*_outgoing())
+
+    assert captured["posts"] == 2
     assert send["error"] == "ycloud_network_error"
+    assert send["delivery_unknown"] is False
+
+
+async def _no_sleep(_seconds):
+    return None
+
+
+@pytest.mark.asyncio
+async def test_outbox_correlation_id_is_sent_as_external_id(monkeypatch):
+    import app.channels.ycloud_whatsapp as ycloud
+
+    captured: dict = {}
+    monkeypatch.setattr(ycloud, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        ycloud.httpx, "AsyncClient", _counting_client(captured, ycloud.httpx.ConnectError("x"))
+    )
+    monkeypatch.setattr("app.http_resilience.asyncio.sleep", _no_sleep)
+    incoming, result = _outgoing()
+    result.response_metadata["outbox_correlation_id"] = "outbox:42"
+
+    await ycloud.send_ycloud_reply(incoming, result)
+
+    assert captured["json"]["externalId"] == "outbox:42"
 
 
 @pytest.mark.asyncio

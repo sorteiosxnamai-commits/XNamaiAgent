@@ -48,19 +48,26 @@ def test_commerce_intents_and_local_intents_remain_distinct():
 
 
 def test_semantic_sales_plan_is_generic_and_preserves_constraints():
-    from app.sales_agent import _normalize_semantic_plan
+    """Antes exercitava ``_normalize_semantic_plan`` — copia morta (sem chamador)
+    removida com o Intent Router. O planner vivo e ``interpretation_to_plan``."""
+    from app.models import SalesInterpretation
+    from app.sales_agent import interpretation_to_plan
 
-    plan = _normalize_semantic_plan({
-        "domain": "commerce",
-        "goal": "recommend",
-        "subject": {"product_type": "fone", "query": "MarcaG elegante", "brand": "MarcaG"},
-        "constraints": {"budget_max": 3000, "attributes": ["elegante"]},
-        "information_needed": ["catalog"],
-    })
+    plan = interpretation_to_plan(SalesInterpretation(
+        domain="commerce",
+        goal="recommend",
+        subject={"product_type": "fone", "brand": "MarcaG"},
+        preferences={"budget_max": 3000, "attributes": ["elegante"]},
+        information_needed=["catalog"],
+        references_previous_context=False,
+        needs_clarification=False,
+        confidence=0.9,
+    ))
     assert plan["goal"] == "recommend"
+    assert plan["intent"] == "recommendation"
     assert plan["subject"]["brand"] == "MarcaG"
     assert plan["constraints"]["budget_max"] == 3000
-    assert "MarcaG elegante" in plan["query"]
+    assert plan["filters"]["attributes"] == ["elegante"]
 
 
 @pytest.mark.asyncio

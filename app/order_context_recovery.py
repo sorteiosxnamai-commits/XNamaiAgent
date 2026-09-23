@@ -149,8 +149,8 @@ def _order_unpaid_score(order: dict[str, Any]) -> int:
     return score
 
 
-def _canonical_tray_order_id(order: dict[str, Any]) -> str | None:
-    """Prefer numeric Tray internal ids over storefront hex codes."""
+def _canonical_provider_order_id(order: dict[str, Any]) -> str | None:
+    """Prefer numeric provider internal ids over storefront hex codes."""
     values: list[str] = []
     for field in ("id", "order_id", "code", "number"):
         value = order.get(field)
@@ -184,7 +184,7 @@ async def recover_order_id_from_customer(
     handles: dict[str, Any],
     preferred_codes: list[str] | None = None,
 ) -> str | None:
-    """Locate the most relevant Tray order using CPF/email recovered from context."""
+    """Locate the most relevant provider order using CPF/email recovered from context."""
     documents = list(handles.get("documents") or [])
     for email in handles.get("emails") or []:
         documents.append(("email", email))
@@ -230,7 +230,7 @@ async def recover_order_id_from_customer(
             order
             for order in order_result.get("orders") or []
             if isinstance(order, dict)
-            and _canonical_tray_order_id(order)
+            and _canonical_provider_order_id(order)
         ]
         if not orders:
             continue
@@ -250,7 +250,7 @@ async def recover_order_id_from_customer(
             reverse=True,
         )
         best = ranked[0]
-        order_id = _canonical_tray_order_id(best)
+        order_id = _canonical_provider_order_id(best)
         if order_id:
             print("[sales.order.recover]", {
                 "via": kind,

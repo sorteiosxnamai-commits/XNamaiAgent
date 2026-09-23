@@ -12,6 +12,8 @@ from app.config import get_settings
 from app.db import ensure_tables, get_conn, to_jsonb
 from app.observability import log_event
 
+from .delivery_policy import OutboxRetryPolicy
+
 
 def build_outbound_envelope(incoming: Any, result: Any) -> dict[str, Any]:
     incoming_payload: dict[str, Any] = {}
@@ -147,15 +149,17 @@ def enqueue_outbound(
 def claim_pending_outbox(
     *,
     limit: int = 10,
-    lease_seconds: int = 180,
+    lease_seconds: int | None = None,
     owner: str | None = None,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     if not settings.database_url:
         return []
     ensure_tables()
+    policy = OutboxRetryPolicy.from_settings(settings)
     lease_owner = owner or f"outbox:{uuid4().hex[:12]}"
-    expires = datetime.now(timezone.utc) + timedelta(seconds=max(15, lease_seconds))
+    lease = policy.lease_seconds if lease_seconds is None else lease_seconds
+    expires = datetime.now(timezone.utc) + timedelta(seconds=max(15, lease))
     with get_conn() as conn:
         with conn.cursor() as cur:
             # Do not replay stale replies after the conversation moves on.
@@ -193,7 +197,7 @@ def claim_pending_outbox(
                   )
                   AND (
                     outbox.attempts >= outbox.max_attempts
-                    OR outbox.created_at < now() - interval '15 minutes'
+                    OR outbox.created_at < now() - make_interval(secs => %(window)s)
                     OR EXISTS (
                       SELECT 1
                       FROM public.ai_inbound_messages AS later
@@ -208,7 +212,8 @@ def claim_pending_outbox(
                         )
                     )
                   )
-                """
+                """,
+                {"window": policy.window_seconds},
             )
             cur.execute(
                 """
@@ -248,8 +253,8 @@ def claim_pending_outbox(
                     "limit": max(1, min(int(limit), 25)),
                     "owner": lease_owner,
                     "expires": expires,
-                    "retry_base": getattr(settings, "agent_queue_retry_base_seconds", 30),
-                    "retry_max": getattr(settings, "agent_queue_retry_max_seconds", 300),
+                    "retry_base": policy.base_seconds,
+                    "retry_max": policy.max_seconds,
                 },
             )
             rows = cur.fetchall() or []
@@ -427,10 +432,13 @@ def get_accepted_outbound(inbound_id: int | None) -> dict[str, Any] | None:
         ("id", "status", "reply_text", "reply_payload"), row))
 
 
-def claim_outbox_for_send(outbox_id: int, *, lease_seconds: int = 180) -> dict[str, Any] | None:
+def claim_outbox_for_send(outbox_id: int, *, lease_seconds: int | None = None) -> dict[str, Any] | None:
     """Claim and return the immutable accepted envelope, never a regenerated reply."""
-    if not get_settings().database_url:
+    settings = get_settings()
+    if not settings.database_url:
         return None
+    if lease_seconds is None:
+        lease_seconds = OutboxRetryPolicy.from_settings(settings).lease_seconds
     owner = f"inline:{uuid4().hex}"
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -497,15 +505,30 @@ async def dispatch_accepted_outbound(outbox_id: int, send) -> dict[str, Any]:
         status = get_outbox_status(outbox_id)
         return {"ok": status == "sent", "queued": status in {"pending", "failed", "leased"},
                 "skipped": True, "status": status}
+    from app.runtime_context import get_current_turn
+
+    runtime = get_current_turn()
+    if runtime is not None:
+        # The inbound turn's logs now also carry the delivery being attempted.
+        runtime.outbox_id = int(row.get("id") or outbox_id)
+        runtime.delivery_attempt = int(row.get("attempts") or 1)
     try:
         from .outbox_worker import _resend_outbox_row
         info = await _resend_outbox_row(row, send=send, verify_lease=False)
     except Exception as exc:
+        # Pre-send checks (lease/conversation lookups) failed: nothing was sent.
         info = {"ok": False, "error": type(exc).__name__}
     if info.get("ok"):
         persisted = mark_outbox_sent(outbox_id, provider_response=info, owner=row["lease_owner"])
         info = {**info, "receipt_persisted": bool(persisted)}
     else:
-        mark_outbox_failed(outbox_id, error=str(info.get("error") or "send_failed"), owner=row["lease_owner"],
-            dead=bool(info.get("permanent")) or int(row.get("attempts") or 1) >= int(row.get("max_attempts") or 5))
+        from .delivery_policy import resolve_failure
+
+        dead, error = resolve_failure(
+            info,
+            attempts=int(row.get("attempts") or 1),
+            max_attempts=int(row.get("max_attempts") or 5),
+            policy=OutboxRetryPolicy.from_settings(get_settings()),
+        )
+        mark_outbox_failed(outbox_id, error=error, owner=row["lease_owner"], dead=dead)
     return info

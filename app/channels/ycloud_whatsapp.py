@@ -19,7 +19,12 @@ import httpx
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.http_resilience import with_retries
+from app.http_resilience import (
+    NOT_SENT_EXCEPTIONS,
+    classify_send_exception,
+    classify_send_status,
+    with_retries,
+)
 from app.models import AgentResult, IncomingMessage
 from app.observability import log_event, log_exception
 from app.repository import normalize_phone
@@ -238,7 +243,32 @@ def parse_ycloud_status_update(payload: Any) -> dict[str, Any] | None:
         "status": _clean(message.get("status")).lower() or None,
         "has_sender": bool(_clean(message.get("from"))),
         "has_recipient": bool(_clean(message.get("to"))),
+        "external_id": _clean(message.get("externalId")) or None,
+        "event_id": _clean(payload.get("id")) or None,
+        "error_code": _clean(message.get("errorCode")) or None,
     }
+
+
+def ycloud_status_recipient(payload: Any) -> str | None:
+    """Recipient of a status event, for reconciliation checks only (never logged)."""
+    message = payload.get("whatsappMessage") if isinstance(payload, dict) else None
+    if not isinstance(message, dict):
+        return None
+    return _clean(message.get("to")) or None
+
+
+def ycloud_signature_age_seconds(signature_header: str | None, *, now: float | None = None) -> float | None:
+    """Age of the signed timestamp (negative = in the future). None if unusable."""
+    import time
+
+    timestamp, _signature = parse_ycloud_signature_header(signature_header)
+    try:
+        signed_at = float(timestamp)
+    except (TypeError, ValueError):
+        return None
+    if signed_at > 1e12:  # milliseconds
+        signed_at /= 1000.0
+    return (time.time() if now is None else now) - signed_at
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +330,15 @@ async def send_ycloud_reply(
         "type": "text",
         "text": {"body": text},
     }
+    # Correlation only: YCloud echoes externalId in status webhooks but does
+    # NOT deduplicate on it (no idempotency key is documented).
+    correlation_id = (
+        (result.response_metadata or {}).get("outbox_correlation_id")
+        if isinstance(result, AgentResult)
+        else None
+    )
+    if correlation_id:
+        payload["externalId"] = str(correlation_id)[:128]
     headers = {
         "X-API-Key": api_key,
         "Content-Type": "application/json",
@@ -311,18 +350,22 @@ async def send_ycloud_reply(
             return await client.post(url, json=payload, headers=headers)
 
     try:
-        response = await with_retries(_post)
+        # Repeat the POST only when it provably never reached YCloud; a read
+        # timeout may mean the message was accepted, and a repeat duplicates it.
+        response = await with_retries(_post, retry_exceptions=NOT_SENT_EXCEPTIONS)
     except Exception as exc:  # noqa: BLE001 — outbound must not crash the turn
+        outcome = classify_send_exception(exc)
         log_exception(
             "ycloud.outbound.network_failed",
             exc,
-            {"recipient_present": True, "reply_chars": len(text or "")},
+            {"recipient_present": True, "reply_chars": len(text or ""), "outcome": outcome},
         )
         return {
             "ok": False,
             "provider": "ycloud",
-            "error": "ycloud_network_error",
+            "error": "ycloud_delivery_unknown" if outcome == "unknown" else "ycloud_network_error",
             "error_type": type(exc).__name__,
+            "delivery_unknown": outcome == "unknown",
         }
 
     try:
@@ -336,9 +379,10 @@ async def send_ycloud_reply(
     ok = 200 <= status_code < 300
     if not ok:
         error = _error_for_status(status_code)
+        outcome = classify_send_status(status_code)
         log_event(
             "ycloud.outbound.failed",
-            {"status_code": status_code, "error": error},
+            {"status_code": status_code, "error": error, "outcome": outcome},
         )
         return {
             "ok": False,
@@ -346,6 +390,8 @@ async def send_ycloud_reply(
             "error": error,
             "status_code": status_code,
             "provider_response": body,
+            "permanent": outcome == "permanent",
+            "delivery_unknown": outcome == "unknown",
         }
 
     log_event(

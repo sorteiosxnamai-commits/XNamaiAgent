@@ -62,12 +62,19 @@ async def _send_reply(incoming: IncomingMessage, result: AgentResult) -> dict[st
     from app.brevo_client import send_brevo_reply
 
     send_result = await send_brevo_reply(incoming, result)
-    return {
+    info = {
         "ok": bool(send_result.ok),
         "status_code": send_result.status_code,
         "provider_response": send_result.model_dump(),
         "error": send_result.error,
     }
+    if not send_result.ok and send_result.status_code:
+        from app.http_resilience import classify_send_status
+
+        outcome = classify_send_status(send_result.status_code)
+        info["permanent"] = outcome == "permanent"
+        info["delivery_unknown"] = outcome == "unknown"
+    return info
 
 
 async def process_inbox_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -160,6 +167,7 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
         budget = build_llm_call_budget(execution_path="normal")
         runtime = TurnRuntimeContext(trace_id=f"inbox-{inbox_id}", inbound_id=inbound_id,
                                     llm_budget=LLMCallBudget(max_calls=budget.get("max_calls", 2),
+                                                            max_transport_attempts=budget.get("max_transport_attempts", 8),
                                                             enforce=budget.get("enforce", True)))
         token = set_current_turn(runtime)
         try:

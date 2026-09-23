@@ -457,7 +457,7 @@ def test_wireless_rejects_mechanical_intra_matic_sibling():
 
 def test_merge_tray_with_visual_prefers_nearest_family_sibling():
     from app.models import SalesInterpretation
-    from app.image_product_id import merge_tray_with_visual_neighbors
+    from app.image_product_id import merge_provider_with_visual_neighbors
 
     interpretation = SalesInterpretation(
         domain="commerce",
@@ -501,7 +501,7 @@ def test_merge_tray_with_visual_prefers_nearest_family_sibling():
             "visual_distance": 0.31,
         },
     ]
-    merged = merge_tray_with_visual_neighbors(tray, visual, interpretation, limit=2)
+    merged = merge_provider_with_visual_neighbors(tray, visual, interpretation, limit=2)
     assert merged[0]["id"] == "900"
     assert "com fio" not in merged[0]["name"]
 
