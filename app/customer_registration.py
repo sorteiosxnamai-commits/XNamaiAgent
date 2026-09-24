@@ -462,6 +462,7 @@ def _metadata(
     clear: bool = False,
     sources: dict[str, str] | None = None,
     required_field: str | None = None,
+    required_fields: list[str] | None = None,
     trade_name_asked: bool = False,
 ) -> dict[str, Any]:
     state = {
@@ -470,6 +471,7 @@ def _metadata(
         "customer_id": customer_id,
         "sources": dict(sources or {}),
         "required_field": required_field,
+        "required_fields": list(required_fields or []),
         "trade_name_asked": trade_name_asked,
     }
     return {
@@ -568,6 +570,12 @@ async def handle_customer_registration_turn(
             return _result("Seu cadastro da Xnamai já está vinculado a este atendimento.",
                            status="created", draft={}, pending_action=None,
                            customer_id=str(lookup["customer_id"]), clear=True)
+        return _result(
+            "Seu cadastro foi recebido pela Mercos e ainda aguarda sincronização. "
+            "Não vou enviar outro cadastro.",
+            status="created_pending_sync", draft={"document": draft["document"]},
+            pending_action=None, clear=True,
+        )
     if not active and registration.get("status") in _BLOCKING_STATUSES:
         return _result(
             "Seu pedido de cadastro anterior está em verificação com a equipe da Xnamai. "
@@ -590,7 +598,14 @@ async def handle_customer_registration_turn(
         )
 
     updates = extract_registration_fields(text)
+    # A reply to a deterministic question may be a commerce detour. Decide
+    # before treating otherwise unlabelled text as a legal or trade name.
+    if active and not updates and not is_greeting(text) and (
+        commerce_action_from_text(text) is not None or "?" in (text or "")
+    ):
+        return None
     required_field = registration.get("required_field")
+    required_fields = list(registration.get("required_fields") or ([required_field] if required_field else []))
     trade_name_asked = bool(registration.get("trade_name_asked"))
     if active and trade_name_asked and not draft.get("trade_name") and _short(text) in {"nao tenho", "sem nome fantasia", "nao usamos", "pular"}:
         updates = {}
@@ -628,8 +643,6 @@ async def handle_customer_registration_turn(
     for field, value in updates.items():
         draft[field] = value
         sources[field] = "customer"
-        if field == required_field:
-            required_field = None
     if "cep" in updates and len(_digits(updates["cep"])) == 8:
         from .checkout_data_service import lookup_address_by_zipcode
 
@@ -640,6 +653,8 @@ async def handle_customer_registration_turn(
                 draft[target] = resolved[source]
                 sources[target] = "cep"
     _apply_channel_defaults(draft, sources, sender_name=sender_name, sender_phone=sender_phone)
+    required_fields = [field for field in required_fields if not draft.get(field)]
+    required_field = required_fields[0] if required_fields else None
     normalized, errors = validate_registration_draft(draft)
     errors.pop("person_type", None)  # o tipo vem do documento; pedir o documento basta
     if required_field and not draft.get(required_field):
@@ -661,6 +676,7 @@ async def handle_customer_registration_turn(
             safety_reason="customer_registration_data_needed" if active else None,
             status="collecting", draft={**draft, **normalized}, sources=sources,
             pending_action=PENDING_REGISTRATION_DATA, required_field=required_field,
+            required_fields=required_fields,
             trade_name_asked=trade_name_asked,
         )
     return _result(
@@ -738,20 +754,25 @@ async def _confirm_and_create(
     if code == "customer_validation":
         mapping = {"razao_social": "legal_name", "tipo": "person_type", "cnpj": "document",
                    "nome_fantasia": "trade_name", "emails": "email", "telefones": "phone"}
-        field = next(iter(result.get("fields") or []), None)
-        if field:
-            field = mapping.get(field, field)
-            if field == "person_type":
-                field = "document"
+        field_order = ("cep", "rua", "numero", "bairro", "cidade", "estado",
+                       "legal_name", "document", "trade_name", "inscricao_estadual",
+                       "suframa", "email", "phone")
+        required_fields = [mapping.get(field, field) for field in (result.get("fields") or [])]
+        required_fields = ["document" if field == "person_type" else field for field in required_fields]
+        required_fields = sorted(set(required_fields), key=lambda field: field_order.index(field) if field in field_order else len(field_order))
+        if required_fields:
             draft = dict(normalized)
-            draft.pop(field, None)
             sources = dict(sources)
-            sources[field] = "rejected"
+            for field in required_fields:
+                draft.pop(field, None)
+                sources[field] = "rejected"
+            field = required_fields[0]
             label = {"email": "seu e-mail", "phone": "seu telefone com DDD",
                      "trade_name": "o nome fantasia", "legal_name": "sua razão social",
                      "document": "seu CPF ou CNPJ"}.get(field, field.replace("_", " "))
             return _result(f"Para concluir seu cadastro, preciso também de {label}.",
                            status="collecting", draft=draft, sources=sources, required_field=field,
+                           required_fields=required_fields,
                            pending_action=PENDING_REGISTRATION_DATA)
         return _result("A Mercos rejeitou o cadastro por uma validação que preciso encaminhar à equipe.",
                        safety_reason="customer_registration_validation_unmapped", handoff=True,
