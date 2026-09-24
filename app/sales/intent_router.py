@@ -71,7 +71,7 @@ _GOAL_BY_INTENT: dict[str, str] = {
 }
 
 _GREETINGS = frozenset(
-    {"oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "oi tudo bem", "olá tudo bem", "ola tudo bem"}
+    {"oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem", "oi tudo bem", "olá tudo bem", "ola tudo bem"}
 )
 _PURCHASE_TERMS = (
     "quero comprar", "quero adquirir", "quero um ", "quero uma ", "gostaria de comprar",
