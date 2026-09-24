@@ -1,9 +1,9 @@
-"""Customer document index against a REAL PostgreSQL (migrations 023 + 025).
+﻿"""Customer document index against a REAL PostgreSQL (migrations 023 + 025).
 
 A mocked cursor cannot prove the advisory lock, the claim's primary key or the
 baseline semantics. Runs only with a disposable database:
 ``TEST_DATABASE_URL=postgresql://... pytest -m integration``. Without it the
-module is SKIPPED — never counted as passed.
+module is SKIPPED â€” never counted as passed.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def tenant(monkeypatch):
     get_settings.cache_clear()
     with db.get_conn() as conn, conn.cursor() as cur:
         for name in ("023_mercos_sync_state.sql", "025_mercos_customer_document_index.sql",
-                     "026_mercos_customer_creation_pending_sync.sql"):
+                     "027_mercos_customer_creation_pending_sync.sql"):
             cur.execute((REPO / "sql" / name).read_text(encoding="utf-8"))
     tenant_id = f"it-{uuid4().hex[:10]}"
     try:

@@ -1,4 +1,4 @@
-# Contrato comercial — MercosAdaptor
+﻿# Contrato comercial â€” MercosAdaptor
 
 Fonte: `sorteiosxnamai-commits/MercosAdaptor` @ `38f0bf4` (16 arquivos, lidos por
 inteiro, incluindo os testes).
@@ -9,17 +9,17 @@ adaptador.
 
 ---
 
-## 1. Rotas disponíveis
+## 1. Rotas disponÃ­veis
 
 | Rota | Uso | Filtro aceito |
 | --- | --- | --- |
-| `GET /health` | saúde do adaptador | — |
-| `GET /v1/resources` | recursos suportados | — |
+| `GET /health` | saÃºde do adaptador | â€” |
+| `GET /v1/resources` | recursos suportados | â€” |
 | `GET /v1/{resource}` | listagem incremental | **apenas** `alterado_apos` |
-| `GET /v1/{customers\|products\|orders}/{mercos_id}` | detalhe | — |
-| `POST/PUT /v1/customers` | criar/alterar cliente | — |
-| `POST/PUT /v1/orders` | criar/alterar pedido (Mercos v2) | — |
-| `POST/PUT /v1/titles` | criar/alterar título | — |
+| `GET /v1/{customers\|products\|orders}/{mercos_id}` | detalhe | â€” |
+| `POST/PUT /v1/customers` | criar/alterar cliente | â€” |
+| `POST/PUT /v1/orders` | criar/alterar pedido (Mercos v2) | â€” |
+| `POST/PUT /v1/titles` | criar/alterar tÃ­tulo | â€” |
 
 Recursos de listagem: `customers`, `products`, `orders`, `price-tables`,
 `payment-conditions`, `carriers`, `commercial-policies`, `categories`,
@@ -34,8 +34,8 @@ respondem 404.
 {"resource": "...", "count": 0, "pageCursor": "...", "nextCursor": "...", "data": []}
 ```
 
-`nextCursor` só vem preenchido quando existe próxima página. O consumidor só pode
-gravar o cursor **depois** de persistir toda a página.
+`nextCursor` sÃ³ vem preenchido quando existe prÃ³xima pÃ¡gina. O consumidor sÃ³ pode
+gravar o cursor **depois** de persistir toda a pÃ¡gina.
 
 ### Erros
 
@@ -52,8 +52,8 @@ gravar o cursor **depois** de persistir toda a página.
 Evidence: the official [Mercos customer API](https://docs.mercos.com/reference/v1clientes)
 documents `cnpj` (CPF for individuals, numeric or alphanumeric CNPJ) and only `excluido` as a
 customer GET filter. The adaptor accepts only `alterado_apos` on
-`GET /v1/customers`. **There is no lookup by CPF/CNPJ** — neither in Mercos
-(documented) nor in the adaptor — so none is called. The agent keeps its own
+`GET /v1/customers`. **There is no lookup by CPF/CNPJ** â€” neither in Mercos
+(documented) nor in the adaptor â€” so none is called. The agent keeps its own
 index (`app/commerce/mercos/customer_index.py`, migration 025).
 
 Index. `run_customer_sync` consumes the adaptor list envelope and stores, per
@@ -68,7 +68,7 @@ Lookup contract (`lookup_customer_by_document`):
 | status | meaning | registration |
 | --- | --- | --- |
 | `FOUND` | exactly one customer (or a local created-claim) | link, zero POST |
-| `NOT_FOUND` | complete, recent baseline and no match | may create — decided again under the lock |
+| `NOT_FOUND` | complete, recent baseline and no match | may create â€” decided again under the lock |
 | `AMBIGUOUS` | same document on 2+ customers (legacy duplicates) | handoff, zero POST |
 | `CREATION_PENDING` | a creation for this document is in flight or unknown | handoff, zero POST |
 | `INDEX_NOT_READY` | never synced, baseline in progress, key rotated, last sync failed, or stale (> 1 h) | registration unavailable |
@@ -77,7 +77,7 @@ Lookup contract (`lookup_customer_by_document`):
 Baseline. `NOT_FOUND` is only trusted after a FULL baseline: a sweep that
 started from an empty cursor with the current key and reached the end
 (`ai_mercos_customer_index_config.baseline_completed_at`). A leftover
-incremental cursor is never taken as a baseline — the first run resets it.
+incremental cursor is never taken as a baseline â€” the first run resets it.
 A baseline may span several runs (page budget); until it completes, lookups
 answer `INDEX_NOT_READY`.
 
@@ -96,10 +96,10 @@ Key rotation. A different `CUSTOMER_DOCUMENT_HMAC_KEY` makes the index
 `INDEX_NOT_READY` immediately (never `NOT_FOUND`). The next sync drops the
 tenant's digests, resets the customer cursor and starts a new baseline;
 registration returns only when it completes. Rotation is refused while there
-are unresolved (`creating`/`unknown`) claims — resolve them first. No
+are unresolved (`creating`/`unknown`) claims â€” resolve them first. No
 dual-key period is supported.
 
-Operations: apply migrations 025 and 026, set the key, run
+Operations: apply migrations 025, 026 and 027, set the key, run
 `POST /api/cron/commerce/sync/customers` (or the admin route) until the
 baseline completes, then schedule it well inside the 1 h freshness window.
 
@@ -111,7 +111,7 @@ Create payload (each field and its evidence):
 | `razao_social` | Mercos docs: legal name, or the person's name for PF |
 | `nome_fantasia` | Mercos docs; PJ only when provided |
 | `cnpj` | Mercos docs: CNPJ for PJ, CPF for PF; numeric CPF/CNPJ or alphanumeric CNPJ without punctuation |
-| `emails: [{"email": ...}]` | Mercos docs: list of Email objects; JSON example uses `email` (field table labels it `e-mail`) — **confirm in homologation** |
+| `emails: [{"email": ...}]` | Mercos docs: list of Email objects; JSON example uses `email` (field table labels it `e-mail`) â€” **confirm in homologation** |
 | `telefones: [{"numero": ...}]` | Mercos docs |
 | `observacao` | Mercos docs (String 500); omitted unless customer supplies it |
 
@@ -123,24 +123,24 @@ Confirm the adaptor behavior in homologation before enabling
 Limits. The index is a snapshot plus local claims: a customer created in
 Mercos by someone else after the last sync is invisible until the next sync.
 
-## 4. Política de freshness
+## 4. PolÃ­tica de freshness
 
-`app/commerce/mercos/freshness.py`. Fora da janela o fato vira `unconfirmed` —
-nunca `zero`, nunca `indisponível`.
+`app/commerce/mercos/freshness.py`. Fora da janela o fato vira `unconfirmed` â€”
+nunca `zero`, nunca `indisponÃ­vel`.
 
-| Tipo | Janela | Razão |
+| Tipo | Janela | RazÃ£o |
 | --- | --- | --- |
-| identidade | 7 dias | nome/referência mudam pouco |
-| preço | 12 horas | muda com frequência |
+| identidade | 7 dias | nome/referÃªncia mudam pouco |
+| preÃ§o | 12 horas | muda com frequÃªncia |
 | estoque | 1 hora | muda o tempo todo |
 
-Tipo desconhecido cai na janela mais curta: na dúvida, exigir confirmação.
+Tipo desconhecido cai na janela mais curta: na dÃºvida, exigir confirmaÃ§Ã£o.
 
 ---
 
-## 5. Segurança
+## 5. SeguranÃ§a
 
 - Apenas `MERCOS_ADAPTOR_URL` e `MERCOS_ADAPTOR_API_KEY` (+ timeout) existem no XNamai.
-- `ApplicationToken`, `CompanyToken` e `MERCOS_BASE_URL` são do adaptador.
-- Mutação nunca é repetida; falha ambígua vira `mutation_state=unknown`.
+- `ApplicationToken`, `CompanyToken` e `MERCOS_BASE_URL` sÃ£o do adaptador.
+- MutaÃ§Ã£o nunca Ã© repetida; falha ambÃ­gua vira `mutation_state=unknown`.
 - `sanitize()` remove chave/token recursivamente antes de qualquer log.
