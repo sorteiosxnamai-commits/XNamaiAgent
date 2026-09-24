@@ -3,7 +3,7 @@
 import re
 
 _CATEGORY = re.compile(
-    r"\b(?:fones?|cabos?|carregadores?|carregador|capas?|suportes?|"
+    r"\b(?:fones?|cabos?|carregadores?|carregador|capas?|suportes?|rel[oó]gios?|"
     r"adaptadores?|adaptador|hubs?|pel[ií]culas?|power\s*banks?|"
     r"eletr[oô]nicos?|acess[oó]rios?|caixas?\s+de\s+som)\b",
     re.IGNORECASE,

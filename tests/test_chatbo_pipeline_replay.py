@@ -335,6 +335,14 @@ async def test_single_message_registration_data_skips_collected_questions(monkey
 
 
 @pytest.mark.asyncio
+async def test_single_product_category_routes_to_catalog(monkeypatch):
+    replay = Replay(monkeypatch)
+    _, row = await replay.say("relógio")
+    assert row["intent"] == "commerce"
+    assert "search_products" in row["tools"]
+
+
+@pytest.mark.asyncio
 async def test_broad_120_turn_replay_builds_routing_matrix(monkeypatch):
     replay = Replay(monkeypatch)
     scripts = [
