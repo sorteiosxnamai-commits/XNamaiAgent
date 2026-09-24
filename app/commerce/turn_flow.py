@@ -302,6 +302,32 @@ async def run_commerce_turn(
                     outcome=OUTCOME_BROWSE, products=alternativas[:MAX_AMBIGUOUS],
                     action=acao, rejected_product_id=rejeitado,
                 )
+        # Sem consulta nova: se a lista ja apresentada tinha outra opcao, ela
+        # e a alternativa mais obvia — nao faz o cliente descrever tudo de novo.
+        apresentados = [
+            item for item in (state.last_presented_products or [])
+            if str(item.product_id) != str(rejeitado)
+        ]
+        if len(apresentados) == 1:
+            produto = await _detalhar(execute, apresentados[0].product_id)
+            if produto is not None:
+                _ativar(state, produto)
+                return CommerceTurnOutcome(
+                    outcome=OUTCOME_REJECTED, action=acao,
+                    rejected_product_id=rejeitado, product=produto,
+                )
+        elif 1 < len(apresentados) <= MAX_AMBIGUOUS:
+            candidatos = []
+            for item in apresentados:
+                produto = await _detalhar(execute, item.product_id)
+                if produto is not None:
+                    candidatos.append(produto)
+            if candidatos:
+                _guardar_lista(state, candidatos)
+                return CommerceTurnOutcome(
+                    outcome=OUTCOME_AMBIGUOUS, products=candidatos,
+                    action=acao, rejected_product_id=rejeitado,
+                )
         return CommerceTurnOutcome(outcome=OUTCOME_REJECTED, action=acao,
                                    rejected_product_id=rejeitado)
 
@@ -543,6 +569,12 @@ async def _turno_de_carrinho(acao, resolucao, *, state, execute) -> CommerceTurn
         quantidade, incremental = resolucao.cart_quantity or (1, False)
         atual = do_carrinho.quantity if do_carrinho else 0
         nova = atual + quantidade if incremental else quantidade
+        if incremental and quantidade < 0 and nova == 0 and do_carrinho is not None:
+            state.cart_items = [item for item in state.cart_items if item.product_id != referencia.product_id]
+            _invalidar_revisao(state)
+            return CommerceTurnOutcome(
+                outcome=OUTCOME_CART, products=_carrinho_para_saida(state), action=acao
+            )
         if nova < 1:
             # Quantidade zero nao e "remover por engano": mantem o item e pede
             # numero valido, porque apagar por causa de um numero errado perde

@@ -127,6 +127,10 @@ class Replay:
             {"sender_key": f"whatsapp:{sender_phone}"} if via == "sender_key" else {})
         key = kwargs.get("conversation_id") or kwargs.get("sender_key") or sender_phone
         before = json.loads(json.dumps(self.states.get(key, {})))
+        from app.commerce_context import CommerceConversationState
+        from app.commerce.turn_resolver import resolve_commerce_turn
+        before_state = CommerceConversationState.from_payload(before)
+        expected_resolution = resolve_commerce_turn(text, state=before_state)
         call_start, handler_start = len(self.calls), len(self.handlers)
         result = await process_incoming_message(
             IncomingMessage(channel="whatsapp", provider="ycloud", text=text,
@@ -143,6 +147,14 @@ class Replay:
             "dialogue_phase": (meta.get("dialogue") or {}).get("phase"),
             "pending_before": before.get("pending_action"),
             "pending_after": after.get("pending_action"),
+            "resolver_action": expected_resolution.action,
+            "active_product_before": before_state.active_product.product_id if before_state.active_product else None,
+            "presented_before": [item.product_id for item in before_state.last_presented_products],
+            "cart_before": [(item.product_id, item.quantity) for item in before_state.cart_items],
+            "purchase_stage_before": before_state.purchase_stage,
+            "previous_active_before": before_state.previous_active_product.product_id if before_state.previous_active_product else None,
+            "last_catalog_query_before": before_state.last_catalog_query,
+            "open_order_before": bool(before_state.order_id or before_state.order_lookup_id),
             "handler": list(dict.fromkeys(self.handlers[handler_start:])),
             "tools": [name for name, _ in self.calls[call_start:]],
             "status_before": (before.get("customer_registration") or {}).get("status"),
@@ -204,6 +216,40 @@ async def test_long_conversation_switches_topics_and_resumes_registration(monkey
     assert all(not replay.rows[index]["factual_fallback"] for index in (10, 11, 12, 14, 15, 16))
     assert replay.rows[-1]["handoff_required"] is True
     assert "search_products" not in replay.rows[-1]["tools"]
+
+
+@pytest.mark.asyncio
+async def test_long_conversation_filter_reject_cart_checkout_registration_and_back(monkeypatch):
+    """produto -> filtro -> comparacao -> rejeicao -> outro -> carrinho -> pagamento
+    -> cadastro -> retorno ao carrinho, sem perder contexto nem cair em fallback
+    generico em nenhum turno."""
+    replay = Replay(monkeypatch)
+    messages = [
+        "tem relógio masculino?", "quero um relógio preto", "tem até 1000 reais?",
+        "tem relógio?", "tem preto?", "qual o mais barato?", "não esse",
+        "me mostra outro", "coloca no carrinho", "quero dois", "quero pagar",
+        "quero me cadastrar", "52998224725", "João Teste da Silva",
+        "joao.teste@example.com", "confirmo o cadastro", "vamos fechar",
+        "meu carrinho",
+    ]
+    generic_fallback = "Qual característica ou preferência é mais importante para você?"
+    for message in messages:
+        await replay.say(message)
+    assert all(row["reply"] != generic_fallback for row in replay.rows)
+    assert not any(
+        row["reply"] == previous["reply"]
+        for previous, row in zip(replay.rows, replay.rows[1:])
+    )
+    state = replay.states["wa:5511988880001"]
+    assert [(item["product_id"], item["quantity"]) for item in state["cart_items"]] == [("watch-1", 2)]
+    assert state["customer_registration"]["status"] == "created"
+    reject_row, other_row, checkout_row, cart_row = (
+        replay.rows[6], replay.rows[7], replay.rows[-2], replay.rows[-1]
+    )
+    assert "Relógio Prata Clássico" in reject_row["reply"]
+    assert "Relógio Preto Esportivo" in other_row["reply"]
+    assert "condição de pagamento" in checkout_row["reply"].casefold()
+    assert "2" in cart_row["reply"] and "Relógio Preto Esportivo" in cart_row["reply"]
 
 
 @pytest.mark.asyncio
@@ -392,8 +438,12 @@ async def test_broad_120_turn_replay_builds_routing_matrix(monkeypatch):
     assert len([name for name, _ in replay.calls if name == "create_customer"]) <= 3
     if os.getenv("CHATBO_WRITE_AUDIT") == "1":
         path = Path(__file__).resolve().parents[1] / "docs" / "chatbo_validation_matrix.md"
-        columns = ("group", "input", "intent", "handler", "tools", "pending_before",
-                   "pending_after", "status_after", "response_source", "fallback_reason", "safety_reason", "reply")
+        columns = ("group", "input", "intent", "handler", "tools", "resolver_action",
+                   "active_product_before", "presented_before", "cart_before",
+                   "purchase_stage_before", "previous_active_before", "last_catalog_query_before",
+                   "open_order_before", "pending_before",
+                   "pending_after", "status_after", "response_source", "fallback_reason",
+                   "safety_reason", "reply")
         lines = ["# ChatBô routing matrix — 120 synthetic turns", "",
                  "Generated by `test_broad_120_turn_replay_builds_routing_matrix` with PII redaction.", "",
                  "| " + " | ".join(columns) + " |", "|" + " --- |" * len(columns)]

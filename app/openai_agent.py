@@ -698,10 +698,15 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_responder=False,
             used_commerce_provider=False,
         )
+    short_order_followup = (
+        commerce_state.active_topic == "order_status"
+        and (message.text or "").casefold().strip(" ?!.") in {"qual status", "e o status"}
+    )
     wants_order_context = (
         is_order_lookup_request(message.text)
         or is_payment_link_request(message.text)
         or is_unpaid_order_resume_request(message.text)
+        or short_order_followup
     )
     known_order_tokens = [
         token
@@ -739,6 +744,23 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             )
             if commerce_state.pending_action is None:
                 commerce_state.pending_action = "awaiting_payment"
+    if (is_order_lookup_request(message.text) or short_order_followup) and not any((
+        order_reference, commerce_state.order_id, commerce_state.order_lookup_id,
+        commerce_state.order_session_id, commerce_state.cart_session_id,
+        commerce_state.order_payment_url,
+    )):
+        return _annotate_agent_result(
+            AgentResult(
+                reply_text="Me informe o número do pedido para eu consultar o status.",
+                intent="commerce",
+                response_metadata={"domain": "commerce", "active_topic": "order_status",
+                                   "response_source": "order_reference_needed",
+                                   "used_commerce_provider": False},
+            ),
+            domain="commerce", response_source="order_reference_needed",
+            used_openai_interpreter=False, used_openai_responder=False,
+            used_commerce_provider=False,
+        )
     resume_pending_order = should_resume_pending_order(
         message.text,
         commerce_state,
@@ -752,6 +774,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     )
     if (
         is_order_lookup_request(message.text)
+        or short_order_followup
         or resume_pending_order
         or is_payment_link_request(message.text)
     ) and (

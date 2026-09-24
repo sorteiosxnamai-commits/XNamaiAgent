@@ -1076,17 +1076,135 @@ async def _generic_catalog_fast_path(
             ACTION_SHOW_MEDIA,
             ACTION_SHOW_MORE_MEDIA,
             ACTION_START_PURCHASE,
+            ACTION_TRANSACTION,
+            LOCAL_CART_ACTIONS,
             READ_ONLY_ACTIONS,
             resolve_commerce_turn,
         )
 
         decisao = resolve_commerce_turn(message.text or "", state=state)
+        from .order_service import is_order_lookup_request
+        if is_order_lookup_request(message.text):
+            return None
+        from .commerce.generic_catalog import normalize_text
+        curto = normalize_text(message.text or "").strip(" ?!.")
+        if curto == "nao quero cadastrar" and state.pending_action is None:
+            return AgentResult(
+                reply_text="Tudo bem, não vou iniciar um cadastro. Posso ajudar com produtos ou pedidos.",
+                intent="general", response_metadata={"domain": "commerce", "response_source": "contextual_action"},
+            )
+        if curto in {"o mais barato", "qual o mais barato", "mais barato"} and state is not None:
+            from decimal import Decimal, InvalidOperation
+            apresentados = list(state.last_presented_products or [])
+            if not apresentados:
+                return AgentResult(
+                    reply_text="Só tenho o produto selecionado no momento. Quer ver outras opções para comparar preços?",
+                    intent="commerce", safety_reason="commerce_clarification",
+                    response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                       "response_source": "contextual_clarification"},
+                )
+            precos = []
+            for item in apresentados:
+                detalhe = await execute_tool("get_product", {"product_id": item.product_id})
+                produto = detalhe.get("product") if isinstance(detalhe.get("product"), dict) else detalhe
+                try:
+                    preco = Decimal(str(produto.get("price"))) if detalhe.get("ok") else None
+                except (InvalidOperation, TypeError, ValueError):
+                    preco = None
+                if preco is None or not preco.is_finite():
+                    return AgentResult(
+                        reply_text="Não consegui confirmar o preço de todos os modelos apresentados para comparar.",
+                        intent="commerce", safety_reason="product_price_unavailable",
+                        response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                           "response_source": "contextual_clarification"},
+                    )
+                precos.append((preco, item.position))
+            menor = min(preco for preco, _ in precos)
+            posicoes = [posicao for preco, posicao in precos if preco == menor]
+            if len(posicoes) > 1:
+                return AgentResult(
+                    reply_text="Os modelos apresentados de menor preço empataram. Qual posição você prefere?",
+                    intent="commerce", safety_reason="commerce_clarification",
+                    response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                       "response_source": "contextual_clarification"},
+                )
+            from .commerce.turn_flow import run_commerce_turn
+            escolha = await run_commerce_turn(str(posicoes[0]), state=state, execute=execute_tool)
+            resposta = _render_commerce_turn(escolha, state)
+            if resposta is not None:
+                resposta.reply_text = "O mais barato entre os modelos apresentados é:\n" + resposta.reply_text
+            return resposta
+        if decisao.action == ACTION_TRANSACTION and state is not None and not state.cart_session_id:
+            itens = list(state.cart_items or [])
+            if curto.startswith("nao ") or curto.startswith("agora nao"):
+                resposta = "Tudo bem. Não iniciarei o pagamento agora; seu carrinho continua disponível."
+                etapa = "shopping"
+            elif not itens:
+                resposta = (
+                    "Para seguir ao pagamento, primeiro preciso de um item no carrinho. "
+                    "Se quiser o produto escolhido, diga 'coloca no carrinho'."
+                    if state.active_product else
+                    "Para seguir ao pagamento, escolha um produto e adicione-o ao carrinho."
+                )
+                etapa = "shopping"
+            elif "condicao" in curto or "forma" in curto:
+                resposta = "As condições de pagamento precisam ser confirmadas na revisão do pedido. Diga 'vamos fechar' para conferir seu carrinho."
+                etapa = "checkout"
+            elif curto.startswith("como "):
+                resposta = "Para pagar, primeiro revisamos os itens do carrinho. Diga 'vamos fechar' para conferir o pedido antes de confirmar."
+                etapa = "checkout"
+            else:
+                resposta = "Seu carrinho está pronto para revisão. Diga 'vamos fechar' para conferir os itens antes de pagar."
+                etapa = "checkout"
+            return AgentResult(
+                reply_text=resposta, intent="commerce",
+                response_metadata={"domain": "commerce", "active_topic": "checkout",
+                                   "purchase_stage": etapa, "response_source": "contextual_action",
+                                   "commerce_action": "checkout_question", "used_commerce_provider": False},
+            )
+        if state is not None and not state.active_product and len(state.last_presented_products) > 1 and curto in {"sim", "nao", "esse", "essa", "aquele"}:
+            pergunta = (
+                "Qual modelo você quer descartar: o primeiro ou o segundo?" if curto == "nao" else
+                "Qual deles você quer: o primeiro ou o segundo modelo?"
+            )
+            return AgentResult(
+                reply_text=pergunta, intent="commerce", safety_reason="commerce_clarification",
+                response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                   "response_source": "contextual_clarification", "used_commerce_provider": False},
+            )
+        if state is not None and not state.active_product and not state.last_presented_products and state.last_catalog_query and curto in {"nao esse", "me mostra outro", "outro"}:
+            resposta = (
+                "Ainda não encontrei um modelo para substituir. Qual tipo de produto você procura?"
+                if curto == "nao esse" else
+                "Ainda não tenho uma alternativa encontrada. Você aceita mudar alguma característica do produto?"
+            )
+            return AgentResult(
+                reply_text=resposta, intent="commerce", safety_reason="commerce_clarification",
+                response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                   "response_source": "contextual_clarification", "used_commerce_provider": False},
+            )
+        if (
+            state is not None and state.active_product
+            and curto in {"outro", "outra", "me mostra outro", "mostra outro", "tem outro", "tem outra"}
+        ):
+            apresentados = [
+                item for item in (state.last_presented_products or [])
+                if item.product_id != state.active_product.product_id
+            ]
+            if len(apresentados) == 1:
+                from .commerce.turn_flow import run_commerce_turn
+                escolha = await run_commerce_turn(str(apresentados[0].position), state=state, execute=execute_tool)
+                return _render_commerce_turn(escolha, state)
         decidiveis = READ_ONLY_ACTIONS | {
             ACTION_START_PURCHASE,
             ACTION_CONFIRM_PENDING,
             ACTION_REJECT_PENDING,
-        }
+        } | LOCAL_CART_ACTIONS
         if decisao.action not in decidiveis:
+            return None
+        if decisao.action in LOCAL_CART_ACTIONS and state is not None and not (
+            state.active_product or state.last_presented_products or state.cart_items
+        ):
             return None
         # Busca e selecao sem contexto nenhum continuam passando pelo fluxo
         # legado antes, para nao atropelar interpretacao mais rica que ele
@@ -1131,6 +1249,10 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
         OUTCOME_MEDIA_UNAVAILABLE,
         OUTCOME_PRODUCT_NOT_FOUND,
         OUTCOME_PROVIDER_UNAVAILABLE,
+        OUTCOME_CART,
+        OUTCOME_ORDER_INCOMPLETE,
+        OUTCOME_ORDER_READY,
+        OUTCOME_ORDER_REVIEW,
         OUTCOME_PURCHASE_INTENT,
     )
     from .site_knowledge import STORE_URL
@@ -1202,6 +1324,79 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 used_commerce_provider=False,
                 active_topic="product_catalog",
                 club_offer_shown=offered or bool(getattr(state, "club_offer_shown", False)),
+            ),
+        )
+
+    if resultado.outcome == OUTCOME_CART and state is not None:
+        itens = list(state.cart_items or [])
+        resumo = ", ".join(f"{item.quantity} × {item.name or 'produto'}" for item in itens)
+        return AgentResult(
+            reply_text=(f"Carrinho atualizado: {resumo}." if itens else "Seu carrinho está vazio."),
+            intent="commerce", commercial_data={"cart_items": resultado.products},
+            response_metadata=_metadados(
+                active_topic="cart", purchase_stage="shopping", used_commerce_provider=False,
+                cart_state={"cart_items": [item.model_dump(mode="json") for item in itens]},
+                commerce_action=resultado.action,
+            ),
+        )
+
+    if resultado.outcome in (OUTCOME_ORDER_INCOMPLETE, OUTCOME_ORDER_REVIEW, OUTCOME_ORDER_READY):
+        revisao = getattr(resultado, "review", None)
+        _MISSING_TEXT = {
+            "customer_id": "Para fechar o pedido, primeiro preciso confirmar seu cadastro. Diga 'quero me cadastrar' para continuarmos.",
+            "payment_condition": "Para fechar o pedido, me diga qual condição de pagamento você prefere.",
+            "preco_unitario": "Não consegui confirmar o preço de um dos itens do carrinho agora. Vou verificar novamente em instantes.",
+            "quantidade": "A quantidade de um dos itens do carrinho ficou inválida. Pode confirmar quantas unidades você quer?",
+            "estoque_insuficiente": "Um dos itens do carrinho não tem estoque suficiente no momento.",
+            "itens": "Seu carrinho está vazio. Escolha um produto para eu adicionar antes de fechar o pedido.",
+        }
+        if resultado.outcome == OUTCOME_ORDER_INCOMPLETE:
+            motivo = next((codigo for codigo in (resultado.missing or []) if codigo in _MISSING_TEXT), None)
+            if motivo is None and (revisao.unconfirmed if revisao else []):
+                texto = "Ainda estou confirmando o estoque de um dos itens do carrinho antes de fechar o pedido."
+            else:
+                texto = _MISSING_TEXT.get(
+                    motivo, "Ainda falta uma informação para fechar o pedido. Pode me dizer o que deseja ajustar?"
+                )
+            return AgentResult(
+                reply_text=texto,
+                intent="commerce",
+                safety_reason="commerce_clarification",
+                response_metadata=_metadados(
+                    active_topic="checkout", purchase_stage="checkout", used_commerce_provider=False,
+                    commerce_action=resultado.action,
+                ),
+            )
+        if resultado.outcome == OUTCOME_ORDER_REVIEW:
+            linhas = quebra.join(
+                f"{linha.quantity} × {linha.name or linha.product_id}"
+                + (f" — R$ {linha.subtotal:.2f}" if linha.subtotal is not None else "")
+                for linha in (revisao.lines if revisao else [])
+            )
+            total = f"Total: R$ {revisao.total:.2f}" if revisao and revisao.total is not None else ""
+            texto = quebra.join(
+                parte for parte in (
+                    "Confira seu pedido antes de confirmar:", linhas, total,
+                    "Se estiver certo, responda 'confirmo o pedido'.",
+                ) if parte
+            )
+            return AgentResult(
+                reply_text=texto,
+                intent="commerce",
+                response_metadata=_metadados(
+                    active_topic="checkout", purchase_stage="checkout", used_commerce_provider=False,
+                    commerce_action=resultado.action,
+                ),
+            )
+        return AgentResult(
+            reply_text=(
+                "Seu pedido está pronto para confirmação. Nossa equipe vai concluir o "
+                "fechamento com você em seguida."
+            ),
+            intent="commerce",
+            response_metadata=_metadados(
+                active_topic="checkout", purchase_stage="checkout", used_commerce_provider=False,
+                commerce_action=resultado.action,
             ),
         )
 

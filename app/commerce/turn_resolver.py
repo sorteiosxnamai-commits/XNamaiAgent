@@ -124,6 +124,7 @@ _POSICOES = {
 _CURRENT_WORDS = frozenset({
     "esse", "essa", "este", "esta", "isso", "ele", "ela", "dele", "dela",
     "mesmo", "desse", "dessa", "deste", "nesse",
+    "aquele", "aquela",
 })
 
 _PRICE = (
@@ -282,6 +283,7 @@ _NON_PRODUCT = frozenset({
     "primeiro", "primeira", "segundo", "segunda", "terceiro", "terceira",
     "quarto", "quarta", "quinto", "quinta", "ultimo", "ultima", "anterior",
     "outra", "outro", "outros", "outras", "mais", "proxima", "proximo",
+    "aquele", "aquela", "barato", "barata",
     "seguinte", "parecido", "parecida", "similar", "nao", "sim",
     "posso", "consigo", "da", "pra", "poderia",
     "pedido", "pedidos", "compra", "compras", "comprar", "pedir", "levar",
@@ -400,7 +402,19 @@ def cart_quantity(normalizado: str) -> tuple[int, bool] | None:
     """
     numero = re.search(r"\b(\d{1,3})\b", normalizado)
     if not numero:
-        return None
+        if not re.fullmatch(
+            r"(?:quero|coloca|poe|adiciona|remove|tira|retira) "
+            r"(?:um|uma|dois|duas|tres|quatro|cinco)(?: no carrinho)?",
+            normalizado,
+        ):
+            return None
+        por_extenso = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4, "cinco": 5}
+        palavra = next((value for word, value in por_extenso.items() if re.search(rf"\b{word}\b", normalizado)), None)
+        if palavra is None:
+            return None
+        if re.search(r"\b(?:remove|tira|retira)\b", normalizado):
+            return -palavra, True
+        return palavra, bool(re.search(r"\bmais\b|\bacrescent|\bsoma\b", normalizado))
     quantidade = int(numero.group(1))
     incremental = bool(re.search(r"\bmais\b|\bacrescent|\bsoma\b", normalizado))
     return quantidade, incremental
@@ -561,6 +575,8 @@ def _detectar_acao(normalizado: str, state) -> tuple[str, str | None]:
         return ACTION_CONFIRM_ORDER, None
     if _contem(normalizado, _REMOVE_CART):
         return ACTION_REMOVE_FROM_CART, None
+    if re.fullmatch(r"(?:remove|tira|retira) (?:um|uma|dois|duas|tres|\d{1,3})", normalizado) and len(state.cart_items or []) == 1:
+        return ACTION_SET_QUANTITY, None
     if _contem(normalizado, _SHOW_CART_STRONG):
         return ACTION_SHOW_CART, None
     if _contem(normalizado, _SHOW_CART) and not _contem(normalizado, _ADD_CART):
