@@ -73,8 +73,9 @@ class CreationClaim:
 
 
 def document_digest(document: str, key: str) -> str:
-    normalized = re.sub(r"\D", "", str(document or ""))
-    if len(normalized) not in {11, 14} or len(key) < MIN_KEY_LENGTH:
+    normalized = re.sub(r"[^A-Z0-9]", "", str(document or "").upper())
+    if not (re.fullmatch(r"[0-9]{11}", normalized) or
+            re.fullmatch(r"[A-Z0-9]{12}[0-9]{2}", normalized)) or len(key) < MIN_KEY_LENGTH:
         raise ValueError("invalid document or index key")
     return hmac.new(key.encode("utf-8"), normalized.encode("ascii"), hashlib.sha256).hexdigest()
 
@@ -193,7 +194,7 @@ class CustomerPageWriter:
                         raise ValueError("invalid customer row")
                     customer_id = str(record.external_id)
                     raw_document = str(row.get("cnpj") or "")
-                    document = re.sub(r"\D", "", raw_document)
+                    document = re.sub(r"[^A-Z0-9]", "", raw_document.upper())
                     # A document can change. Remove the old digest in the same
                     # transaction before inserting the current one.
                     cur.execute(
@@ -204,8 +205,8 @@ class CustomerPageWriter:
                     # against the production adaptor, tests/fixtures). Only an
                     # explicit True removes; absent/None keeps the customer.
                     if (row.get("excluido") is True or not document
-                            or re.search(r"[A-Za-z]", raw_document)
-                            or len(document) not in {11, 14}):
+                            or not (re.fullmatch(r"[0-9]{11}", document) or
+                                    re.fullmatch(r"[A-Z0-9]{12}[0-9]{2}", document))):
                         continue
                     digest = document_digest(document, self.hmac_key)
                     cur.execute(
@@ -214,6 +215,12 @@ class CustomerPageWriter:
                         "ON CONFLICT (tenant_id, document_digest, customer_id) "
                         "DO UPDATE SET updated_at = now()",
                         (self.tenant_id, digest, customer_id),
+                    )
+                    cur.execute(
+                        f"UPDATE {CLAIM_TABLE} SET status = 'created', customer_id = %s, updated_at = now() "
+                        "WHERE tenant_id = %s AND document_digest = %s "
+                        "AND status = 'created_pending_sync'",
+                        (customer_id, self.tenant_id, digest),
                     )
         return len(records)
 
@@ -316,7 +323,7 @@ class CustomerDocumentIndex:
                         (self.tenant_id, digest),
                     )
                     return
-                if outcome not in {"created", "unknown"}:
+                if outcome not in {"created", "created_pending_sync", "unknown"}:
                     raise ValueError("invalid creation outcome")
                 cur.execute(
                     f"UPDATE {CLAIM_TABLE} SET status = %s, customer_id = %s, updated_at = now() "

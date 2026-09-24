@@ -28,18 +28,18 @@ palavra sozinha), não uma lista de frases. Não são pedidos novos: negação,
 - `pending_action` persiste até conclusão, cancelamento, handoff ou erro
   terminal. Uma pergunta comercial no meio do cadastro é respondida
   normalmente e **não** limpa a pendência; saudação não rouba o turno.
-- Status terminais `unknown` e `lookup_failed` bloqueiam nova criação
+- Status terminais `unknown`, `lookup_failed` e `created_pending_sync` bloqueiam nova criação
   automática na conversa (a equipe verifica).
 
 ## Coleta
 
 - Parser natural + "Campo: valor": e-mail por padrão; CPF/CNPJ só com dígito
   verificador válido (ou com "cpf"/"cnpj" explícito, para apontar o erro);
-  telefone só quando anunciado ou formatado; nome só após "meu nome é" /
-  "me chamo" / "razão social". PF/PJ inferido do documento.
+  telefone só quando anunciado ou formatado; nome também é aceito como resposta
+  direta à pergunta de nome. PF/PJ é inferido do documento, inclusive CNPJ
+  alfanumérico validado pelo DV oficial.
 - Dados do canal: `sender_phone` válido preenche o telefone (não é pedido de
-  novo); `sender_name` é proposto como nome de PF e aparece marcado na
-  revisão. Nunca usado como razão social. Precedência: valor explícito do
+  novo); `sender_name` não vira nome legal. Precedência: valor explícito do
   turno > rascunho > canal. O cliente sempre pode corrigir.
 - Pede **apenas** o que falta ou está inválido.
 - Revisão mascarada (documento `***1234`, e-mail `ab***@dominio`, telefone
@@ -47,24 +47,28 @@ palavra sozinha), não uma lista de frases. Não são pedidos novos: negação,
 
 ## Capacidade e duplicidade
 
-O fluxo só é oferecido quando o runtime expõe **as duas** capacidades:
+O fluxo de coleta está disponível antes das capacidades de criação. A confirmação
+só executa mutation quando o runtime expõe **as duas** capacidades:
 
 | capacidade | origem | hoje |
 |---|---|---|
 | `create_customer` | `MERCOS_CUSTOMER_MUTATIONS_ENABLED=true` (nunca ligado automaticamente) | desligado por padrão |
 | `lookup_customer_by_document` | índice local de HMAC dos documentos (sync incremental do MercosAdaptor, migration 025) | pronto só após baseline completo e recente |
 
-Sem elas, o pedido recebe resposta determinística de indisponibilidade com
-handoff **antes** de qualquer dado pessoal ser pedido.
+Sem elas, a coleta e revisão continuam; na confirmação, o pedido recebe
+resposta determinística de indisponibilidade e handoff, sem POST.
 
 Após a confirmação: `lookup_customer_by_document` → `FOUND`: vincula, sem
 criar; `NOT_FOUND`: `create_customer`, que refaz a busca sob trava por
 documento e só então faz **um** POST; `AMBIGUOUS`, `CREATION_PENDING`,
 índice não pronto ou falha: handoff, nada é criado. Resultado de criação
-desconhecido (`mutation_state_unknown`, exceção, sem id): sem retry, handoff,
+desconhecido (`mutation_state_unknown`, exceção de transporte): sem retry, handoff,
 status `unknown`, e o documento fica bloqueado até a equipe verificar. O id
 criado é gravado em `mercos_customer_id`; uma segunda confirmação — nesta ou
-em outra conversa — não cria outro.
+em outra conversa — não cria outro. Resposta 2xx sem ID vira
+`created_pending_sync`: o sync resolve pelo digest e vincula sem segundo POST.
+Erro 422 de obrigatoriedade libera o claim e pede o campo faltante, com nova
+revisão e confirmação. Detalhes em `docs/mercos_chat_registration.md`.
 
 Não existe busca por CPF/CNPJ no MercosAdaptor nem na API Mercos documentada;
 detalhes do índice, estados e operação em `docs/mercos_contract.md` §2.

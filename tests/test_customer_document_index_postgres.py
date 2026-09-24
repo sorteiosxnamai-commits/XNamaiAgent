@@ -45,7 +45,8 @@ def tenant(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", TEST_DATABASE_URL)
     get_settings.cache_clear()
     with db.get_conn() as conn, conn.cursor() as cur:
-        for name in ("023_mercos_sync_state.sql", "025_mercos_customer_document_index.sql"):
+        for name in ("023_mercos_sync_state.sql", "025_mercos_customer_document_index.sql",
+                     "026_mercos_customer_creation_pending_sync.sql"):
             cur.execute((REPO / "sql" / name).read_text(encoding="utf-8"))
     tenant_id = f"it-{uuid4().hex[:10]}"
     try:

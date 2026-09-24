@@ -113,7 +113,7 @@ async def test_full_registration_flow_asks_only_missing_fields_and_creates_once(
     started = await conversation.say("gostaria de me cadastrar")
     assert conversation.pending == "awaiting_customer_registration_data"
     asked = started.reply_text.casefold()
-    assert "cpf" in asked and "e-mail" in asked and "nome" in asked
+    assert "cpf" in asked and "e-mail" not in asked and "nome" not in asked
     assert "telefone" not in asked
 
     # B: dados naturais -> extraidos; permanece no cadastro; pede so o nome
@@ -159,34 +159,32 @@ async def test_full_registration_flow_asks_only_missing_fields_and_creates_once(
 
 
 @pytest.mark.asyncio
-async def test_channel_name_is_proposed_but_the_customer_can_correct_it(monkeypatch):
+async def test_channel_name_is_not_used_as_legal_name(monkeypatch):
     conversation = Conversation(monkeypatch, sender_name="Maria Souza")
     started = await conversation.say("quero me cadastrar")
     assert "nome" not in started.reply_text.casefold().split("envie")[-1] or "Maria" in started.reply_text
     review = await conversation.say(f"cpf {CPF} email {EMAIL}")
-    assert conversation.pending == "awaiting_customer_registration_confirmation"
-    assert "Maria Souza" in review.reply_text  # proposto a partir do canal, visivel para corrigir
+    assert conversation.pending == "awaiting_customer_registration_data"
+    assert "nome" in review.reply_text.casefold()
     await conversation.say("nome: Maria Aparecida Souza")
     assert conversation.registration["draft"]["legal_name"] == "Maria Aparecida Souza"
 
 
 @pytest.mark.asyncio
-async def test_registration_unavailable_is_decided_before_collecting_pii(monkeypatch):
-    """F: sem capacidade, nada de pedir CPF/e-mail para depois descobrir que nao da."""
+async def test_registration_collects_before_commit_capability_is_ready(monkeypatch):
     conversation = Conversation(monkeypatch, capabilities=frozenset())
     result = await conversation.say("gostaria de me cadastrar")
-    assert result.safety_reason == "customer_registration_unavailable"
-    assert "cpf" not in result.reply_text.casefold() and "e-mail" not in result.reply_text.casefold()
-    assert conversation.pending is None
+    assert result.safety_reason is None
+    assert "cpf" in result.reply_text.casefold()
+    assert conversation.pending == "awaiting_customer_registration_data"
     assert conversation.calls == []
 
 
 @pytest.mark.asyncio
-async def test_create_without_duplicate_check_is_not_offered(monkeypatch):
-    """Mutacao ligada mas sem busca por documento: cadastro continua bloqueado."""
+async def test_create_without_duplicate_check_only_allows_collection(monkeypatch):
     conversation = Conversation(monkeypatch, capabilities=frozenset({"create_customer"}))
     result = await conversation.say("quero me cadastrar")
-    assert result.safety_reason == "customer_registration_unavailable"
+    assert "CPF" in result.reply_text
     assert conversation.calls == []
 
 

@@ -63,7 +63,7 @@ async def test_registration_requires_review_and_explicit_confirmation():
         "quero me cadastrar", state=state, execute=execute,
     )
     # pede so o que falta (sem o formulario inteiro), e nada e enviado ainda
-    assert "CPF ou CNPJ" in started.reply_text and "e-mail" in started.reply_text
+    assert "CPF ou CNPJ" in started.reply_text and "e-mail" not in started.reply_text
     assert calls == []
     state = evolve_commerce_state(state, started)
     assert state.pending_action == PENDING_REGISTRATION_DATA
@@ -230,15 +230,15 @@ def test_customer_payload_is_redacted_from_observability():
     ):
         assert private_value not in serialized
     assert redacted["razao_social"] == "[REDACTED]"
-    assert redacted["nome_fantasia"] == "[REDACTED]"
+    assert "nome_fantasia" not in redacted
     assert redacted["cnpj"] == "[REDACTED]"
     assert redacted["emails"] == "[REDACTED]"
     assert redacted["telefones"] == "[REDACTED]"
 
 
 @pytest.mark.asyncio
-async def test_create_customer_alone_does_not_enable_registration(monkeypatch):
-    """Sem busca por documento nao ha como evitar duplicidade: nada e coletado."""
+async def test_create_customer_alone_collects_but_does_not_commit(monkeypatch):
+    """Coleta continua disponível; confirmação exige busca e mutation."""
     import app.openai_agent as agent
 
     monkeypatch.setattr(agent, "load_recent_conversation_turns", lambda *_a, **_k: [])
@@ -250,8 +250,8 @@ async def test_create_customer_alone_does_not_enable_registration(monkeypatch):
         agent.IncomingMessage(text="quero me cadastrar"),
         {"_commerce_state": CommerceConversationState()},
     )
-    assert result.safety_reason == "customer_registration_unavailable"
-    assert "CPF" not in result.reply_text
+    assert result.safety_reason is None
+    assert "CPF" in result.reply_text
 
 
 @pytest.mark.asyncio

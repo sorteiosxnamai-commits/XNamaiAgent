@@ -375,7 +375,7 @@ class MercosCommerceProvider:
         """
         from .client import MercosAdaptorError, MercosMutationDisabled
 
-        required = ("tipo", "razao_social", "nome_fantasia", "cnpj")
+        required = ("tipo", "razao_social", "cnpj")
         missing = [field for field in required if not arguments.get(field)]
         if missing:
             return {"ok": False, "error": "missing_argument", "arguments": missing}
@@ -412,6 +412,21 @@ class MercosCommerceProvider:
                 _finish("released")
             else:
                 _finish("unknown")
+            if exc.status_code in {400, 409, 422}:
+                from .customer_validation import parse_customer_validation, is_duplicate_document_error
+
+                if is_duplicate_document_error(exc.details, str(exc)):
+                    try:
+                        await self.run_customer_sync()
+                    except Exception:  # noqa: BLE001 - unresolved duplicate goes to handoff
+                        pass
+                    lookup = index.lookup_customer_by_document(document)
+                    if lookup.status.value == "FOUND" and lookup.customer_id:
+                        return {"ok": True, "customer_id": lookup.customer_id, "linked_existing": True}
+                    return {"ok": False, "code": "duplicate_document"}
+                if exc.status_code == 422:
+                    fields = parse_customer_validation(exc.details, str(exc))
+                    return {"ok": False, "code": "customer_validation", "fields": list(fields)}
             raise
         except Exception:
             _finish("unknown")
@@ -423,8 +438,16 @@ class MercosCommerceProvider:
             or payload.get("mercos_id") or nested.get("id")
         )
         if customer_id is None:
-            _finish("unknown")
-            return {"ok": False, "error": "customer_id_missing", "code": "mutation_state_unknown"}
+            _finish("created_pending_sync")
+            try:
+                await self.run_customer_sync()
+                lookup = index.lookup_customer_by_document(document)
+                if lookup.status.value == "FOUND" and lookup.customer_id:
+                    _finish("created", lookup.customer_id)
+                    return {"ok": True, "customer_id": lookup.customer_id}
+            except Exception:  # noqa: BLE001 - 2xx remains successful, claim blocks a second POST
+                pass
+            return {"ok": True, "status": "CREATED_PENDING_SYNC"}
         _finish("created", str(customer_id))
         return {"ok": True, "customer_id": str(customer_id)}
 

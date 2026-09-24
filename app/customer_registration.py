@@ -29,7 +29,7 @@ REGISTRATION_PENDING_ACTIONS = frozenset({PENDING_REGISTRATION_DATA, PENDING_REG
 REQUIRED_CAPABILITIES = frozenset({"create_customer", "lookup_customer_by_document"})
 
 #: Terminal statuses that forbid another automatic creation in this conversation.
-_BLOCKING_STATUSES = frozenset({"unknown", "lookup_failed", "ambiguous", "creation_pending"})
+_BLOCKING_STATUSES = frozenset({"unknown", "lookup_failed", "ambiguous", "creation_pending", "created_pending_sync"})
 
 _AMBIGUOUS_REPLY = (
     "Encontrei mais de um cadastro da Xnamai com esse documento. Para não vincular "
@@ -89,6 +89,10 @@ _LABELS = {
     "telefone": "phone",
     "celular": "phone",
     "whatsapp": "phone",
+    "cep": "cep", "rua": "rua", "numero": "numero", "número": "numero",
+    "complemento": "complemento", "bairro": "bairro", "cidade": "cidade",
+    "estado": "estado", "uf": "estado", "inscricao estadual": "inscricao_estadual",
+    "suframa": "suframa", "observacao": "observacao",
 }
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _EMAIL_FIND_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -114,7 +118,7 @@ _FIELD_LABELS = {
     "email": "e-mail",
     "phone": "telefone com DDD",
 }
-_FIELD_ORDER = ("legal_name", "document", "email", "phone")
+_FIELD_ORDER = ("document", "legal_name", "email", "phone")
 _ERROR_TEXT = {
     "invalid_cpf": "o CPF informado não é válido",
     "invalid_cnpj": "o CNPJ informado não é válido",
@@ -157,12 +161,12 @@ def _valid_cpf(value: str) -> bool:
 
 
 def _valid_cnpj(value: str) -> bool:
-    digits = _digits(value)
-    if len(digits) != 14 or digits == digits[0] * 14:
+    digits = re.sub(r"[^A-Z0-9]", "", str(value).upper())
+    if not re.fullmatch(r"[A-Z0-9]{12}[0-9]{2}", digits) or digits == digits[0] * 14:
         return False
 
     def check(base: str, weights: tuple[int, ...]) -> str:
-        remainder = sum(int(d) * w for d, w in zip(base, weights)) % 11
+        remainder = sum((ord(d) - 48) * w for d, w in zip(base, weights)) % 11
         return "0" if remainder < 2 else str(11 - remainder)
 
     first = check(digits[:12], (5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
@@ -172,12 +176,14 @@ def _valid_cnpj(value: str) -> bool:
 
 def _person_type(value: Any, document: str | None = None) -> str | None:
     folded = _fold(value).replace(".", "")
+    length = len(re.sub(r"[^A-Z0-9]", "", str(document or "").upper()))
+    if length in {11, 14}:
+        return "F" if length == 11 else "J"
     if folded in {"f", "pf", "fisica", "pessoa fisica"}:
         return "F"
     if folded in {"j", "pj", "juridica", "pessoa juridica", "empresa"}:
         return "J"
-    length = len(_digits(document))
-    return "F" if length == 11 else "J" if length == 14 else None
+    return None
 
 
 def _national_phone(value: Any) -> str:
@@ -250,6 +256,12 @@ def extract_registration_fields(text: str | None) -> dict[str, str]:
         if "document" not in found and document_hint and len(digits) in {11, 14}:
             found["document"] = digits  # invalido: a validacao aponta o erro
 
+    if "document" not in found:
+        for candidate in re.findall(r"(?<![A-Za-z0-9])[A-Za-z0-9]{12}[0-9]{2}(?![A-Za-z0-9])", raw):
+            if re.search(r"[A-Za-z]", candidate) and _valid_cnpj(candidate):
+                found["document"] = candidate.upper()
+                break
+
     if "legal_name" not in found:
         match = _NAME_RE.search(raw)
         if match:
@@ -272,7 +284,7 @@ def extract_registration_fields(text: str | None) -> dict[str, str]:
 def validate_registration_draft(draft: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
     normalized: dict[str, str] = {}
     errors: dict[str, str] = {}
-    document = _digits(draft.get("document"))
+    document = re.sub(r"[^A-Z0-9]", "", str(draft.get("document") or "").upper())
     person_type = _person_type(draft.get("person_type"), document)
     legal_name = " ".join(str(draft.get("legal_name") or "").strip().split())
     trade_name = " ".join(str(draft.get("trade_name") or "").strip().split())
@@ -289,8 +301,6 @@ def validate_registration_draft(draft: dict[str, Any]) -> tuple[dict[str, str], 
         normalized["legal_name"] = legal_name[:100]
     if trade_name:
         normalized["trade_name"] = trade_name[:100]
-    elif legal_name:
-        normalized["trade_name"] = legal_name[:100]
     if person_type == "F" and not _valid_cpf(document):
         errors["document"] = "invalid_cpf"
     elif person_type == "J" and not _valid_cnpj(document):
@@ -307,6 +317,24 @@ def validate_registration_draft(draft: dict[str, Any]) -> tuple[dict[str, str], 
         errors["phone"] = "invalid_phone"
     else:
         normalized["phone"] = phone
+    for field, limit in {"inscricao_estadual": 30, "suframa": 20, "rua": 100,
+                         "numero": 100, "complemento": 50, "bairro": 30,
+                         "cidade": 50, "observacao": 500}.items():
+        value = " ".join(str(draft.get(field) or "").split())
+        if value:
+            normalized[field] = value[:limit]
+    cep = _digits(draft.get("cep"))
+    if cep:
+        if len(cep) == 8:
+            normalized["cep"] = cep
+        else:
+            errors["cep"] = "invalid_cep"
+    estado = str(draft.get("estado") or "").strip().upper()
+    if estado:
+        if re.fullmatch(r"[A-Z]{2}", estado):
+            normalized["estado"] = estado
+        else:
+            errors["estado"] = "invalid_estado"
     return normalized, errors
 
 
@@ -355,20 +383,25 @@ def registration_prompt(
 ) -> str:
     """Ask ONLY for what is still missing or invalid — never the whole form again."""
     missing, invalid = _missing_fields(draft, errors)
+    other_invalid = [field for field in errors if field not in _FIELD_ORDER]
     lines: list[str] = []
     if invalid:
         problems = [_ERROR_TEXT.get(errors[field], f"{_FIELD_LABELS[field]} inválido") for field in invalid]
         lines.append("Quase lá: " + _join(problems) + ". Pode enviar de novo?")
-    wanted = [_FIELD_LABELS[field] for field in missing]
+    if other_invalid:
+        field = other_invalid[0]
+        lines.append(f"O campo {field.replace('_', ' ')} não está válido. Pode enviá-lo novamente?")
+    wanted = [_FIELD_LABELS[field] for field in missing[:1]]
     if wanted:
-        if starting:
-            lines.append("Vamos criar seu cadastro na Xnamai. Me envie " + _join(wanted) + ".")
-            lines.append("Pode mandar tudo numa mensagem só, do jeito que preferir.")
+        field = missing[0]
+        if field == "document":
+            lines.append("Claro. Me envie seu CPF ou CNPJ para começarmos.")
+        elif field == "legal_name":
+            lines.append("Certo. Agora me envie sua razão social." if _person_type(draft.get("person_type"), draft.get("document")) == "J" else "Certo. Agora me envie seu nome completo.")
+        elif field == "email":
+            lines.append("Qual e-mail você quer usar no cadastro?")
         else:
-            lines.append(("Obrigado! " if not invalid else "") + "Falta só: " + _join(wanted) + ".")
-    if channel_name:
-        lines.append(f"Vou usar o nome {channel_name}, do seu WhatsApp; se precisar, me envie o nome correto.")
-    lines.append("Seus dados só serão enviados depois que você conferir e confirmar.")
+            lines.append("Para concluir seu cadastro, preciso também do seu telefone com DDD.")
     return "\n".join(lines)
 
 
@@ -390,7 +423,7 @@ def registration_review(draft: dict[str, str], *, sources: dict[str, str] | None
         "Confira os dados do cadastro da Xnamai:",
         f"Tipo: {kind}",
         f"Nome/Razão social: {draft['legal_name']}{name_note}",
-        f"Nome fantasia: {draft['trade_name']}",
+        *([f"Nome fantasia: {draft['trade_name']}"] if draft.get("trade_name") else []),
         f"CPF/CNPJ: {_masked_document(draft['document'])}",
         f"E-mail: {_masked_email(draft['email'])}",
         f"Telefone final: ***{draft['phone'][-4:]}{phone_note}",
@@ -400,15 +433,20 @@ def registration_review(draft: dict[str, str], *, sources: dict[str, str] | None
 
 
 def customer_payload(draft: dict[str, str]) -> dict[str, Any]:
-    return {
+    payload = {
         "tipo": draft["person_type"],
         "razao_social": draft["legal_name"],
-        "nome_fantasia": draft["trade_name"],
         "cnpj": draft["document"],
         "emails": [{"email": draft["email"]}],
         "telefones": [{"numero": draft["phone"]}],
-        "observacao": "Cadastro solicitado pelo cliente no atendimento Xnamai",
     }
+    for source, target in {"trade_name": "nome_fantasia", "inscricao_estadual": "inscricao_estadual",
+                           "suframa": "suframa", "cep": "cep", "rua": "rua", "numero": "numero",
+                           "complemento": "complemento", "bairro": "bairro", "cidade": "cidade",
+                           "estado": "estado", "observacao": "observacao"}.items():
+        if draft.get(source):
+            payload[target] = draft[source]
+    return payload
 
 
 def registration_capability_available(capabilities: frozenset[str] | set[str]) -> bool:
@@ -423,12 +461,16 @@ def _metadata(
     customer_id: str | None = None,
     clear: bool = False,
     sources: dict[str, str] | None = None,
+    required_field: str | None = None,
+    trade_name_asked: bool = False,
 ) -> dict[str, Any]:
     state = {
         "status": status,
         "draft": draft,
         "customer_id": customer_id,
         "sources": dict(sources or {}),
+        "required_field": required_field,
+        "trade_name_asked": trade_name_asked,
     }
     return {
         "domain": "commerce",
@@ -465,7 +507,7 @@ def _apply_channel_defaults(
 ) -> None:
     """Channel data only fills gaps; anything the customer typed wins."""
     phone = _national_phone(sender_phone)
-    if not draft.get("phone") and len(phone) in {10, 11}:
+    if not draft.get("phone") and sources.get("phone") != "rejected" and len(phone) in {10, 11}:
         draft["phone"] = phone
         sources["phone"] = "channel"
     name = " ".join(str(sender_name or "").split())
@@ -473,9 +515,7 @@ def _apply_channel_defaults(
     if is_company and sources.get("legal_name") == "channel":
         draft.pop("legal_name", None)  # nome de pessoa nao e razao social
         sources.pop("legal_name", None)
-    elif not draft.get("legal_name") and not is_company and len(name) >= 3 and not _digits(name):
-        draft["legal_name"] = name
-        sources["legal_name"] = "channel"
+    # The sender's profile name is never an asserted legal name.
 
 
 def _is_related_to_registration(text: str | None, updates: dict[str, str]) -> bool:
@@ -495,6 +535,7 @@ async def handle_customer_registration_turn(
     state: CommerceConversationState,
     execute: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
     registration_enabled: bool = True,
+    commit_enabled: bool = True,
     sender_name: str | None = None,
     sender_phone: str | None = None,
 ) -> AgentResult | None:
@@ -518,6 +559,15 @@ async def handle_customer_registration_turn(
             "Seu cadastro da Xnamai já está vinculado a este atendimento.",
             status="created", draft={}, pending_action=None, customer_id=str(existing_id), clear=True,
         )
+    if not active and registration.get("status") == "created_pending_sync" and draft.get("document"):
+        try:
+            lookup = await execute("lookup_customer_by_document", {"document": draft["document"]})
+        except Exception:  # noqa: BLE001
+            lookup = {}
+        if lookup.get("ok") and lookup.get("found") and lookup.get("customer_id"):
+            return _result("Seu cadastro da Xnamai já está vinculado a este atendimento.",
+                           status="created", draft={}, pending_action=None,
+                           customer_id=str(lookup["customer_id"]), clear=True)
     if not active and registration.get("status") in _BLOCKING_STATUSES:
         return _result(
             "Seu pedido de cadastro anterior está em verificação com a equipe da Xnamai. "
@@ -540,13 +590,35 @@ async def handle_customer_registration_turn(
         )
 
     updates = extract_registration_fields(text)
+    required_field = registration.get("required_field")
+    trade_name_asked = bool(registration.get("trade_name_asked"))
+    if active and trade_name_asked and not draft.get("trade_name") and _short(text) in {"nao tenho", "sem nome fantasia", "nao usamos", "pular"}:
+        updates = {}
+    elif active and trade_name_asked and not draft.get("trade_name") and not updates:
+        raw_trade = " ".join(str(text or "").split())
+        if raw_trade and not is_greeting(text):
+            updates["trade_name"] = raw_trade
+    if active and not updates and pending == PENDING_REGISTRATION_DATA:
+        expected = required_field
+        if not expected:
+            _, current_errors = validate_registration_draft(draft)
+            expected = next((field for field in _FIELD_ORDER if field in current_errors), None)
+        raw = " ".join(str(text or "").split())
+        if expected == "legal_name" and raw and not is_greeting(text):
+            updates["legal_name"] = raw
+        elif expected == "phone" and len(_national_phone(raw)) in {10, 11}:
+            updates["phone"] = raw
+        elif expected == "trade_name" and raw:
+            updates["trade_name"] = raw
+        elif expected in {"cep", "rua", "numero", "bairro", "cidade", "estado", "inscricao_estadual", "suframa"} and raw:
+            updates[expected] = raw
     if active and not _is_related_to_registration(text, updates) and not is_greeting(text):
         if commerce_action_from_text(text) is not None or "?" in (text or ""):
             return None  # pergunta comercial: responde normalmente, cadastro segue pendente
 
     if pending == PENDING_REGISTRATION_CONFIRMATION and not updates:
         if folded in _CONFIRM:
-            return await _confirm_and_create(draft, sources, execute=execute)
+            return await _confirm_and_create(draft, sources, execute=execute, commit_enabled=commit_enabled)
         if folded in _REJECT:
             return _result(
                 "Sem problema. Me envie o dado que deseja corrigir (nome, CPF/CNPJ, e-mail ou telefone).",
@@ -556,20 +628,45 @@ async def handle_customer_registration_turn(
     for field, value in updates.items():
         draft[field] = value
         sources[field] = "customer"
+        if field == required_field:
+            required_field = None
+    if "cep" in updates and len(_digits(updates["cep"])) == 8:
+        from .checkout_data_service import lookup_address_by_zipcode
+
+        resolved = await lookup_address_by_zipcode(updates["cep"])
+        for source, target in {"address": "rua", "neighborhood": "bairro",
+                               "city": "cidade", "state": "estado"}.items():
+            if resolved.get(source) and not draft.get(target):
+                draft[target] = resolved[source]
+                sources[target] = "cep"
     _apply_channel_defaults(draft, sources, sender_name=sender_name, sender_phone=sender_phone)
     normalized, errors = validate_registration_draft(draft)
     errors.pop("person_type", None)  # o tipo vem do documento; pedir o documento basta
+    if required_field and not draft.get(required_field):
+        errors[required_field] = "required_by_mercos"
+    if (not errors.get("document") and not errors.get("legal_name") and
+            normalized.get("person_type") == "J" and not draft.get("trade_name") and
+            not trade_name_asked and not required_field):
+        return _result("Sua empresa usa nome fantasia? Se sim, me envie. Se não, responda 'não tenho'.",
+                       status="collecting", draft={**draft, **normalized}, sources=sources,
+                       trade_name_asked=True, pending_action=PENDING_REGISTRATION_DATA)
     if errors:
+        if not required_field:
+            required_field = next((field for field in errors if field not in _FIELD_ORDER), None)
         channel_name = draft.get("legal_name") if sources.get("legal_name") == "channel" else None
         return _result(
-            registration_prompt(draft, errors, starting=not active, channel_name=channel_name),
+            (f"Para concluir seu cadastro, preciso também de {required_field.replace('_', ' ')}."
+             if required_field and not draft.get(required_field)
+             else registration_prompt(draft, errors, starting=not active, channel_name=channel_name)),
             safety_reason="customer_registration_data_needed" if active else None,
             status="collecting", draft={**draft, **normalized}, sources=sources,
-            pending_action=PENDING_REGISTRATION_DATA,
+            pending_action=PENDING_REGISTRATION_DATA, required_field=required_field,
+            trade_name_asked=trade_name_asked,
         )
     return _result(
         registration_review(normalized, sources=sources),
-        status="review", draft=normalized, sources=sources, pending_action=PENDING_REGISTRATION_CONFIRMATION,
+        status="review", draft=normalized, sources=sources, trade_name_asked=trade_name_asked,
+        pending_action=PENDING_REGISTRATION_CONFIRMATION,
     )
 
 
@@ -578,6 +675,7 @@ async def _confirm_and_create(
     sources: dict[str, str],
     *,
     execute: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
+    commit_enabled: bool = True,
 ) -> AgentResult:
     normalized, errors = validate_registration_draft(draft)
     if errors:
@@ -587,6 +685,10 @@ async def _confirm_and_create(
             status="collecting", draft={**draft, **normalized}, sources=sources,
             pending_action=PENDING_REGISTRATION_DATA,
         )
+
+    if not commit_enabled:
+        return _result(_UNAVAILABLE_REPLY, safety_reason="customer_registration_unavailable",
+                       handoff=True, status="unavailable", draft={}, pending_action=None, clear=True)
 
     # 1) duplicidade: sem resposta clara da busca por documento, nada e criado.
     try:
@@ -626,7 +728,38 @@ async def _confirm_and_create(
                 customer_id=str(result["customer_id"]), clear=True,
             ),
         )
+    if result.get("ok") is True and result.get("status") == "CREATED_PENDING_SYNC":
+        return _result(
+            "Seu cadastro foi recebido pela Mercos. Estou aguardando a sincronização para vinculá-lo ao atendimento.",
+            status="created_pending_sync", draft={"document": normalized["document"]},
+            pending_action=None, clear=True,
+        )
     code = str(result.get("code") or result.get("error") or "")
+    if code == "customer_validation":
+        mapping = {"razao_social": "legal_name", "tipo": "person_type", "cnpj": "document",
+                   "nome_fantasia": "trade_name", "emails": "email", "telefones": "phone"}
+        field = next(iter(result.get("fields") or []), None)
+        if field:
+            field = mapping.get(field, field)
+            if field == "person_type":
+                field = "document"
+            draft = dict(normalized)
+            draft.pop(field, None)
+            sources = dict(sources)
+            sources[field] = "rejected"
+            label = {"email": "seu e-mail", "phone": "seu telefone com DDD",
+                     "trade_name": "o nome fantasia", "legal_name": "sua razão social",
+                     "document": "seu CPF ou CNPJ"}.get(field, field.replace("_", " "))
+            return _result(f"Para concluir seu cadastro, preciso também de {label}.",
+                           status="collecting", draft=draft, sources=sources, required_field=field,
+                           pending_action=PENDING_REGISTRATION_DATA)
+        return _result("A Mercos rejeitou o cadastro por uma validação que preciso encaminhar à equipe.",
+                       safety_reason="customer_registration_validation_unmapped", handoff=True,
+                       status="failed", draft={}, pending_action=None, clear=True)
+    if code == "duplicate_document":
+        return _result("A Mercos indicou que esse documento já está cadastrado. A equipe vai verificar e vincular o cadastro.",
+                       safety_reason="customer_registration_duplicate", handoff=True,
+                       status="ambiguous", draft={}, pending_action=None, clear=True)
     if code in {"commerce_unavailable", "mutation_disabled"}:
         reply, status = _UNAVAILABLE_REPLY, "unavailable"
     elif code in {"missing_argument"}:

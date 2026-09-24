@@ -50,19 +50,18 @@ gravar o cursor **depois** de persistir toda a página.
 ## 2. Customer document lookup: incremental local index
 
 Evidence: the official [Mercos customer API](https://docs.mercos.com/reference/v1clientes)
-documents `cnpj` (CPF for individuals, digits only) and only `excluido` as a
+documents `cnpj` (CPF for individuals, numeric or alphanumeric CNPJ) and only `excluido` as a
 customer GET filter. The adaptor accepts only `alterado_apos` on
 `GET /v1/customers`. **There is no lookup by CPF/CNPJ** — neither in Mercos
 (documented) nor in the adaptor — so none is called. The agent keeps its own
 index (`app/commerce/mercos/customer_index.py`, migration 025).
 
 Index. `run_customer_sync` consumes the adaptor list envelope and stores, per
-tenant, an HMAC-SHA-256 digest of each valid 11/14-digit document
+tenant, an HMAC-SHA-256 digest of each valid CPF or numeric/alphanumeric CNPJ
 (`CUSTOMER_DOCUMENT_HMAC_KEY`, >= 32 chars, never stored; only a key
 fingerprint is). No document text, no payload. `excluido: true` (documented
-field) removes the customer; absent/`null` keeps it. Alphanumeric CNPJ
-(documented by Mercos) is not indexed — and the agent's validator does not
-accept it either, so it can never produce a false NOT_FOUND.
+field) removes the customer; absent/`null` keeps it. Alphanumeric CNPJ uses
+the Receita Federal's documented check digit calculation.
 
 Lookup contract (`lookup_customer_by_document`):
 
@@ -88,9 +87,10 @@ lookup inside it and inserts a durable claim
 (`ai_mercos_customer_creation_claim`) before POSTing. Another conversation or
 worker confirming the same document finds the claim (`CREATION_PENDING`, or
 `FOUND` once created) and never POSTs. Outcome: `created` (id kept, `FOUND`
-until the sync sees it), `unknown` (transport/5xx/unreadable body: keeps
-blocking until the team verifies), or released (definitive 4xx/429: nothing
-was created).
+until the sync sees it), `created_pending_sync` (adaptor confirmed 2xx without
+an ID: sync resolves the digest, no second POST), `unknown`
+(transport/5xx/unreadable body: keeps blocking until the team verifies), or
+released (definitive 4xx/429: nothing was created).
 
 Key rotation. A different `CUSTOMER_DOCUMENT_HMAC_KEY` makes the index
 `INDEX_NOT_READY` immediately (never `NOT_FOUND`). The next sync drops the
@@ -99,7 +99,7 @@ registration returns only when it completes. Rotation is refused while there
 are unresolved (`creating`/`unknown`) claims — resolve them first. No
 dual-key period is supported.
 
-Operations: apply migration 025, set the key, run
+Operations: apply migrations 025 and 026, set the key, run
 `POST /api/cron/commerce/sync/customers` (or the admin route) until the
 baseline completes, then schedule it well inside the 1 h freshness window.
 
@@ -109,16 +109,16 @@ Create payload (each field and its evidence):
 | --- | --- |
 | `tipo` (`F`/`J`) | Mercos docs: allowed values `J`, `F` |
 | `razao_social` | Mercos docs: legal name, or the person's name for PF |
-| `nome_fantasia` | Mercos docs |
-| `cnpj` (digits only) | Mercos docs: CNPJ for PJ, CPF for PF, no punctuation |
+| `nome_fantasia` | Mercos docs; PJ only when provided |
+| `cnpj` | Mercos docs: CNPJ for PJ, CPF for PF; numeric CPF/CNPJ or alphanumeric CNPJ without punctuation |
 | `emails: [{"email": ...}]` | Mercos docs: list of Email objects; JSON example uses `email` (field table labels it `e-mail`) — **confirm in homologation** |
 | `telefones: [{"numero": ...}]` | Mercos docs |
-| `observacao` | Mercos docs (String 500) |
+| `observacao` | Mercos docs (String 500); omitted unless customer supplies it |
 
-`ativo` is not sent. The created id: the adaptor now returns
-`{"id": <MeusPedidosID header>}` on writes (evidence: the previous backend read
-that header; not described in the Mercos customer page) — **confirm in
-homologation** before enabling `MERCOS_CUSTOMER_MUTATIONS_ENABLED`.
+`ativo` is not sent. The adaptor may return an ID, but 2xx with an empty body
+is also successful; the customer sync resolves the ID without another POST.
+Confirm the adaptor behavior in homologation before enabling
+`MERCOS_CUSTOMER_MUTATIONS_ENABLED`.
 
 Limits. The index is a snapshot plus local claims: a customer created in
 Mercos by someone else after the last sync is invisible until the next sync.

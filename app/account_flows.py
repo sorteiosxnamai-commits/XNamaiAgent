@@ -50,7 +50,8 @@ async def handle_account_flows(
         text,
         state=state,
         execute=execute,
-        registration_enabled=registration_capability_available(
+        registration_enabled=True,
+        commit_enabled=registration_capability_available(
             capability_catalog.runtime_commerce_capabilities()
         ),
         sender_name=message.sender_name,
