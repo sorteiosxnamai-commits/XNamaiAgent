@@ -70,6 +70,35 @@ def _commerce_health() -> dict:
     return commerce_sync_health()
 
 
+def _registration_capability_diagnostics() -> dict:
+    """TEMPORARY diagnostic booleans for the customer-registration commit gate.
+
+    Only booleans and a short non-secret status code (e.g. "stale",
+    "never_synced") — never a token, URL, document, or key. Remove once the
+    WhatsApp registration commit-gate investigation is closed.
+    """
+    try:
+        from app.commerce.provider import get_commerce_provider
+
+        provider = get_commerce_provider()
+        capabilities = provider.runtime_capabilities
+        index = getattr(provider, "_customer_index", None)
+        client = getattr(provider, "_client", None)
+        return {
+            "mercos_customer_mutations_enabled": bool(
+                getattr(client, "customer_mutations_enabled", False)
+            ),
+            "mercos_customer_index_ready": bool(index.ready) if index is not None else False,
+            "mercos_customer_index_not_ready_reason": (
+                index.not_ready_reason() if index is not None else "customer_index_not_configured"
+            ),
+            "mercos_lookup_customer_capability": "lookup_customer_by_document" in capabilities,
+            "mercos_create_customer_capability": "create_customer" in capabilities,
+        }
+    except Exception:  # noqa: BLE001 - diagnostics never break /api/health
+        return {"mercos_registration_diagnostics_error": True}
+
+
 def _request_trace_id(request: Request) -> str:
     supplied = (request.headers.get("x-request-id") or "").strip()
     if supplied and len(supplied) <= 64 and all(
@@ -415,6 +444,7 @@ async def health():
         # fornecedor.
         "commerce_tools_exposed": bool(get_commerce_provider().available),
         **_commerce_health(),
+        **_registration_capability_diagnostics(),
         "remarketing_enabled": getattr(settings, "remarketing_enabled", False),
         "remarketing_cron_configured": bool(
             getattr(settings, "remarketing_cron_secret", "")
