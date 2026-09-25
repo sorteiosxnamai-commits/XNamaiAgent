@@ -116,6 +116,47 @@ async def test_unknown_mutation_result_is_never_retried():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["Oi", "Quero ver outra coisa", "Quero saber de outra coisa"])
+async def test_unrelated_message_during_confirmation_does_not_reflood_review(text):
+    """A greeting or topic change while awaiting confirmation must not
+    re-print the review on every turn — it defers to the rest of the agent,
+    and the pending confirmation survives untouched."""
+    normalized, errors = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
+    assert errors == {}
+    state = CommerceConversationState(
+        pending_action=PENDING_REGISTRATION_CONFIRMATION,
+        customer_registration={"status": "review", "draft": normalized},
+    )
+
+    async def execute(name, arguments):  # pragma: no cover - must never be called
+        raise AssertionError(f"unexpected tool call: {name}")
+
+    result = await handle_customer_registration_turn(text, state=state, execute=execute)
+    assert result is None
+    assert state.pending_action == PENDING_REGISTRATION_CONFIRMATION
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["ok", "beleza", "pode ser"])
+async def test_weak_affirmation_during_confirmation_still_reshows_review(text):
+    """Unlike a clear topic change, a weak affirmation plausibly means "yes"
+    and still gets the review re-shown so the customer can answer clearly."""
+    normalized, errors = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
+    assert errors == {}
+    state = CommerceConversationState(
+        pending_action=PENDING_REGISTRATION_CONFIRMATION,
+        customer_registration={"status": "review", "draft": normalized},
+    )
+
+    async def execute(name, arguments):  # pragma: no cover - must never be called
+        raise AssertionError(f"unexpected tool call: {name}")
+
+    result = await handle_customer_registration_turn(text, state=state, execute=execute)
+    assert result is not None
+    assert "Confira os dados" in result.reply_text
+
+
+@pytest.mark.asyncio
 async def test_mercos_provider_creates_customer_only_when_gate_is_open():
     from app.commerce.mercos.client import MercosAdaptorClient
     from app.commerce.mercos.provider import MercosCommerceProvider

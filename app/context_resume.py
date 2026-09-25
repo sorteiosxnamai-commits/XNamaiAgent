@@ -60,6 +60,17 @@ def has_resumable_commerce(
     return commerce_state_resumable_score(state) >= 20
 
 
+#: Registration is a state machine with terminal outcomes (created, cancelled,
+#: unavailable, ...); an older donor must never resurrect a review/data-
+#: collection step the latest turn already moved past. Order/cart recovery
+#: below stays donor-driven on purpose — only registration is pinned to the
+#: primary turn.
+_REGISTRATION_PENDING_ACTIONS = frozenset({
+    "awaiting_customer_registration_data",
+    "awaiting_customer_registration_confirmation",
+})
+
+
 def merge_commerce_states(
     primary: dict[str, Any] | None,
     fallback: dict[str, Any] | None,
@@ -69,6 +80,23 @@ def merge_commerce_states(
     donor = dict(fallback or {})
     if not donor:
         return base
+    # Captured before `_merge_commerce_states` mutates `base` in place (it may
+    # copy a stale `pending_action` from `donor` onto `base` while recovering
+    # order fields) — the override below must use the turn's true values.
+    primary_registration = base.get("customer_registration")
+    primary_pending_action = base.get("pending_action")
+    primary_customer_id = base.get("mercos_customer_id")
+    merged = _merge_commerce_states(base, donor)
+    if primary_registration:
+        merged["customer_registration"] = primary_registration
+        if merged.get("pending_action") in _REGISTRATION_PENDING_ACTIONS:
+            merged["pending_action"] = primary_pending_action
+        if primary_customer_id:
+            merged["mercos_customer_id"] = primary_customer_id
+    return merged
+
+
+def _merge_commerce_states(base: dict[str, Any], donor: dict[str, Any]) -> dict[str, Any]:
     if commerce_state_resumable_score(base) >= commerce_state_resumable_score(donor):
         # Still recover order fields if a later greeting/cart turn wiped them.
         if not base.get("order_id") and donor.get("order_id"):

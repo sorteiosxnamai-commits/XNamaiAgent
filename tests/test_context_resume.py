@@ -32,6 +32,109 @@ def test_merge_recovers_order_wiped_by_later_greeting():
     assert merged["pending_action"] == "awaiting_payment"
 
 
+def _durable_review_donor():
+    return {
+        "active_domain": "commerce",
+        "pending_action": "awaiting_customer_registration_confirmation",
+        "customer_registration": {
+            "status": "review",
+            "draft": {"document": "52998224725", "legal_name": "Joao Teste"},
+        },
+    }
+
+
+def test_merge_never_resurrects_review_over_a_terminal_registration_status():
+    old_durable = _durable_review_donor()
+    latest = {
+        "active_domain": "commerce",
+        "pending_action": None,
+        "customer_registration": {"status": "unavailable", "draft": {}},
+    }
+    merged = merge_commerce_states(latest, old_durable)
+    assert merged["customer_registration"]["status"] == "unavailable"
+    assert merged["customer_registration"]["draft"] == {}
+    assert merged["pending_action"] is None
+
+
+@pytest.mark.parametrize("status", [
+    "created", "linked", "cancelled", "unavailable", "failed", "unknown",
+    "ambiguous", "lookup_failed", "creation_pending", "created_pending_sync", "handoff",
+])
+def test_merge_never_resurrects_review_for_any_terminal_status(status):
+    old_durable = _durable_review_donor()
+    latest = {
+        "active_domain": "commerce",
+        "pending_action": None,
+        "customer_registration": {"status": status, "draft": {}},
+    }
+    merged = merge_commerce_states(latest, old_durable)
+    assert merged["customer_registration"]["status"] == status
+    assert merged["pending_action"] != "awaiting_customer_registration_confirmation"
+    assert merged["pending_action"] != "awaiting_customer_registration_data"
+
+
+def test_merge_keeps_resolved_customer_id_from_primary_on_created():
+    old_durable = _durable_review_donor()
+    latest = {
+        "active_domain": "commerce",
+        "pending_action": None,
+        "mercos_customer_id": "700",
+        "customer_registration": {"status": "created", "customer_id": "700", "draft": {}},
+    }
+    merged = merge_commerce_states(latest, old_durable)
+    assert merged["customer_registration"]["status"] == "created"
+    assert merged["mercos_customer_id"] == "700"
+    assert merged["pending_action"] is None
+
+
+def test_merge_keeps_created_pending_sync_over_old_review_donor():
+    old_durable = _durable_review_donor()
+    latest = {
+        "active_domain": "commerce",
+        "pending_action": None,
+        "customer_registration": {"status": "created_pending_sync", "draft": {"document": "52998224725"}},
+    }
+    merged = merge_commerce_states(latest, old_durable)
+    assert merged["customer_registration"]["status"] == "created_pending_sync"
+    assert merged["pending_action"] is None
+
+
+def test_merge_still_recovers_order_fields_when_registration_untouched():
+    """The registration guard must not break the pre-existing order/cart recovery."""
+    latest = {"active_domain": "commerce", "pending_action": None, "order_id": None}
+    previous = {
+        "order_id": "0CC131B51070AEF",
+        "pending_action": "awaiting_payment",
+    }
+    merged = merge_commerce_states(latest, previous)
+    assert merged["order_id"] == "0CC131B51070AEF"
+    assert merged["pending_action"] == "awaiting_payment"
+
+
+def test_persist_customer_commerce_session_semantics_never_resurrect_review():
+    """Reproduces persist_customer_commerce_session's real decision logic
+    (pick the highest-scoring existing session as donor, merge with the real
+    merge_commerce_states, skip persisting when the merged score is <= 0)
+    against fake storage, without ever assigning state directly."""
+    existing_sessions = [_durable_review_donor()]
+    new_turn_state = {
+        "active_domain": "commerce",
+        "pending_action": None,
+        "customer_registration": {"status": "unavailable", "draft": {}},
+    }
+    donor = max(existing_sessions, key=commerce_state_resumable_score)
+    merged = merge_commerce_states(new_turn_state, donor)
+    score = commerce_state_resumable_score(merged)
+    persisted = merged if score > 0 else None
+    # customer_registration alone scores 0 (no order/cart/payment signal), so
+    # this turn's own gate (`score <= 0: return`) would skip writing — that is
+    # a separate, pre-existing behaviour. What must never happen is a merged
+    # value carrying the stale review back into storage.
+    if persisted is not None:
+        assert persisted["customer_registration"]["status"] == "unavailable"
+        assert persisted["pending_action"] is None
+
+
 def test_soft_greeting_and_unpaid_resume_detection():
     assert is_soft_greeting("Opa, boa noite")
     assert is_unpaid_order_resume_request(

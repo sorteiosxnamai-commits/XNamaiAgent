@@ -17,6 +17,7 @@ import unicodedata
 from typing import Any, Awaitable, Callable
 
 from .commerce_context import CommerceConversationState
+from .context_resume import is_short_affirmation
 from .models import AgentResult
 from .sales.intent_router import commerce_action_from_text, is_customer_registration_request, is_greeting
 
@@ -639,6 +640,14 @@ async def handle_customer_registration_turn(
                 "Sem problema. Me envie o dado que deseja corrigir (nome, CPF/CNPJ, e-mail ou telefone).",
                 status="collecting", draft=draft, sources=sources, pending_action=PENDING_REGISTRATION_DATA,
             )
+        # Neither a confirmation, a rejection, nor a data correction. A weak
+        # affirmation ("ok", "beleza") plausibly means "yes" and still gets
+        # the review re-shown so the customer can answer unambiguously; a
+        # greeting or unrelated message must not re-flood the review — the
+        # pending confirmation survives untouched for when the customer comes
+        # back to it.
+        if not is_short_affirmation(text):
+            return None
 
     for field, value in updates.items():
         draft[field] = value
