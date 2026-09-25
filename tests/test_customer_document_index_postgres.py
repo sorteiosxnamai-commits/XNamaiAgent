@@ -175,6 +175,44 @@ async def test_stale_baseline_is_not_ready(tenant):
     assert index.lookup_customer_by_document("39053344705").status is CustomerLookupStatus.INDEX_NOT_READY
 
 
+@pytest.mark.asyncio
+async def test_index_stays_ready_after_an_incremental_sync_with_no_changes(tenant):
+    """The scheduled incremental tick (empty page: nothing changed since the
+    cursor) must not disturb an already-ready index."""
+    await _sync(tenant, [[_row(1, CPF, "2026-09-01T00:00:00")]])
+    index = _index(tenant)
+    assert index.not_ready_reason() is None
+
+    second, client = await _sync(tenant, [[]])
+    assert second["ok"] is True
+    assert client.requested[0] == "2026-09-01T00:00:00"
+    assert index.not_ready_reason() is None
+    assert index.lookup_customer_by_document(CPF).customer_id == "1"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_incremental_sync_preserves_the_previous_ready_index(tenant):
+    """A Mercos read failure on the scheduled tick must record the failure
+    without erasing the index a prior successful sync already built."""
+    await _sync(tenant, [[_row(1, CPF, "2026-09-01T00:00:00")]])
+    index = _index(tenant)
+    assert index.not_ready_reason() is None
+
+    class _FailingClient:
+        async def list_resource(self, resource, *, changed_after=None):
+            raise MercosAdaptorError("adaptor unavailable", code="adaptor_unavailable")
+
+    result = await run_customer_sync(
+        settings=_settings(tenant), client=_FailingClient(), max_pages=1,
+    )
+    assert result["ok"] is False
+    assert result["error_code"] == "adaptor_unavailable"
+    # The previously built index is untouched: still ready, still finds the
+    # same customer — a failed tick never deletes or rebuilds it.
+    assert index.not_ready_reason() is None
+    assert index.lookup_customer_by_document(CPF).customer_id == "1"
+
+
 # --- key rotation --------------------------------------------------------------------
 
 
