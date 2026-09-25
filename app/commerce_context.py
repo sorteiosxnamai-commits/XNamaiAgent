@@ -169,6 +169,14 @@ class CommerceConversationState(BaseModel):
     # produtos?"). Deliberadamente separado de `pending_action` do checkout:
     # um e pergunta de conversa, o outro e etapa de compra com efeito real.
     pending_commerce_action: str | None = None
+    # Generic continuation for a question the AGENT itself just asked outside
+    # the deterministic commerce/registration flows (e.g. a free-text answer
+    # ending in "quer saber mais?"). Deliberately minimal — just enough for
+    # the next turn's short reply ("sim"/"não"/"prossiga") to be grounded
+    # against the question that prompted it, instead of being misread as an
+    # unrelated fresh message. Cleared as soon as it is consumed or the
+    # customer clearly changes subject.
+    pending_followup: dict[str, Any] | None = None
     # Id do cliente NA FONTE COMERCIAL. Sem ele o pedido nao existe, e por isso
     # a revisao tem um estado proprio para a ausencia em vez de listar o campo
     # junto com os outros que faltam.
@@ -644,6 +652,13 @@ def evolve_commerce_state(
 ) -> CommerceConversationState:
     state = previous.model_copy(deep=True)
     metadata = result.response_metadata or {}
+    # Domain-agnostic: a question the agent itself asked (any domain, not just
+    # commerce) must be resolvable next turn. Applied before the commerce-only
+    # cut below so a "general" answer ending in a question is not silently
+    # dropped on the floor.
+    if "pending_followup" in metadata:
+        followup = metadata["pending_followup"]
+        state.pending_followup = followup if isinstance(followup, dict) else None
     if result.handoff_required and state.pending_action in {
         "awaiting_customer_registration_data",
         "awaiting_customer_registration_confirmation",

@@ -745,7 +745,10 @@ async def _confirm_and_create(
         )
     if result.get("ok") is True and result.get("customer_id") is not None:
         return AgentResult(
-            reply_text="Cadastro criado com sucesso na Xnamai. Já podemos continuar seu atendimento.",
+            reply_text=(
+                "Seu cadastro comercial foi criado com sucesso na Xnamai. "
+                "Já podemos continuar seu atendimento por aqui."
+            ),
             intent="commerce",
             commercial_data={"customer_registration": {"success": True}},
             response_metadata=_metadata(

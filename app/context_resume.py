@@ -142,6 +142,42 @@ def is_short_affirmation(text: str | None) -> bool:
     return folded in _SHORT_AFFIRMATIONS
 
 
+#: Extra affirmations that mean "yes, continue" for a generic follow-up
+#: question — broader than `_SHORT_AFFIRMATIONS` (payment-context words like
+#: "sim"/"ok" already covered there), never a phrase from any one conversation.
+_FOLLOWUP_AFFIRM_WORDS = _SHORT_AFFIRMATIONS | {
+    "claro", "quero", "prossiga", "prossegue", "continue", "continua", "vai",
+    "manda", "manda ver", "quero sim", "com certeza", "positivo", "confirmo",
+}
+_FOLLOWUP_REJECT_WORDS = frozenset({
+    "nao", "nao quero", "agora nao", "nao agora", "depois", "nao obrigado",
+    "nao, obrigado", "nao precisa", "deixa pra la", "deixa para la",
+})
+
+
+def resolve_followup_response(
+    text: str | None, pending_followup: dict[str, Any] | None
+) -> str:
+    """AFFIRM / REJECT / NEW_TOPIC / UNRESOLVED for a reply to the agent's own
+    last question. Only ever classifies — never executes a mutation itself.
+    """
+    if not pending_followup:
+        return "UNRESOLVED"
+    folded = _fold(text).strip("!?.,")
+    if not folded:
+        return "UNRESOLVED"
+    if folded in _FOLLOWUP_AFFIRM_WORDS:
+        return "AFFIRM"
+    if folded in _FOLLOWUP_REJECT_WORDS:
+        return "REJECT"
+    # A short "não ..." (few words) is still a rejection of THIS question; a
+    # longer one carries a new subject and is left for normal routing (the
+    # customer's actual words already say what they want next).
+    if folded.split()[0] in {"nao", "não"} and len(folded.split()) <= 3:
+        return "REJECT"
+    return "NEW_TOPIC"
+
+
 def is_soft_greeting(text: str | None) -> bool:
     folded = _fold(text).strip("!?.,")
     if folded in {

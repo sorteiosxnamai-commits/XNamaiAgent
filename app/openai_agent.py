@@ -31,6 +31,7 @@ from .context_resume import (
     is_payment_link_request,
     is_soft_greeting,
     is_unpaid_order_resume_request,
+    resolve_followup_response,
     should_resume_pending_order,
 )
 from .order_context_recovery import (
@@ -110,10 +111,55 @@ GENERAL_GREETING_FALLBACK = "Ol\u00e1! Como posso ajudar?"
 STORE_KNOWLEDGE_UNAVAILABLE = "Ainda não tenho essa informação oficial da loja disponível neste atendimento."
 
 
+def _trailing_question(reply_text: str) -> str | None:
+    """Last sentence of `reply_text`, when the reply ends inviting a reply.
+
+    Generic on purpose: works for any topic, not a list of known phrases.
+    """
+    text = (reply_text or "").strip()
+    if not text.endswith("?"):
+        return None
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    question = next((s for s in reversed(sentences) if s.strip()), "")
+    question = question.strip()
+    return question or None
+
+
+def _apply_pending_followup(result: AgentResult) -> None:
+    """Track (or clear) a generic conversational continuation for the reply.
+
+    Runs for every path through `_annotate_agent_result` so a "general"
+    answer that ends in a question is not silently dropped, while a more
+    specific pending mechanism (registration, cart/checkout, order) always
+    keeps priority — this never overrides an explicit decision already made.
+    """
+    metadata = result.response_metadata
+    if "pending_followup" in metadata:
+        return
+    owns_more_specific_pending = bool(
+        metadata.get("pending_action") or metadata.get("pending_commerce_action")
+    )
+    # Commerce replies already have their own dedicated continuation machinery
+    # (pending_commerce_action, active_product/last_presented_products,
+    # order/checkout state) even when a specific clarification does not set
+    # pending_action explicitly — this layer is only for everything else.
+    if (
+        result.handoff_required
+        or metadata.get("domain") in ("guardrail", "commerce")
+        or owns_more_specific_pending
+    ):
+        metadata["pending_followup"] = None
+        return
+    metadata["pending_followup"] = (
+        {"question": question} if (question := _trailing_question(result.reply_text)) else None
+    )
+
+
 def _annotate_agent_result(result: AgentResult, **metadata: object) -> AgentResult:
     for key, value in metadata.items():
         if value is not None and key not in result.response_metadata:
             result.response_metadata[key] = value
+    _apply_pending_followup(result)
     # Phase 8: count skipped LLM slots when deterministic / partial paths win.
     if "used_openai_interpreter" in metadata or "used_openai_responder" in metadata:
         from .runtime_context import register_avoided_llm_call
@@ -594,6 +640,31 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_commerce_provider=bool(account_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=account_result.safety_reason,
         )
+    # Generic continuation for a question the agent itself asked outside the
+    # deterministic flows above. A bare "sim"/"prossiga" carries no topic on
+    # its own — ground it against the pending question so it is not read as
+    # a fresh, unrelated message. "não"/"agora não" get the same anchor so
+    # the reply can decline naturally instead of resetting the conversation.
+    # A clear subject change or anything else just drops the follow-up and
+    # falls through unchanged: the customer's own words already say what
+    # they want next.
+    pending_followup = getattr(commerce_state, "pending_followup", None)
+    owns_more_specific_pending = bool(
+        commerce_state.pending_action or commerce_state.pending_commerce_action
+    )
+    if pending_followup and not owns_more_specific_pending:
+        verdict = resolve_followup_response(message.text, pending_followup)
+        question = pending_followup.get("question") or ""
+        if verdict == "AFFIRM" and question:
+            message = message.model_copy(update={
+                "text": f'{message.text} (respondendo "sim" à pergunta: "{question}")',
+            })
+        elif verdict == "REJECT" and question:
+            message = message.model_copy(update={
+                "text": f'{message.text} (respondendo "não" à pergunta: "{question}")',
+            })
+        commerce_state.pending_followup = None
+        customer_context["_commerce_state"] = commerce_state.model_dump(mode="json")
     if commerce_state.pending_action == "awaiting_order_customer_document":
         customer_document = extract_valid_tax_document(message.text)
         if customer_document:
