@@ -30,6 +30,12 @@ def test_public_knowledge_contains_no_unverified_commercial_terms():
     assert "Não presuma políticas" in text
 
 
+def test_public_knowledge_explicitly_allows_cpf_and_cnpj_registration():
+    text = build_site_knowledge_text()
+    assert "tanto por CPF quanto por CNPJ" in text
+    assert "Nunca diga que o cadastro é exclusivo para CNPJ" in text
+
+
 def test_no_vip_identity_is_preconfigured():
     from app.vip_profiles import VIP_PROFILES
     assert VIP_PROFILES == ()

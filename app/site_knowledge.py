@@ -32,6 +32,7 @@ def build_site_knowledge_text() -> str:
 - A Xnamai é uma distribuidora de eletrônicos e acessórios de celular para venda no atacado.
 - Site institucional: {SITE_URL}
 - Catálogo e portal de pedidos: {STORE_URL}
+- A Xnamai atende cadastro e compras tanto por CPF quanto por CNPJ. Nunca diga que o cadastro é exclusivo para CNPJ, lojistas ou revendedores.
 - Clube empresarial e planos: {CLUB_URL}
 - Esses endereços são canais oficiais públicos e podem ser compartilhados no atendimento.
 - O XNaMai Club oferece preços exclusivos em compras elegíveis para membros com assinatura ativa.
