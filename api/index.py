@@ -2098,39 +2098,42 @@ async def cron_process_inbox_get():
 
 @app.post(
     "/api/internal/chatbo/outbound",
-    dependencies=[Depends(verify_chatbo_sync_token)],
 )
 async def chatbo_manual_outbound(body: dict):
-    """Entrega uma resposta humana do ChatBô pelo número YCloud da XNamai."""
+    """Entrega por YCloud uma mensagem de uso único já gravada pelo ChatBô."""
+    from uuid import UUID
+
+    from app.chatbo_manual_outbound import claim_message, finish_message
     from app.channels.ycloud_whatsapp import send_ycloud_reply
     from app.models import AgentResult, IncomingMessage
 
     settings = get_settings()
     expected_workspace = str(getattr(settings, "chatbo_workspace_id", "") or "").strip()
-    workspace_id = str(body.get("workspaceId") or "").strip()
-    if not expected_workspace or workspace_id != expected_workspace:
-        raise HTTPException(status_code=403, detail="invalid_workspace")
+    if not expected_workspace:
+        raise HTTPException(status_code=503, detail="chatbo_workspace_not_configured")
+    try:
+        message_id = str(UUID(str(body.get("messageId") or "")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="invalid_message_id") from None
 
-    recipient = str(body.get("recipient") or "").strip()
-    content = str(body.get("content") or "").strip()
-    if not recipient:
-        raise HTTPException(status_code=422, detail="recipient_required")
-    if not content:
-        raise HTTPException(status_code=422, detail="content_required")
+    claimed = claim_message(message_id, expected_workspace)
+    if not claimed:
+        raise HTTPException(status_code=409, detail="message_not_dispatchable")
+    if claimed.get("already_sent"):
+        return {"ok": True, "provider": "ycloud", "already_sent": True}
 
     incoming = IncomingMessage(
-        workspace_id=workspace_id,
+        workspace_id=expected_workspace,
         provider="ycloud",
         channel="whatsapp",
-        sender_phone=recipient,
-        sender_key=recipient,
+        sender_phone=str(claimed.get("contact_phone") or ""),
+        sender_key=str(claimed.get("contact_phone") or ""),
         text="",
     )
-    result = AgentResult(reply_text=content)
-    correlation_id = str(body.get("correlationId") or "").strip()
-    if correlation_id:
-        result.with_response_metadata(outbox_correlation_id=correlation_id)
+    result = AgentResult(reply_text=str(claimed.get("content") or ""))
+    result.with_response_metadata(outbox_correlation_id=message_id)
     delivery = await send_ycloud_reply(incoming, result)
+    finish_message(message_id, expected_workspace, delivery)
     if not delivery.get("ok"):
         status_code = int(delivery.get("status_code") or 502)
         if status_code < 400 or status_code > 599:
