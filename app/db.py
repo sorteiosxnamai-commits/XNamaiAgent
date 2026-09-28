@@ -8,6 +8,16 @@ from .config import get_settings
 from .runtime_context import register_database_call
 
 
+def connect_database_url(database_url: str) -> psycopg.Connection:
+    """Single connection factory, including bootstrap configuration reads."""
+    return psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+        connect_timeout=10,
+        prepare_threshold=None,
+    )
+
+
 def to_jsonb(value: Any, default: Any = None) -> Jsonb:
     """Convert Python dict/list/value to psycopg Jsonb wrapper."""
     if value is None:
@@ -34,12 +44,7 @@ def get_conn() -> Iterator[psycopg.Connection]:
     register_database_call()
     # Supabase transaction pooler (6543) nao suporta prepared statements
     # persistentes entre transacoes; desabilitar auto-prepare do psycopg.
-    conn = psycopg.connect(
-        settings.database_url,
-        row_factory=dict_row,
-        connect_timeout=10,
-        prepare_threshold=None,
-    )
+    conn = connect_database_url(settings.database_url)
     try:
         yield conn
         conn.commit()

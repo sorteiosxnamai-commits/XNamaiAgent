@@ -1067,7 +1067,9 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    from app.workspace_configuration import load_workspace_settings
+
+    return load_workspace_settings(Settings())
 
 
 def get_allowed_channels(settings: Settings) -> set[str]:
