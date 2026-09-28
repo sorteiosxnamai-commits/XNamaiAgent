@@ -69,6 +69,7 @@ from .guardrails import (
     detect_commerce_inquiry,
 )
 from .models import AgentResult, IncomingMessage, SalesInterpretation
+from .site_knowledge import STORE_URL
 from .turn_runtime import LLMCallBudgetExceeded
 from .payment_service import (
     inspect_current_cart,
@@ -2438,7 +2439,11 @@ async def _execute_compiled_product_retrieval(
         if product_lookup_failed:
             print("[sales.retrieval.empty]", {"reason": "catalog_lookup_failed"})
             return AgentResult(
-                reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
+                reply_text=(
+                    "Não consegui consultar os produtos da loja neste momento. "
+                    "Você pode ver preços e disponibilidade no catálogo oficial: "
+                    f"{STORE_URL}"
+                ),
                 intent="commerce",
                 handoff_required=False,
                 safety_reason="commerce_provider_unavailable",
@@ -2453,7 +2458,11 @@ async def _execute_compiled_product_retrieval(
                 safety_reason="product_not_found",
             )
         return AgentResult(
-            reply_text="Não encontrei opções disponíveis para esses critérios agora.",
+            reply_text=(
+                "Não localizei uma opção que confirme esses critérios agora. "
+                "Posso refazer a busca priorizando a característica mais importante "
+                f"para você, ou você pode consultar o catálogo oficial: {STORE_URL}"
+            ),
             intent="commerce",
             handoff_required=False,
             safety_reason="recommendation_no_match",
@@ -2529,7 +2538,11 @@ async def _execute_compiled_product_retrieval(
                 safety_reason="product_not_found",
             )
         return AgentResult(
-            reply_text="Encontrei produtos no catálogo, mas nenhum atende aos critérios objetivos informados agora.",
+            reply_text=(
+                "Encontrei itens relacionados, mas nenhum confirma todos os critérios "
+                "que você informou. Qual característica é indispensável para eu "
+                "refazer a busca sem te mostrar opções inadequadas?"
+            ),
             intent="commerce",
             handoff_required=False,
             safety_reason="recommendation_no_match",
@@ -3250,6 +3263,29 @@ async def _handle_sales_message_inner(
     account_result = await handle_account_flows(message, state=state, execute=execute_tool)
     if account_result is not None:
         return account_result
+
+    # Uma pergunta sobre mix, preços e modelo comercial pede orientação,
+    # não uma busca literal do texto inteiro como se ele fosse um SKU.
+    from .store_guidance import build_store_guidance
+
+    store_guidance = build_store_guidance(message.text, interpretation)
+    if store_guidance is not None:
+        return _mark_sales_result(
+            AgentResult(
+                reply_text=store_guidance.reply_text,
+                intent="commerce",
+                handoff_required=False,
+                response_metadata={
+                    "active_topic": "store_product_overview",
+                    "guidance_topics": list(store_guidance.topics),
+                },
+            ),
+            interpretation=interpretation,
+            goal=interpretation.goal if interpretation else "discover",
+            response_source="official_store_guidance",
+            used_openai_responder=False,
+            used_commerce_provider=False,
+        )
 
     # Pergunta generica de catalogo ("o que voces vendem?") nao sobrevive ao
     # resto desta funcao: ha ramos que devolvem None antes do fast path mais

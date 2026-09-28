@@ -1097,6 +1097,31 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_responder=False,
             used_commerce_provider=False,
         )
+    # Perguntas institucionais com vários assuntos comerciais (mix, preços,
+    # atacado/varejo) não são uma busca literal de SKU. Resolva-as com fatos
+    # oficiais mesmo quando o interpretador as chamar de store_general.
+    if scope_domain in {"commerce", "store_general"}:
+        from .store_guidance import build_store_guidance
+
+        store_guidance = build_store_guidance(message.text, interpretation)
+        if store_guidance is not None:
+            return _annotate_agent_result(
+                AgentResult(
+                    reply_text=store_guidance.reply_text,
+                    intent="commerce",
+                    handoff_required=False,
+                    response_metadata={
+                        "active_topic": "store_product_overview",
+                        "guidance_topics": list(store_guidance.topics),
+                    },
+                ),
+                domain="commerce",
+                goal=interpretation.goal or "discover",
+                response_source="official_store_guidance",
+                used_openai_interpreter=used_openai_interpreter,
+                used_openai_responder=False,
+                used_commerce_provider=False,
+            )
     if scope_domain == "out_of_scope":
         return _annotate_agent_result(
             AgentResult(reply_text=OUT_OF_SCOPE_REPLY, intent="out_of_scope", handoff_required=False, safety_reason="scope_refusal"),

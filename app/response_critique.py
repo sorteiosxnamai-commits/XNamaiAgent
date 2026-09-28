@@ -162,6 +162,50 @@ def apply_fast_deterministic_critique(
             )
             return fixed, verdict, "fast_trade_in_handoff"
 
+    # Broad questions about assortment and commercial conditions must not
+    # collapse into a literal catalog miss or a terse clarification.
+    from .store_guidance import build_store_guidance
+
+    guidance = build_store_guidance(text)
+    weak_store_reply = bool(
+        result.safety_reason in {"recommendation_no_match", "product_not_found"}
+        or (
+            len(reply) < 120
+            and any(
+                cue in reply.casefold()
+                for cue in (
+                    "não encontrei",
+                    "nao encontrei",
+                    "qual produto",
+                    "qual preferência",
+                    "qual preferencia",
+                )
+            )
+        )
+    )
+    if guidance is not None and weak_store_reply:
+        fixed = result.model_copy(deep=True)
+        fixed.reply_text = guidance.reply_text
+        fixed.safety_reason = None
+        fixed.response_metadata = dict(fixed.response_metadata or {})
+        fixed.response_metadata.update({
+            "fast_critique": "store_guidance_recovered",
+            "active_topic": "store_product_overview",
+            "guidance_topics": list(guidance.topics),
+            "used_commerce_provider": False,
+        })
+        verdict = CritiqueVerdict(
+            score=35,
+            pass_check=False,
+            issues=["broad_store_question_treated_as_catalog_lookup"],
+            summary=(
+                "Pergunta ampla sobre produtos e condições foi tratada como "
+                "busca literal; resposta substituída por orientação oficial."
+            ),
+            better_reply_hint=guidance.reply_text,
+        )
+        return fixed, verdict, "fast_store_guidance"
+
     # 2) Do not re-send the same greeting this person already received.
     previous = _last_assistant_reply(recent_turns)
     if (
