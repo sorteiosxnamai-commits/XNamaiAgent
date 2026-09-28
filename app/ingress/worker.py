@@ -200,6 +200,7 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
     try:
         response_id = insert_agent_response(
             {
+                "workspace_id": incoming.workspace_id,
                 "inbound_id": inbound_id,
                 "channel": incoming.channel,
                 "sender_key": incoming.sender_key,

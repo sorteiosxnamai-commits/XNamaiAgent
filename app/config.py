@@ -796,7 +796,7 @@ class Settings(BaseSettings):
 
     # ChatBô central inbox mirror. The internal token is server-only and must
     # never be exposed to the browser or reused as a provider webhook secret.
-    chatbo_sync_enabled: bool = Field(default=True, alias="CHATBO_SYNC_ENABLED")
+    chatbo_sync_enabled: bool = Field(default=False, alias="CHATBO_SYNC_ENABLED")
     chatbo_api_url: str = Field(
         default="https://chatbo-backendagent.onrender.com/api",
         alias="CHATBO_API_URL",

@@ -626,6 +626,7 @@ def ensure_tables() -> None:
 def _prepare_inbound_message(message: dict[str, Any]) -> dict[str, Any]:
     safe_message = dict(message or {})
     defaults = {
+        "workspace_id": None,
         "provider": "brevo",
         "event_type": None,
         "message_id": None,
@@ -703,6 +704,7 @@ def insert_inbound_message(message: dict[str, Any]) -> int | None:
                 """
                 INSERT INTO public.ai_inbound_messages
                   (
+                    workspace_id,
                     provider,
                     event_type,
                     message_id,
@@ -723,6 +725,7 @@ def insert_inbound_message(message: dict[str, Any]) -> int | None:
                   )
                 VALUES
                   (
+                    %(workspace_id)s,
                     %(provider)s,
                     %(event_type)s,
                     %(message_id)s,
@@ -812,6 +815,7 @@ def claim_inbound_message(message: dict[str, Any]) -> tuple[bool, int | None]:
                 """
                 INSERT INTO public.ai_inbound_messages
                   (
+                    workspace_id,
                     provider, event_type, message_id, conversation_id, channel,
                     sender_key, sender_external_id, visitor_id, sender_username,
                     source_channel_ref, source_channel_link, source_conversation_ref,
@@ -819,6 +823,7 @@ def claim_inbound_message(message: dict[str, Any]) -> tuple[bool, int | None]:
                   )
                 VALUES
                   (
+                    %(workspace_id)s,
                     %(provider)s, %(event_type)s, %(message_id)s, %(conversation_id)s,
                     %(channel)s, %(sender_key)s, %(sender_external_id)s, %(visitor_id)s,
                     %(sender_username)s, %(source_channel_ref)s, %(source_channel_link)s,
@@ -1308,6 +1313,7 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
     safe_data = dict(data or {})
 
     safe_data.setdefault("inbound_id", None)
+    safe_data.setdefault("workspace_id", None)
     safe_data.setdefault("channel", "unknown")
     safe_data.setdefault("sender_key", None)
     safe_data.setdefault("sender_phone", None)
@@ -1337,6 +1343,7 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
                 """
                 INSERT INTO public.ai_agent_responses
                   (
+                    workspace_id,
                     inbound_id,
                     channel,
                     sender_key,
@@ -1350,6 +1357,7 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
                   )
                 VALUES
                   (
+                    %(workspace_id)s,
                     %(inbound_id)s,
                     %(channel)s,
                     %(sender_key)s,
