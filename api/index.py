@@ -2097,6 +2097,52 @@ async def cron_process_inbox_get():
 
 
 @app.post(
+    "/api/internal/chatbo/outbound",
+    dependencies=[Depends(verify_chatbo_sync_token)],
+)
+async def chatbo_manual_outbound(body: dict):
+    """Entrega uma resposta humana do ChatBô pelo número YCloud da XNamai."""
+    from app.channels.ycloud_whatsapp import send_ycloud_reply
+    from app.models import AgentResult, IncomingMessage
+
+    settings = get_settings()
+    expected_workspace = str(getattr(settings, "chatbo_workspace_id", "") or "").strip()
+    workspace_id = str(body.get("workspaceId") or "").strip()
+    if not expected_workspace or workspace_id != expected_workspace:
+        raise HTTPException(status_code=403, detail="invalid_workspace")
+
+    recipient = str(body.get("recipient") or "").strip()
+    content = str(body.get("content") or "").strip()
+    if not recipient:
+        raise HTTPException(status_code=422, detail="recipient_required")
+    if not content:
+        raise HTTPException(status_code=422, detail="content_required")
+
+    incoming = IncomingMessage(
+        workspace_id=workspace_id,
+        provider="ycloud",
+        channel="whatsapp",
+        sender_phone=recipient,
+        sender_key=recipient,
+        text="",
+    )
+    result = AgentResult(reply_text=content)
+    correlation_id = str(body.get("correlationId") or "").strip()
+    if correlation_id:
+        result.with_response_metadata(outbox_correlation_id=correlation_id)
+    delivery = await send_ycloud_reply(incoming, result)
+    if not delivery.get("ok"):
+        status_code = int(delivery.get("status_code") or 502)
+        if status_code < 400 or status_code > 599:
+            status_code = 502
+        raise HTTPException(
+            status_code=status_code,
+            detail=delivery.get("error") or "ycloud_send_failed",
+        )
+    return delivery
+
+
+@app.post(
     "/api/cron/chatbo-sync",
     dependencies=[Depends(verify_chatbo_sync_token)],
 )
