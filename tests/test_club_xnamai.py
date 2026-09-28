@@ -14,6 +14,8 @@ def test_non_member_receives_official_club_offer():
     assert result is not None
     assert CLUB_URL in result.reply_text
     assert "planos atuais" in result.reply_text.casefold()
+    assert "preço de quase caixa fechada" in result.reply_text
+    assert "acréscimo de 15%" in result.reply_text
     assert result.response_metadata["club_membership_status"] == "non_member"
     assert result.response_metadata["used_openai_interpreter"] is False
 

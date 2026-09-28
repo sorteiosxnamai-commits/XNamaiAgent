@@ -11,6 +11,8 @@ never invents Club conditions. Order:
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Any, Awaitable, Callable
 
 from . import capability_catalog
@@ -26,6 +28,21 @@ from .models import AgentResult, IncomingMessage
 from .sales.intent_router import is_customer_registration_request
 
 
+def _asks_if_cpf_is_accepted(text: str) -> bool:
+    folded = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", text.casefold())
+        if not unicodedata.combining(char)
+    )
+    return bool(
+        re.search(r"\bcpf\b", folded)
+        and re.search(
+            r"\b(?:aceita|aceitam|atende|consigo|posso|cadastro|cadastrar|comprar|compra|fazer)\b",
+            folded,
+        )
+    )
+
+
 async def handle_account_flows(
     message: IncomingMessage,
     *,
@@ -33,6 +50,20 @@ async def handle_account_flows(
     execute: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
 ) -> AgentResult | None:
     text = message.text
+    if _asks_if_cpf_is_accepted(text):
+        return AgentResult(
+            reply_text=(
+                "Sim. A XNamai atende cadastro e compras tanto por CPF quanto por CNPJ. "
+                "O cadastro por CPF é feito pelo atendimento. Para fazer por aqui, "
+                "preciso de nome completo, CPF, endereço, telefone e e-mail para login."
+            ),
+            intent="general",
+            response_metadata={
+                "domain": "commerce",
+                "active_topic": "customer_registration",
+                "response_source": "cpf_registration_policy",
+            },
+        )
     if is_club_request(text) or (
         state.pending_action not in REGISTRATION_PENDING_ACTIONS and is_club_followup(text, state)
     ):

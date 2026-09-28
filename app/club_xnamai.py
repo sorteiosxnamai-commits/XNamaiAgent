@@ -88,8 +88,9 @@ def is_club_followup(text: str | None, state: CommerceConversationState) -> bool
 
 def club_offer_text() -> str:
     return (
-        "Se você ainda não é membro, conheça o XNaMai Club: membros com assinatura "
-        "ativa têm acesso a preços exclusivos em compras elegíveis. Catálogo oficial: "
+        "Se você ainda não é membro, conheça o XNaMai Club: preço de quase caixa "
+        "fechada sem precisar comprar caixa fechada. Os valores do catálogo já são "
+        "os preços exclusivos do Club; sem Club, há acréscimo de 15%. Catálogo oficial: "
         f"{STORE_URL} | Plano e regras atuais do Club: {CLUB_URL}"
     )
 
@@ -141,7 +142,13 @@ def handle_club_turn(
             f"por esta conversa. Club: {CLUB_URL}"
         )
     else:
-        intro = "Para ser membro do XNaMai Club, escolha um plano e entre ou crie sua conta no Club."
+        intro = (
+            "O XNaMai Club dá acesso aos preços exclusivos do catálogo sem exigir "
+            "caixa fechada. A proposta é ter preço de quase caixa fechada comprando "
+            "a quantidade que você precisa. Os preços exibidos no catálogo já são "
+            "os preços Club; sem assinatura, há acréscimo de 15%. Para ser membro, "
+            "escolha um plano e entre ou crie sua conta no Club."
+        )
         if plans:
             descriptions = [
                 f"{plan.name}: R$ {plan.monthly_price_cents / 100:.2f}/mês".replace(".", ",")

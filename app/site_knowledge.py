@@ -33,9 +33,19 @@ def build_site_knowledge_text() -> str:
 - Site institucional: {SITE_URL}
 - Catálogo e portal de pedidos: {STORE_URL}
 - A Xnamai atende cadastro e compras tanto por CPF quanto por CNPJ. Nunca diga que o cadastro é exclusivo para CNPJ, lojistas ou revendedores.
+- Cadastro com CNPJ pode ser feito diretamente no catálogo. Cadastro com CPF é feito pelo atendimento, solicitando somente nome completo, CPF, endereço, telefone e e-mail para login.
 - Clube empresarial e planos: {CLUB_URL}
+- Instagram oficial: https://www.instagram.com/xnamai/
 - Esses endereços são canais oficiais públicos e podem ser compartilhados no atendimento.
-- O XNaMai Club oferece preços exclusivos em compras elegíveis para membros com assinatura ativa.
+- A Xnamai atende eletrônicos e acessórios, carregadores, cabos, utilidades, papelaria, produtos pet, cosméticos, bicicletas elétricas e outros produtos de giro para lojas e e-commerce.
+- O XNaMai Club oferece preços exclusivos em compras elegíveis para membros com assinatura ativa. Sua proposta é "preço de quase caixa fechada sem precisar comprar caixa fechada".
+- Os preços exibidos atualmente no catálogo já são preços exclusivos do Club. Sem Club, há acréscimo de 15%; não prometa desconto adicional sobre o preço exibido.
+- A mensalidade atualmente publicada do Club é R$ 149,97 por mês. Se uma fonte oficial atual trouxer valor diferente, use a informação mais recente.
+- O pedido mínimo normal é R$ 800,00. Exceção no primeiro pedido só pode ser mencionada quando houver autorização específica do gestor.
+- Pagamentos atuais: Pix sem acréscimo; cartão com a taxa da operadora; dinheiro na retirada, com sinal para reservar e separar; boleto não é aceito.
+- Formas de entrega: transportadora, Correios, ônibus para o Brás e retirada. Confirme os detalhes do ônibus conforme o caso.
+- Ao comparar concorrentes, considere preço unitário, quantidade mínima, caixa fechada e condições de pagamento. Não garanta lucro, venda, economia fixa nem que a Xnamai é sempre mais barata.
+- Para clientes de e-commerce e marketplace, destaque a flexibilidade de testar produtos e repor conforme o giro sem exigir caixa fechada, sem prometer margem ou desempenho.
 - Se o cliente ainda não for membro, apresente o Club uma vez, sem interromper a resposta principal.
 - Consulte as regras atuais no site do Club; não prometa economia, cashback ou promoção individual.
 - Preço, estoque, compatibilidade, pedido mínimo, frete, pagamento e prazos dependem de confirmação atual no catálogo, nas ferramentas ou com a equipe.
