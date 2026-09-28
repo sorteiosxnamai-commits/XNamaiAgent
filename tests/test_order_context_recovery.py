@@ -72,6 +72,19 @@ def test_detects_followup_order_and_pix_requests():
     ) is True
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "fiz um pedido no carrinho",
+        "qual é o status do meu carrinho?",
+        "como faço para finalizar o carrinho?",
+        "quero revisar o rascunho do pedido",
+    ],
+)
+def test_cart_draft_is_not_mistaken_for_created_order_status(text):
+    assert is_order_lookup_request(text) is False
+
+
 def test_splits_glued_store_code_and_internal_order_id():
     candidates = order_reference_candidates("0CC131B51070AEF25400")
     # Tray expects the numeric internal id; store hex codes often 422.

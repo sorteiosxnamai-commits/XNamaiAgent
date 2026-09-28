@@ -96,7 +96,8 @@ async def test_showing_the_cart_resolves_nothing_and_changes_nothing():
      "quero finalizar", "finaliza o pedido", "finalizar pedido",
      "vamos finalizar", "vamos fechar", "pode concluir", "quero concluir",
      "concluir pedido", "revisa o pedido", "revisar pedido",
-     "quero revisar antes", "prosseguir com o pedido"],
+     "quero revisar antes", "prosseguir com o pedido",
+     "como faço para finalizar?", "como finalizar meu pedido?"],
 )
 def test_closing_phrases_ask_for_a_review(texto):
     assert resolve_commerce_turn(texto, state=_com_carrinho()).action == ACTION_REVIEW_ORDER

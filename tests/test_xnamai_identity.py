@@ -40,14 +40,25 @@ def test_public_knowledge_explicitly_allows_cpf_and_cnpj_registration():
 def test_public_knowledge_contains_published_club_and_sales_policy():
     text = build_site_knowledge_text()
     for expected in (
+        "primeira distribuidora do Brasil no modelo de assinatura",
         "preço de quase caixa fechada sem precisar comprar caixa fechada",
-        "acréscimo de 15%",
         "R$ 149,97 por mês",
         "R$ 800,00",
         "boleto não é aceito",
         "ônibus para o Brás",
     ):
         assert expected in text
+    assert "taxa da operadora" not in text
+    assert "preços exibidos no catálogo já são preços exclusivos" not in text
+
+
+def test_persona_uses_emojis_naturally_without_forcing_them():
+    persona = (Path(__file__).resolve().parents[1] / "persona_xnamai.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Use emoji sempre que ele ajudar" in persona
+    assert "sem forçar" in persona
+    assert "sem colocar emoji em toda mensagem" in persona
 
 
 def test_no_vip_identity_is_preconfigured():

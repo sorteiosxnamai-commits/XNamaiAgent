@@ -195,10 +195,14 @@ _CLEAR_CART = (
 _REVIEW_ORDER = (
     "pode fechar", "fecha o pedido", "fechar pedido", "quero fechar",
     "quero finalizar", "finaliza o pedido", "finalizar pedido",
+    "como faco para finalizar", "como finalizar", "como finalizo",
+    "finalizar meu pedido", "finalizar o meu pedido",
     "vamos finalizar", "vamos fechar", "pode concluir", "quero concluir",
     "concluir pedido", "revisa o pedido", "revisar pedido", "revisar antes",
     "antes de fechar", "prosseguir com o pedido", "prosseguir com a compra",
     "quero prosseguir", "fechar a compra", "finalizar a compra",
+    "finalizei os itens", "terminei de escolher", "terminei os itens",
+    "nao quero mais nada", "nao vou adicionar mais", "pode revisar o rascunho",
 )
 
 #: Confirmacao explicita: nao pede para ver, autoriza o que ja foi visto.

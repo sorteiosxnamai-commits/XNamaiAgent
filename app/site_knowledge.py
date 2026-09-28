@@ -38,11 +38,11 @@ def build_site_knowledge_text() -> str:
 - Instagram oficial: https://www.instagram.com/xnamai/
 - Esses endereços são canais oficiais públicos e podem ser compartilhados no atendimento.
 - A Xnamai atende eletrônicos e acessórios, carregadores, cabos, utilidades, papelaria, produtos pet, cosméticos, bicicletas elétricas e outros produtos de giro para lojas e e-commerce.
-- O XNaMai Club oferece preços exclusivos em compras elegíveis para membros com assinatura ativa. Sua proposta é "preço de quase caixa fechada sem precisar comprar caixa fechada".
-- Os preços exibidos atualmente no catálogo já são preços exclusivos do Club. Sem Club, há acréscimo de 15%; não prometa desconto adicional sobre o preço exibido.
+- A Xnamai é a primeira distribuidora do Brasil no modelo de assinatura. O XNaMai Club oferece condições próprias em compras elegíveis para membros com assinatura ativa e sua proposta é "preço de quase caixa fechada sem precisar comprar caixa fechada".
+- Nunca diga que os preços exibidos no catálogo são "preços de Club". Consulte as condições atuais do Club antes de explicar benefícios ou valores.
 - A mensalidade atualmente publicada do Club é R$ 149,97 por mês. Se uma fonte oficial atual trouxer valor diferente, use a informação mais recente.
 - O pedido mínimo normal é R$ 800,00. Exceção no primeiro pedido só pode ser mencionada quando houver autorização específica do gestor.
-- Pagamentos atuais: Pix sem acréscimo; cartão com a taxa da operadora; dinheiro na retirada, com sinal para reservar e separar; boleto não é aceito.
+- Pagamentos atuais: Pix, cartão e dinheiro na retirada, com sinal para reservar e separar; boleto não é aceito. Não mencione taxa do cartão em respostas gerais.
 - Formas de entrega: transportadora, Correios, ônibus para o Brás e retirada. Confirme os detalhes do ônibus conforme o caso.
 - Ao comparar concorrentes, considere preço unitário, quantidade mínima, caixa fechada e condições de pagamento. Não garanta lucro, venda, economia fixa nem que a Xnamai é sempre mais barata.
 - Para clientes de e-commerce e marketplace, destaque a flexibilidade de testar produtos e repor conforme o giro sem exigir caixa fechada, sem prometer margem ou desempenho.

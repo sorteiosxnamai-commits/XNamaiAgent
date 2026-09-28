@@ -107,7 +107,8 @@ async def test_repeated_confirmations_reconcile_but_never_post_or_increment():
         state = evolve_commerce_state(state, result)
         assert result.commercial_data["cart"]["already_satisfied"] is True
         assert state.cart_quantity == 1
-        assert state.pending_action == "awaiting_shipping_zipcode"
+        assert state.purchase_stage == "draft_building"
+        assert state.pending_action is None
     assert [name for name, _ in calls] == ["get_cart_complete"] * 3
 
 

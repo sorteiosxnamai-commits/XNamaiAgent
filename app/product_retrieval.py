@@ -23,7 +23,9 @@ CATALOG_DISCOVERY_MAX_PRODUCTS = 100
 SEMANTIC_MATCH_POOL_LIMIT = 20
 CANDIDATE_POOL_LIMIT = SEMANTIC_MATCH_POOL_LIMIT
 GPT_MATCH_CANDIDATE_LIMIT = 80
-CUSTOMER_RESULT_LIMIT = 3
+# Atacado pede comparação de mix, não uma vitrine de um único SKU. Seis
+# opções ainda cabem em uma resposta curta e permitem variedade real.
+CUSTOMER_RESULT_LIMIT = 6
 RERANK_SELECTION_LIMIT = 5  # legacy default; prefer rerank_selection_limit()
 MAX_VARIANT_PRODUCT_QUERIES = 5
 

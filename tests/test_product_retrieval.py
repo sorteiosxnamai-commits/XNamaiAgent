@@ -666,7 +666,7 @@ def test_budget_is_applied_after_retrieval_using_effective_price():
 
 
 @pytest.mark.asyncio
-async def test_candidate_pool_is_twenty_and_customer_result_is_three(monkeypatch):
+async def test_candidate_pool_is_twenty_and_customer_result_is_six(monkeypatch):
     import app.sales_agent as sales_agent
 
     calls = []
@@ -694,7 +694,7 @@ async def test_candidate_pool_is_twenty_and_customer_result_is_three(monkeypatch
 
     search_calls = [call for call in calls if call[0] == "search_products"]
     assert search_calls == [("search_products", {"name": "fone", "available": True, "available_in_store": True, "limit": 20, "page": 1})]
-    assert len(result.commercial_data["products"]) == 3
+    assert len(result.commercial_data["products"]) == 6
 
 
 @pytest.mark.asyncio

@@ -130,7 +130,12 @@ Use exclusivamente os fatos comerciais retornados pela fonte oficial no bloco FA
 Não invente produto, preço, estoque, promoção, disponibilidade, Pix, parcelamento ou cupom.
 Se um fato não estiver em FACTS, diga que não foi informado.
 Responda em português do Brasil, respeitando o formato do canal. Preserve URLs completas.
-Apresente normalmente no máximo três opções relevantes.
+Em buscas de atacado ou abastecimento, apresente normalmente até seis opções
+relevantes e variadas, agrupando por categoria quando houver mais de uma. Em uma
+consulta muito específica, mostre somente as correspondências realmente confirmadas.
+Trate o carrinho como pedido em rascunho: depois de incluir itens, convide o cliente
+a enviar outros produtos e quantidades. Só conduza para revisão, frete ou pagamento
+quando ele disser que terminou ou pedir explicitamente para fechar.
 Quando FACTS contiver uma lista de produtos, preserve a ordem recebida e numere as opções
 como 1, 2 e 3. Não altere essa ordem, pois ela será usada nas referências posteriores.
 Quando FACTS.match_status for ambiguous, apresente as correspondências plausíveis e peça
@@ -1293,9 +1298,12 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
 
     if resultado.outcome == OUTCOME_PURCHASE_INTENT:
         reply, offered = maybe_append_club_offer(
-            f"Você pode comprar pelo catálogo oficial da XNamai: {STORE_URL} "
-            "Se quiser ajuda para encontrar algo, diga o tipo de produto ou o que "
-            "você precisa — por exemplo, cabo, carregador, fone ou capa.",
+            "Vamos montar um pedido de atacado variado 🛒 Você pode enviar, em uma "
+            "única mensagem, vários produtos ou categorias e as quantidades que "
+            "procura — pode incluir mais de um tipo de produto. "
+            "Vou manter tudo em rascunho para você continuar adicionando "
+            "itens e só revisaremos quando disser que terminou. "
+            f"Veja o catálogo oficial da XNamai: {STORE_URL}",
             state=state,
         )
         return AgentResult(
@@ -1305,6 +1313,8 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
             response_metadata=_metadados(
                 used_commerce_provider=False,
                 active_topic="purchase_guidance",
+                purchase_stage="draft_building",
+                order_draft_open=True,
                 club_offer_shown=offered or getattr(state, "club_offer_shown", False),
             ),
         )
@@ -4169,7 +4179,7 @@ async def _handle_sales_message_inner(
                 elif candidates:
                     unresolved_candidates = [
                         candidate
-                        for candidate in candidates[:3]
+                        for candidate in candidates[:CUSTOMER_RESULT_LIMIT]
                         if isinstance(candidate, dict)
                     ]
                     log_purchase_progress(
@@ -4238,7 +4248,7 @@ async def _handle_sales_message_inner(
             unresolved_purchase_items = 1
             unresolved_candidates = [
                 candidate
-                for candidate in lookup_products[:3]
+                for candidate in lookup_products[:CUSTOMER_RESULT_LIMIT]
                 if isinstance(candidate, dict)
             ]
             log_purchase_progress(

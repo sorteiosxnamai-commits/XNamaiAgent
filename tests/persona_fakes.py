@@ -65,6 +65,7 @@ class InMemoryPersonaStore:
             name="XNamai Commercial",
             tenant_id="xnamai",
             persona_key="xnamai_commercial",
+            workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
             source="user",
             created_by=None,
             status="draft",
@@ -84,6 +85,7 @@ class InMemoryPersonaStore:
                 "id": store._next_id,
                 "tenant_id": tenant_id,
                 "persona_key": persona_key,
+                "workspace_id": workspace_id,
                 "version": version,
                 "name": name,
                 "source": source,
@@ -118,6 +120,7 @@ class InMemoryPersonaStore:
                 if (
                     row["tenant_id"] == tenant_id
                     and row["persona_key"] == target["persona_key"]
+                    and row.get("workspace_id") == target.get("workspace_id")
                     and row["status"] == "active"
                     and row["id"] != persona_id
                 ):
@@ -147,7 +150,8 @@ class InMemoryPersonaStore:
             )
 
         def find_persona_by_hash(
-            *, tenant_id, persona_key, instructions_hash, version=None
+            *, tenant_id, persona_key, instructions_hash, version=None,
+            workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
         ):
             from app.persona_models import PersonaVersion
 
@@ -156,6 +160,7 @@ class InMemoryPersonaStore:
                 for row in store.personas
                 if row["tenant_id"] == tenant_id
                 and row["persona_key"] == persona_key
+                and row.get("workspace_id") == workspace_id
                 and row["instructions_hash"] == instructions_hash
                 and (version is None or row["version"] == version)
             ]

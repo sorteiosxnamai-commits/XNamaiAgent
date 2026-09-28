@@ -110,6 +110,7 @@ def create_persona_version(
     name: str = "XNamai Comercial",
     tenant_id: str = DEFAULT_TENANT_ID,
     persona_key: str = DEFAULT_PERSONA_KEY,
+    workspace_id: str | None = DEFAULT_WORKSPACE_ID,
     source: str = "user",
     created_by: str | None = None,
     status: str = "draft",
@@ -127,15 +128,16 @@ def create_persona_version(
             cur.execute(
                 """
                 INSERT INTO public.ai_agent_persona_versions (
-                    tenant_id, persona_key, version, name, source,
+                    tenant_id, persona_key, workspace_id, version, name, source,
                     instructions, instructions_hash, status, created_by, metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     tenant_id,
                     persona_key,
+                    workspace_id,
                     version,
                     name,
                     source,
@@ -172,7 +174,7 @@ def activate_persona_version(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, persona_key, status
+                SELECT id, persona_key, workspace_id, status
                 FROM public.ai_agent_persona_versions
                 WHERE id = %s AND tenant_id = %s
                 LIMIT 1
@@ -184,6 +186,7 @@ def activate_persona_version(
             if not target:
                 raise ValueError("persona_not_found")
             persona_key = str(target["persona_key"])
+            workspace_id = target.get("workspace_id")
             # Archive current active version(s).
             cur.execute(
                 """
@@ -192,10 +195,11 @@ def activate_persona_version(
                     archived_at = %s
                 WHERE tenant_id = %s
                   AND persona_key = %s
+                  AND workspace_id IS NOT DISTINCT FROM %s::uuid
                   AND status = 'active'
                   AND id <> %s
                 """,
-                (now, tenant_id, persona_key, persona_id),
+                (now, tenant_id, persona_key, workspace_id, persona_id),
             )
             cur.execute(
                 """
@@ -260,6 +264,7 @@ def find_persona_by_hash(
     persona_key: str,
     instructions_hash: str,
     version: int | None = None,
+    workspace_id: str | None = DEFAULT_WORKSPACE_ID,
 ) -> PersonaVersion | None:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -270,11 +275,12 @@ def find_persona_by_hash(
                     FROM public.ai_agent_persona_versions
                     WHERE tenant_id = %s
                       AND persona_key = %s
+                      AND workspace_id IS NOT DISTINCT FROM %s::uuid
                       AND instructions_hash = %s
                     ORDER BY version DESC
                     LIMIT 1
                     """,
-                    (tenant_id, persona_key, instructions_hash),
+                    (tenant_id, persona_key, workspace_id, instructions_hash),
                 )
             else:
                 cur.execute(
@@ -283,11 +289,12 @@ def find_persona_by_hash(
                     FROM public.ai_agent_persona_versions
                     WHERE tenant_id = %s
                       AND persona_key = %s
+                      AND workspace_id IS NOT DISTINCT FROM %s::uuid
                       AND instructions_hash = %s
                       AND version = %s
                     LIMIT 1
                     """,
-                    (tenant_id, persona_key, instructions_hash, version),
+                    (tenant_id, persona_key, workspace_id, instructions_hash, version),
                 )
             row = cur.fetchone()
     return _row_to_persona(row) if row else None

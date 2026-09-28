@@ -14,6 +14,7 @@ class PersonaVersion(BaseModel):
     id: int | None = None
     tenant_id: str
     persona_key: str
+    workspace_id: str | None = None
     version: int
     name: str
     source: PersonaSource = "user"
@@ -26,6 +27,11 @@ class PersonaVersion(BaseModel):
     activated_at: datetime | None = None
     archived_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("workspace_id", mode="before")
+    @classmethod
+    def normalize_workspace_id(cls, value):
+        return str(value) if value is not None else None
 
 
 class PersonaVersionCreate(BaseModel):
