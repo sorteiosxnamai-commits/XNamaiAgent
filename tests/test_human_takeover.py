@@ -54,7 +54,7 @@ def test_human_activity_ignores_customer_last_message():
     )
 
 
-def test_assigned_without_activity_stays_with_human(monkeypatch):
+def test_stuck_assigned_without_activity_allows_bot_when_persist_fails(monkeypatch):
     monkeypatch.setenv("HUMAN_TAKEOVER_IDLE_MINUTES", "15")
     from app.config import get_settings
 
@@ -73,17 +73,18 @@ def test_assigned_without_activity_stays_with_human(monkeypatch):
                 {"assigned_to": "agent-1", "bot_activated": False, "status": "open"}
             ],
         ),
-        patch("app.human_takeover._load_pause_state") as load,
-        patch("app.human_takeover._upsert_pause_state") as upsert,
+        patch("app.human_takeover._load_pause_state", return_value=None),
+        patch(
+            "app.human_takeover._upsert_pause_state",
+            side_effect=RuntimeError("no table"),
+        ),
     ):
-        assert human_takeover_active(incoming) is True
-        load.assert_not_called()
-        upsert.assert_not_called()
+        assert human_takeover_active(incoming) is False
 
     get_settings.cache_clear()
 
 
-def test_first_observation_uses_chatbo_state_without_idle_clock(monkeypatch):
+def test_first_observation_mutes_only_when_persisted(monkeypatch):
     monkeypatch.setenv("HUMAN_TAKEOVER_IDLE_MINUTES", "15")
     from app.config import get_settings
 
@@ -102,16 +103,15 @@ def test_first_observation_uses_chatbo_state_without_idle_clock(monkeypatch):
                 {"assigned_to": "agent-1", "bot_activated": False, "status": "open"}
             ],
         ),
-        patch("app.human_takeover._load_pause_state") as load,
+        patch("app.human_takeover._load_pause_state", return_value=None),
         patch("app.human_takeover._upsert_pause_state") as upsert,
     ):
         assert human_takeover_active(incoming) is True
-        load.assert_not_called()
-        upsert.assert_not_called()
+        assert upsert.called
 
     get_settings.cache_clear()
 
-def test_human_takeover_does_not_expire_while_still_assigned(monkeypatch):
+def test_human_takeover_expires_after_idle(monkeypatch):
     monkeypatch.setenv("HUMAN_TAKEOVER_IDLE_MINUTES", "15")
     from app.config import get_settings
 
@@ -135,7 +135,7 @@ def test_human_takeover_does_not_expire_while_still_assigned(monkeypatch):
         ),
         patch("app.human_takeover._upsert_pause_state"),
     ):
-        assert human_takeover_active(incoming) is True
+        assert human_takeover_active(incoming) is False
 
     get_settings.cache_clear()
 
