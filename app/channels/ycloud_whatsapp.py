@@ -179,6 +179,7 @@ def parse_ycloud_inbound_message(payload: Any) -> IncomingMessage | None:
 class YCloudTenantResolution(BaseModel):
     ok: bool = False
     tenant_id: str | None = None
+    workspace_id: str | None = None
     source: Literal[
         "business_number",
         "unverified_non_production",
@@ -218,7 +219,16 @@ def resolve_ycloud_tenant(
     if not tenant_id:
         return YCloudTenantResolution(failure_code="tenant_not_configured")
 
-    return YCloudTenantResolution(ok=True, tenant_id=tenant_id, source=source)
+    workspace_id = _clean(getattr(cfg, "chatbo_workspace_id", ""))
+    if bool(getattr(cfg, "chatbo_sync_enabled", True)) and not workspace_id:
+        return YCloudTenantResolution(failure_code="workspace_not_configured")
+
+    return YCloudTenantResolution(
+        ok=True,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id or None,
+        source=source,
+    )
 
 
 # ---------------------------------------------------------------------------

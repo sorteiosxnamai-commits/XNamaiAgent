@@ -794,6 +794,19 @@ class Settings(BaseSettings):
         alias="YCLOUD_BASE_URL",
     )
 
+    # ChatBô central inbox mirror. The internal token is server-only and must
+    # never be exposed to the browser or reused as a provider webhook secret.
+    chatbo_sync_enabled: bool = Field(default=True, alias="CHATBO_SYNC_ENABLED")
+    chatbo_api_url: str = Field(
+        default="https://chatbo-backendagent.onrender.com/api",
+        alias="CHATBO_API_URL",
+    )
+    chatbo_internal_token: str = Field(default="", alias="CHATBO_INTERNAL_TOKEN")
+    chatbo_workspace_id: str = Field(
+        default="aa774d20-509f-4d54-865b-7a5de22b6d30",
+        alias="CHATBO_WORKSPACE_ID",
+    )
+
     # Instagram Story ↔ product recognition (default off until real payload validated).
     instagram_story_recognition_enabled: bool = Field(
         default=False,

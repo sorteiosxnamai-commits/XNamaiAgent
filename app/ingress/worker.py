@@ -149,6 +149,13 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
         incoming.raw["inbound_id"] = inbound_id
         incoming.raw["inbox_id"] = inbox_id
 
+    if inbound_id is not None:
+        from app.chatbo_sync import sync_chatbo_turn
+
+        # Mirror the customer message before model/provider work. A later call
+        # enriches the same idempotent turn with the agent response.
+        await sync_chatbo_turn(inbound_id=inbound_id)
+
     if has_successful_agent_response(inbound_id):
         mark_inbox_processed(inbox_id, processed_inbound_id=inbound_id, owner=owner)
         return {"ok": True, "inbox_id": inbox_id, "skipped": "already_sent"}
@@ -191,8 +198,9 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
     send_ok = bool(send_info.get("ok"))
 
     try:
-        insert_agent_response(
+        response_id = insert_agent_response(
             {
+                "workspace_id": incoming.workspace_id,
                 "inbound_id": inbound_id,
                 "channel": incoming.channel,
                 "sender_key": incoming.sender_key,
@@ -206,6 +214,10 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
                 "provider_response": send_info,
             }
         )
+        if response_id is not None:
+            from app.chatbo_sync import sync_chatbo_turn
+
+            await sync_chatbo_turn(inbound_id=inbound_id, response_id=response_id)
     except Exception as exc:  # noqa: BLE001
         log_exception(
             "inbox.response_persist_failed",

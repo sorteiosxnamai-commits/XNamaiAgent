@@ -31,6 +31,8 @@ def _settings(**overrides):
         "ycloud_waba_id": "",
         "ycloud_base_url": "https://api.ycloud.com/v2",
         "agent_persona_tenant_id": "xnamai",
+        "chatbo_sync_enabled": True,
+        "chatbo_workspace_id": "aa774d20-509f-4d54-865b-7a5de22b6d30",
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -256,6 +258,7 @@ def test_inbound_to_configured_business_number_resolves_tenant():
 
     assert resolution.ok is True
     assert resolution.tenant_id == "xnamai"
+    assert resolution.workspace_id == "aa774d20-509f-4d54-865b-7a5de22b6d30"
     assert resolution.source == "business_number"
 
 

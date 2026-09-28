@@ -184,6 +184,7 @@ class SalesInterpretation(BaseModel):
 
 
 class IncomingMessage(BaseModel):
+    workspace_id: str | None = None
     provider: str = "brevo"
     event_type: str | None = None
     message_id: str | None = None

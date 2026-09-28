@@ -28,7 +28,6 @@ from app.db import (
     has_successful_agent_response,
     inbound_message_exists,
     insert_agent_response,
-    insert_inbound_message,
     is_latest_inbound_message,
 )
 from app.inbound_coalesce import is_caption_echo_of_recent_image
@@ -1629,6 +1628,8 @@ async def ycloud_whatsapp_webhook(request: Request):
             }
         )
 
+    incoming.workspace_id = resolution.workspace_id
+
     runtime = get_current_turn()
     if runtime is not None:
         runtime.channel = incoming.channel
@@ -2070,9 +2071,16 @@ async def cron_instagram_story_media_retention_get():
 )
 async def cron_process_inbox():
     from app.ingress.dispatch import process_pending_queues
+    from app.chatbo_sync import sync_pending_chatbo_turns
 
     result = await process_pending_queues()
-    return {**result["inbox"], "ok": result["ok"], "outbox": result["outbox"]}
+    chatbo = await sync_pending_chatbo_turns(limit=100)
+    return {
+        **result["inbox"],
+        "ok": result["ok"],
+        "outbox": result["outbox"],
+        "chatbo": chatbo,
+    }
 
 
 @app.get(
@@ -2081,6 +2089,24 @@ async def cron_process_inbox():
 )
 async def cron_process_inbox_get():
     return await cron_process_inbox()
+
+
+@app.post(
+    "/api/cron/chatbo-sync",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def cron_chatbo_sync():
+    from app.chatbo_sync import sync_pending_chatbo_turns
+
+    return await sync_pending_chatbo_turns(limit=500)
+
+
+@app.get(
+    "/api/cron/chatbo-sync",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def cron_chatbo_sync_get():
+    return await cron_chatbo_sync()
 
 
 @app.post(
