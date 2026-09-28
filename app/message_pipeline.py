@@ -95,20 +95,24 @@ async def enrich_agent_result(incoming: IncomingMessage, result: AgentResult) ->
 
 async def process_incoming_message(incoming: IncomingMessage, customer_context: dict) -> AgentResult:
     from .business_policy import bind_policy, reset_policy
+    from .persona_consultation import consult_active_persona
     from .turn_cache import begin_turn_cache, end_turn_cache
 
     cache_token = begin_turn_cache()
     policy_token = None
     active = None
+    workspace_id = None
     try:
         settings = get_settings()
-        if getattr(settings, "database_url", None) and getattr(settings, "agent_db_persona_enabled", False):
+        workspace_id = (
+            incoming.workspace_id
+            or getattr(settings, "chatbo_workspace_id", None)
+        )
+        # Persona lookup is mandatory for every turn.  The feature flag still
+        # controls prompt replacement, but never skips the persona-first check.
+        if getattr(settings, "database_url", None):
             try:
                 from .persona_repository import get_active_persona
-                workspace_id = (
-                    incoming.workspace_id
-                    or getattr(settings, "chatbo_workspace_id", None)
-                )
                 active = get_active_persona(
                     settings.agent_persona_tenant_id,
                     settings.agent_persona_key,
@@ -121,7 +125,11 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
         except ValueError as exc:
             log_exception("persona.configuration_invalid", exc)
             policy_token = bind_policy(None)
+        consultation = consult_active_persona(active, incoming.text)
         result = await _process_incoming_message(incoming, customer_context)
+        result.response_metadata["persona_consultation"] = consultation.model_dump(
+            exclude={"relevant_knowledge"}
+        )
         if active is not None:
             result.response_metadata["business_configuration"] = {
                 "persona_version_id": active.id, "persona_version": active.version,
