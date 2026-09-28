@@ -23,13 +23,18 @@ class InMemoryPersonaStore:
     def install(self, monkeypatch) -> "InMemoryPersonaStore":
         store = self
 
-        def get_active_persona(tenant_id="xnamai", persona_key="xnamai_commercial"):
+        def get_active_persona(
+            tenant_id="xnamai",
+            persona_key="xnamai_commercial",
+            workspace_id=None,
+        ):
             from app.persona_models import PersonaVersion
 
             for row in store.personas:
                 if (
                     row["tenant_id"] == tenant_id
                     and row["persona_key"] == persona_key
+                    and (workspace_id is None or row.get("workspace_id") == workspace_id)
                     and row["status"] == "active"
                 ):
                     return PersonaVersion.model_validate(row)

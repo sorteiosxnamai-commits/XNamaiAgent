@@ -105,7 +105,15 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
         if getattr(settings, "database_url", None) and getattr(settings, "agent_db_persona_enabled", False):
             try:
                 from .persona_repository import get_active_persona
-                active = get_active_persona(settings.agent_persona_tenant_id, settings.agent_persona_key)
+                workspace_id = (
+                    incoming.workspace_id
+                    or getattr(settings, "chatbo_workspace_id", None)
+                )
+                active = get_active_persona(
+                    settings.agent_persona_tenant_id,
+                    settings.agent_persona_key,
+                    workspace_id,
+                )
             except Exception as exc:
                 log_exception("persona.configuration_unavailable", exc)
         try:
@@ -118,6 +126,7 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             result.response_metadata["business_configuration"] = {
                 "persona_version_id": active.id, "persona_version": active.version,
                 "tenant_id": settings.agent_persona_tenant_id,
+                "workspace_id": workspace_id,
             }
         return result
     finally:

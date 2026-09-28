@@ -13,6 +13,7 @@ from .turn_cache import cached_turn_read, invalidates_turn_reads
 
 DEFAULT_TENANT_ID = "xnamai"
 DEFAULT_PERSONA_KEY = "xnamai_commercial"
+DEFAULT_WORKSPACE_ID = "aa774d20-509f-4d54-865b-7a5de22b6d30"
 
 
 def hash_instructions(instructions: str) -> str:
@@ -27,6 +28,7 @@ def _row_to_persona(row: dict[str, Any]) -> PersonaVersion:
 def get_active_persona(
     tenant_id: str = DEFAULT_TENANT_ID,
     persona_key: str = DEFAULT_PERSONA_KEY,
+    workspace_id: str | None = None,
 ) -> PersonaVersion | None:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -36,10 +38,11 @@ def get_active_persona(
                 FROM public.ai_agent_persona_versions
                 WHERE tenant_id = %s
                   AND persona_key = %s
+                  AND (%s::uuid IS NULL OR workspace_id = %s::uuid)
                   AND status = 'active'
                 LIMIT 1
                 """,
-                (tenant_id, persona_key),
+                (tenant_id, persona_key, workspace_id, workspace_id),
             )
             row = cur.fetchone()
     return _row_to_persona(row) if row else None

@@ -21,3 +21,12 @@ def test_volatile_price_and_checkout_are_rejected():
     assert "checkout_url" in find_volatile_persona_claims(bad)
     with pytest.raises(ValueError, match="persona_volatile_facts_forbidden"):
         assert_persona_instructions_safe(bad)
+
+
+def test_official_catalog_root_is_allowed_but_checkout_path_is_not():
+    official = "Catálogo oficial: https://xnamai.meuspedidos.com.br/"
+    assert find_volatile_persona_claims(official) == []
+    assert_persona_instructions_safe(official)
+
+    unsafe = "Use https://xnamai.meuspedidos.com.br/checkout/123"
+    assert "checkout_url" in find_volatile_persona_claims(unsafe)

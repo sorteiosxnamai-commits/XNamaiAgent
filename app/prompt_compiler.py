@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import unicodedata
@@ -158,7 +157,11 @@ def compile_agent_prompt(
 
     if bool(getattr(settings, "agent_db_persona_enabled", False)):
         try:
-            active = get_active_persona(tenant_id, persona_key)
+            workspace_id = (
+                getattr(incoming, "workspace_id", None)
+                or getattr(settings, "chatbo_workspace_id", None)
+            )
+            active = get_active_persona(tenant_id, persona_key, workspace_id)
         except Exception as exc:
             active = None
             fallback_reason = f"persona_load_failed:{type(exc).__name__}"
