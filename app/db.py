@@ -67,7 +67,6 @@ def ensure_tables() -> None:
                 """
                 CREATE TABLE IF NOT EXISTS public.ai_inbound_messages (
                   id bigserial PRIMARY KEY,
-                  workspace_id uuid NULL,
                   provider text NOT NULL DEFAULT 'brevo',
                   event_type text NULL,
                   message_id text NULL,
@@ -89,9 +88,6 @@ def ensure_tables() -> None:
                 );
 
                 ALTER TABLE public.ai_inbound_messages
-                  ADD COLUMN IF NOT EXISTS workspace_id uuid,
-                  ADD COLUMN IF NOT EXISTS chatbo_synced_at timestamptz,
-                  ADD COLUMN IF NOT EXISTS chatbo_sync_error text,
                   ADD COLUMN IF NOT EXISTS channel text NOT NULL DEFAULT 'unknown',
                   ADD COLUMN IF NOT EXISTS sender_key text,
                   ADD COLUMN IF NOT EXISTS sender_external_id text,
@@ -129,7 +125,6 @@ def ensure_tables() -> None:
 
                 CREATE TABLE IF NOT EXISTS public.ai_agent_responses (
                   id bigserial PRIMARY KEY,
-                  workspace_id uuid NULL,
                   inbound_id bigint NULL REFERENCES public.ai_inbound_messages(id) ON DELETE SET NULL,
                   channel text NOT NULL DEFAULT 'unknown',
                   sender_key text NULL,
@@ -144,9 +139,6 @@ def ensure_tables() -> None:
                 );
 
                 ALTER TABLE public.ai_agent_responses
-                  ADD COLUMN IF NOT EXISTS workspace_id uuid,
-                  ADD COLUMN IF NOT EXISTS chatbo_synced_at timestamptz,
-                  ADD COLUMN IF NOT EXISTS chatbo_sync_error text,
                   ADD COLUMN IF NOT EXISTS channel text NOT NULL DEFAULT 'unknown',
                   ADD COLUMN IF NOT EXISTS sender_key text;
 
@@ -634,7 +626,6 @@ def ensure_tables() -> None:
 def _prepare_inbound_message(message: dict[str, Any]) -> dict[str, Any]:
     safe_message = dict(message or {})
     defaults = {
-        "workspace_id": None,
         "provider": "brevo",
         "event_type": None,
         "message_id": None,
@@ -712,7 +703,6 @@ def insert_inbound_message(message: dict[str, Any]) -> int | None:
                 """
                 INSERT INTO public.ai_inbound_messages
                   (
-                    workspace_id,
                     provider,
                     event_type,
                     message_id,
@@ -733,7 +723,6 @@ def insert_inbound_message(message: dict[str, Any]) -> int | None:
                   )
                 VALUES
                   (
-                    %(workspace_id)s,
                     %(provider)s,
                     %(event_type)s,
                     %(message_id)s,
@@ -823,7 +812,6 @@ def claim_inbound_message(message: dict[str, Any]) -> tuple[bool, int | None]:
                 """
                 INSERT INTO public.ai_inbound_messages
                   (
-                    workspace_id,
                     provider, event_type, message_id, conversation_id, channel,
                     sender_key, sender_external_id, visitor_id, sender_username,
                     source_channel_ref, source_channel_link, source_conversation_ref,
@@ -831,7 +819,6 @@ def claim_inbound_message(message: dict[str, Any]) -> tuple[bool, int | None]:
                   )
                 VALUES
                   (
-                    %(workspace_id)s,
                     %(provider)s, %(event_type)s, %(message_id)s, %(conversation_id)s,
                     %(channel)s, %(sender_key)s, %(sender_external_id)s, %(visitor_id)s,
                     %(sender_username)s, %(source_channel_ref)s, %(source_channel_link)s,
@@ -1321,7 +1308,6 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
     safe_data = dict(data or {})
 
     safe_data.setdefault("inbound_id", None)
-    safe_data.setdefault("workspace_id", None)
     safe_data.setdefault("channel", "unknown")
     safe_data.setdefault("sender_key", None)
     safe_data.setdefault("sender_phone", None)
@@ -1351,7 +1337,6 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
                 """
                 INSERT INTO public.ai_agent_responses
                   (
-                    workspace_id,
                     inbound_id,
                     channel,
                     sender_key,
@@ -1365,7 +1350,6 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
                   )
                 VALUES
                   (
-                    %(workspace_id)s,
                     %(inbound_id)s,
                     %(channel)s,
                     %(sender_key)s,

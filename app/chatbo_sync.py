@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
-from app.db import ensure_tables, get_conn
+from app.db import ensure_tables, get_conn, to_jsonb
 from app.observability import log_event, log_exception
 
 
@@ -105,37 +105,37 @@ def _payload(row: dict[str, Any], workspace_id: str) -> dict[str, Any]:
 
 
 def _mark_synced(inbound_id: int, response_id: int | None) -> None:
-    now = datetime.now(timezone.utc)
+    marker = {
+        "synced_at": datetime.now(timezone.utc).isoformat(),
+        "response_id": response_id,
+        "error": None,
+    }
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """UPDATE public.ai_inbound_messages
-                   SET workspace_id=%s::uuid, chatbo_synced_at=%s, chatbo_sync_error=NULL
+                   SET raw=COALESCE(raw, '{}'::jsonb)
+                           || jsonb_build_object('_chatbo_sync', %s::jsonb)
                    WHERE id=%s""",
-                (get_settings().chatbo_workspace_id, now, inbound_id),
+                (to_jsonb(marker), inbound_id),
             )
-            if response_id is not None:
-                cur.execute(
-                    """UPDATE public.ai_agent_responses
-                       SET workspace_id=%s::uuid, chatbo_synced_at=%s, chatbo_sync_error=NULL
-                       WHERE id=%s AND inbound_id=%s""",
-                    (get_settings().chatbo_workspace_id, now, response_id, inbound_id),
-                )
 
 
 def _mark_failed(inbound_id: int, response_id: int | None, error: str) -> None:
-    safe_error = (error or "chatbo_sync_failed")[:500]
+    marker = {
+        "synced_at": None,
+        "response_id": response_id,
+        "error": (error or "chatbo_sync_failed")[:500],
+    }
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE public.ai_inbound_messages SET chatbo_sync_error=%s WHERE id=%s",
-                (safe_error, inbound_id),
+                """UPDATE public.ai_inbound_messages
+                   SET raw=COALESCE(raw, '{}'::jsonb)
+                           || jsonb_build_object('_chatbo_sync', %s::jsonb)
+                   WHERE id=%s""",
+                (to_jsonb(marker), inbound_id),
             )
-            if response_id is not None:
-                cur.execute(
-                    "UPDATE public.ai_agent_responses SET chatbo_sync_error=%s WHERE id=%s AND inbound_id=%s",
-                    (safe_error, response_id, inbound_id),
-                )
 
 
 async def sync_chatbo_turn(*, inbound_id: int, response_id: int | None = None) -> dict[str, Any]:
@@ -179,14 +179,17 @@ def _pending_turns(limit: int) -> list[tuple[int, int | None]]:
                 SELECT inbound.id AS inbound_id, response.id AS response_id
                 FROM public.ai_inbound_messages AS inbound
                 LEFT JOIN LATERAL (
-                  SELECT r.id, r.chatbo_synced_at
+                  SELECT r.id
                   FROM public.ai_agent_responses r
                   WHERE r.inbound_id=inbound.id
                   ORDER BY r.id DESC LIMIT 1
                 ) response ON true
                 WHERE inbound.provider='ycloud'
-                  AND (inbound.chatbo_synced_at IS NULL
-                       OR (response.id IS NOT NULL AND response.chatbo_synced_at IS NULL))
+                  AND (
+                    inbound.raw #>> '{_chatbo_sync,synced_at}' IS NULL
+                    OR COALESCE(inbound.raw #>> '{_chatbo_sync,response_id}', '')
+                       <> COALESCE(response.id::text, '')
+                  )
                 ORDER BY inbound.id ASC
                 LIMIT %s
                 """,
