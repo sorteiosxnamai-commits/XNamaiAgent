@@ -51,19 +51,26 @@ async def handle_account_flows(
 ) -> AgentResult | None:
     text = message.text
     if _asks_if_cpf_is_accepted(text):
-        return AgentResult(
-            reply_text=(
-                "Sim. A XNamai atende cadastro e compras tanto por CPF quanto por CNPJ. "
-                "O cadastro por CPF é feito pelo atendimento. Para fazer por aqui, "
-                "preciso de nome completo, CPF, endereço, telefone e e-mail para login."
+        result = await handle_customer_registration_turn(
+            "quero me cadastrar",
+            state=state,
+            execute=execute,
+            registration_enabled=True,
+            commit_enabled=registration_capability_available(
+                capability_catalog.runtime_commerce_capabilities()
             ),
-            intent="general",
-            response_metadata={
-                "domain": "commerce",
-                "active_topic": "customer_registration",
-                "response_source": "cpf_registration_policy",
-            },
+            sender_name=message.sender_name,
+            sender_phone=message.sender_phone,
         )
+        if result is None:
+            return None
+        result.reply_text = (
+            "Sim. A XNamai atende cadastro e compras tanto por CPF quanto por CNPJ. "
+            "O cadastro por CPF é feito pelo atendimento. Para fazer por aqui, "
+            "preciso de nome completo, CPF, endereço, telefone e e-mail para login."
+        )
+        result.response_metadata["response_source"] = "cpf_registration_policy"
+        return result
     if is_club_request(text) or (
         state.pending_action not in REGISTRATION_PENDING_ACTIONS and is_club_followup(text, state)
     ):

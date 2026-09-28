@@ -2,6 +2,7 @@ import pytest
 
 from app.account_flows import _asks_if_cpf_is_accepted, handle_account_flows
 from app.commerce_context import CommerceConversationState
+from app.customer_registration import PENDING_REGISTRATION_DATA
 from app.models import IncomingMessage
 
 
@@ -35,4 +36,5 @@ async def test_answers_cpf_policy_without_calling_commerce_or_model():
     assert "tanto por CPF quanto por CNPJ" in result.reply_text
     assert "nome completo, CPF, endereço, telefone e e-mail" in result.reply_text
     assert result.response_metadata["response_source"] == "cpf_registration_policy"
+    assert result.response_metadata["pending_action"] == PENDING_REGISTRATION_DATA
     assert calls == []
