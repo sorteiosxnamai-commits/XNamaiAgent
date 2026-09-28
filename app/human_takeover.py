@@ -1,8 +1,8 @@
 """Detecta quando a Central ChatBô assumiu a conversa (humano no comando).
 
-O pause NÃO é permanente: só silencia o bot enquanto houver evidência de
-atividade do atendente nos últimos N minutos (default 15). Sem atividade
-recente — mesmo com assigned_to preso — o agente volta a atender.
+O estado da conversa é a autoridade: enquanto estiver atribuída a um humano
+ou com o bot desativado, o agente permanece pausado. Ele só volta depois da
+ação explícita de concluir, que fecha/libera a conversa e reativa o bot.
 """
 
 from __future__ import annotations
@@ -283,12 +283,10 @@ def touch_human_activity(incoming: IncomingMessage) -> bool:
 
 
 def human_takeover_active(incoming: IncomingMessage) -> bool:
-    """True only while a human is actively handling the thread.
+    """True while ChatBô says the thread belongs to human attendance.
 
-    Requires takeover signal in ChatBô (`assigned_to` / `bot_activated=false`)
-    AND recent attendant activity within `human_takeover_idle_minutes`.
-
-    Stuck `assigned_to` without recent human activity does NOT mute the bot.
+    Idle time must not silently return an assigned conversation to the bot.
+    Resumption is driven by the explicit close transition in ChatBô.
     """
     keys = _candidate_keys(incoming)
     state_key = _primary_state_key(incoming)
@@ -304,103 +302,13 @@ def human_takeover_active(incoming: IncomingMessage) -> bool:
     takeover_row = next((row for row in rows if _conversas_has_takeover_signal(row)), None)
     if takeover_row is None:
         return False
-
-    idle = timedelta(minutes=_idle_minutes())
-    now = datetime.now(timezone.utc)
-
-    last_activity: datetime | None = None
-    activity_source = "none"
-    try:
-        state = _load_pause_state(state_key)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("human_takeover state load failed: %s", exc)
-        state = None
-
-    if state is not None:
-        last_activity = _as_aware_utc(state.get("last_human_activity_at"))
-        if last_activity is not None:
-            activity_source = "local_state"
-
-    if last_activity is None:
-        last_activity = _human_activity_from_row(takeover_row)
-        if last_activity is not None:
-            activity_source = "conversas"
-            try:
-                _upsert_pause_state(
-                    state_key=state_key,
-                    last_human_activity_at=last_activity,
-                    conversation_key=incoming.conversation_id,
-                    sender_key=incoming.sender_key,
-                    metadata={"source": "conversas_seed"},
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("human_takeover state seed failed: %s", exc)
-
-    if last_activity is None:
-        # First time we observe takeover without human timestamps: start a
-        # single 15‑min window — only if we can persist it. If persist fails,
-        # fail open so a stuck assigned_to never mutes forever.
-        seeded = now
-        try:
-            _upsert_pause_state(
-                state_key=state_key,
-                last_human_activity_at=seeded,
-                conversation_key=incoming.conversation_id,
-                sender_key=incoming.sender_key,
-                metadata={"source": "first_observation"},
-            )
-            last_activity = seeded
-            activity_source = "first_observation"
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("human_takeover first_observation persist failed: %s", exc)
-            log_event(
-                "human_takeover.allow",
-                {
-                    "reason": "persist_failed_fail_open",
-                    "state_key": state_key,
-                    "error_type": type(exc).__name__,
-                    "idle_minutes": _idle_minutes(),
-                },
-            )
-            return False
-
-    if last_activity is None:
-        log_event(
-            "human_takeover.allow",
-            {
-                "reason": "no_recent_human_activity",
-                "state_key": state_key,
-                "assigned_to_present": bool(takeover_row.get("assigned_to")),
-                "bot_activated": takeover_row.get("bot_activated"),
-                "idle_minutes": _idle_minutes(),
-            },
-        )
-        return False
-
-    age = now - last_activity
-    if age >= idle:
-        log_event(
-            "human_takeover.allow",
-            {
-                "reason": "idle_expired",
-                "state_key": state_key,
-                "activity_source": activity_source,
-                "idle_minutes": _idle_minutes(),
-                "age_seconds": int(age.total_seconds()),
-            },
-        )
-        return False
-
-    remaining = int((idle - age).total_seconds())
     log_event(
         "human_takeover.block",
         {
             "state_key": state_key,
-            "activity_source": activity_source,
+            "reason": "chatbo_human_state",
             "assigned_to_present": bool(takeover_row.get("assigned_to")),
             "bot_activated": takeover_row.get("bot_activated"),
-            "remaining_seconds": remaining,
-            "idle_minutes": _idle_minutes(),
         },
     )
     return True

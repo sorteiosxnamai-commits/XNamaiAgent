@@ -8,6 +8,17 @@ from .models import AgentResult, IncomingMessage
 #: marca legada rotearia o cliente da XNamai para outra empresa.
 SALES_CONTACT_WHATSAPP = ""
 
+_CONFIRMED_CUSTOMER_CONSENT_REASONS = frozenset(
+    {"customer_requested_human", "customer_accepted_handoff_offer"}
+)
+
+
+def _handoff_consent(reason: str) -> dict[str, Any]:
+    """Return the explicit-consent contract consumed by the ChatBô inbox."""
+    if reason not in _CONFIRMED_CUSTOMER_CONSENT_REASONS:
+        return {"confirmed": False, "consent_reason": None}
+    return {"confirmed": True, "consent_reason": reason}
+
 
 def should_request_human_handoff(
     incoming: IncomingMessage,
@@ -53,6 +64,7 @@ def build_human_handoff_result(
             "handoff": {
                 "required": True,
                 "reason": reason,
+                **_handoff_consent(reason),
                 "contact_whatsapp": SALES_CONTACT_WHATSAPP or None,
                 "provider_action": "mark_for_human",
             },
@@ -76,6 +88,7 @@ def enrich_handoff_metadata(
         {
             "required": True,
             "reason": reason,
+            **_handoff_consent(reason),
             "channel": incoming.channel,
             "conversation_id_present": bool(incoming.conversation_id),
             "visitor_id_present": bool(incoming.visitor_id),
@@ -95,6 +108,8 @@ def handoff_provider_payload(result: AgentResult) -> dict[str, Any] | None:
     return {
         "required": True,
         "reason": handoff.get("reason"),
+        "confirmed": handoff.get("confirmed") is True,
+        "consent_reason": handoff.get("consent_reason"),
         "provider_action": handoff.get("provider_action"),
         "contact_whatsapp": handoff.get("contact_whatsapp"),
     }
