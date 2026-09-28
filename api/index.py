@@ -10,7 +10,12 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
-from app.security import verify_brevo_webhook, verify_admin_token, verify_remarketing_cron
+from app.security import (
+    verify_admin_token,
+    verify_brevo_webhook,
+    verify_chatbo_sync_token,
+    verify_remarketing_cron,
+)
 from app.persona_admin_api import router as persona_admin_router
 from app.webhook_parser import (
     inbound_skip_reason,
@@ -2093,7 +2098,7 @@ async def cron_process_inbox_get():
 
 @app.post(
     "/api/cron/chatbo-sync",
-    dependencies=[Depends(verify_remarketing_cron)],
+    dependencies=[Depends(verify_chatbo_sync_token)],
 )
 async def cron_chatbo_sync():
     from app.chatbo_sync import sync_pending_chatbo_turns
@@ -2103,7 +2108,7 @@ async def cron_chatbo_sync():
 
 @app.get(
     "/api/cron/chatbo-sync",
-    dependencies=[Depends(verify_remarketing_cron)],
+    dependencies=[Depends(verify_chatbo_sync_token)],
 )
 async def cron_chatbo_sync_get():
     return await cron_chatbo_sync()
