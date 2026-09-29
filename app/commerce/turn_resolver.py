@@ -224,6 +224,18 @@ _PURCHASE = (
     "fazer uma compra", "realizar um pedido", "efetuar pedido",
 )
 
+_PURCHASE_GUIDANCE = (
+    "como faco para comprar",
+    "como comprar com voces",
+    "comprar com voces",
+)
+
+
+def is_purchase_guidance_request(text: str | None) -> bool:
+    """Compra institucional sem SKU: orientar a jornada, nunca buscar produto."""
+    normalizado = normalize_text(text or "")
+    return _contem(normalizado, _PURCHASE_GUIDANCE)
+
 # Resposta comum quando uma orientação de compra foi vaga (por exemplo,
 # "qual modelo você procura?"). Isso é um pedido de esclarecimento sobre o
 # atendimento, não o nome de um produto para consultar no catálogo.

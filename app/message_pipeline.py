@@ -126,7 +126,15 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             log_exception("persona.configuration_invalid", exc)
             policy_token = bind_policy(None)
         consultation = consult_active_persona(active, incoming.text)
-        result = await _process_incoming_message(incoming, customer_context)
+        turn_customer_context = dict(customer_context)
+        if active is not None:
+            persona_metadata = getattr(active, "metadata", None) or {}
+            turn_customer_context["_active_persona_identity"] = {
+                "agent_name": persona_metadata.get("persona_display_name"),
+                "brand": persona_metadata.get("brand"),
+                "persona_version_id": getattr(active, "id", None),
+            }
+        result = await _process_incoming_message(incoming, turn_customer_context)
         result.response_metadata["persona_consultation"] = consultation.model_dump(
             exclude={"relevant_knowledge"}
         )

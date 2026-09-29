@@ -12,6 +12,8 @@ def _active(**overrides):
         "version": 3,
         "instructions": "A XNamai aceita cadastro por CPF e por CNPJ.",
         "metadata": {
+            "persona_display_name": "Mai",
+            "brand": "XNamai",
             "knowledge_documents": [
                 {
                     "id": "entrega-v1",
@@ -81,7 +83,12 @@ async def test_pipeline_checks_persona_even_for_deterministic_reply(monkeypatch)
         "app.persona_repository.get_active_persona", lambda *args: _active()
     )
 
-    async def deterministic_reply(*args):
+    async def deterministic_reply(_incoming, context):
+        assert context["_active_persona_identity"] == {
+            "agent_name": "Mai",
+            "brand": "XNamai",
+            "persona_version_id": 12,
+        }
         return AgentResult(
             reply_text="Sim, atendemos por CPF.",
             response_metadata={"response_source": "deterministic_fallback"},

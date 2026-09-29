@@ -391,10 +391,20 @@ def generate_agent_reply(message: IncomingMessage, customer_context: dict) -> Ag
     if scope.get("domain") == "out_of_scope":
         return AgentResult(reply_text=OUT_OF_SCOPE_REPLY, intent="out_of_scope", handoff_required=False, safety_reason="scope_refusal")
     if scope.get("domain") == "greeting":
+        persona_identity = customer_context.get("_active_persona_identity") or {}
         return AgentResult(
-            reply_text=choose_greeting_reply(None),
+            reply_text=choose_greeting_reply(
+                None,
+                persona_identity,
+            ),
             intent="general",
             handoff_required=False,
+            response_metadata={
+                "persona_identity_applied": bool(
+                    persona_identity.get("agent_name")
+                    and persona_identity.get("brand")
+                ),
+            },
         )
     primary_intent = detect_primary_intent(message.text)
     print("[agent.route]", {"inbound_id": (message.raw or {}).get("inbound_id"), "primary_intent": primary_intent})
@@ -642,6 +652,31 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_commerce_provider=bool(account_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=account_result.safety_reason,
         )
+    # Perguntas institucionais sobre COMO comprar nao sao consultas de SKU.
+    # Resolva antes do interpretador para que "XNamai" nunca vire nome de
+    # produto nem produza recommendation_no_match.
+    from .commerce.turn_resolver import is_purchase_guidance_request
+
+    if is_purchase_guidance_request(message.text):
+        from .commerce.turn_flow import run_commerce_turn
+        from .sales_agent import _render_commerce_turn
+
+        purchase_turn = await run_commerce_turn(
+            message.text or "",
+            state=commerce_state,
+            execute=execute_tool,
+        )
+        purchase_result = _render_commerce_turn(purchase_turn, commerce_state)
+        if purchase_result is not None:
+            return _annotate_agent_result(
+                purchase_result,
+                domain="commerce",
+                goal="buy",
+                response_source="persona_purchase_guidance",
+                used_openai_interpreter=False,
+                used_openai_responder=False,
+                used_commerce_provider=False,
+            )
     # Generic continuation for a question the agent itself asked outside the
     # deterministic flows above. A bare "sim"/"prossiga" carries no topic on
     # its own — ground it against the pending question so it is not read as
@@ -1152,11 +1187,21 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 used_commerce_provider=False,
                 fallback_reason=interpretation._fallback_reason,
             )
+        persona_identity = customer_context.get("_active_persona_identity") or {}
         return _annotate_agent_result(
             AgentResult(
-                reply_text=choose_greeting_reply(recent_turns),
+                reply_text=choose_greeting_reply(
+                    recent_turns,
+                    persona_identity,
+                ),
                 intent="general",
                 handoff_required=False,
+                response_metadata={
+                    "persona_identity_applied": bool(
+                        persona_identity.get("agent_name")
+                        and persona_identity.get("brand")
+                    ),
+                },
             ),
             domain="greeting",
             response_source="local_greeting",

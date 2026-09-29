@@ -85,6 +85,20 @@ async def test_purchase_guidance_answers_how_to_buy_without_searching(catalog):
     assert catalog == []
 
 
+async def test_exact_whatsapp_purchase_question_never_becomes_product_search(catalog):
+    state = CommerceConversationState(
+        pending_followup={"question": "Como posso ajudar?"},
+    )
+    result, state = await turn("como faço para comprar na xnamai?", state)
+
+    assert "pedido de atacado" in result.reply_text
+    assert "Não localizei" not in result.reply_text
+    assert result.safety_reason != "recommendation_no_match"
+    assert result.response_metadata["active_topic"] == "purchase_guidance"
+    assert result.response_metadata["used_commerce_provider"] is False
+    assert catalog == []
+
+
 async def test_model_of_what_resumes_purchase_guidance_without_catalog_search(catalog):
     _, state = await turn(
         "como faço para comprar com vocês?",
