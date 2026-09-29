@@ -1,9 +1,16 @@
 """Presentation rules for channel-aware outbound replies (Etapa 7).
 
-Modes (`AGENT_PRESENTER_MODE`):
-- full — legacy Phase-12 regex (opener/CTA/question surgery)
-- thin — minimal: similar-product mark, block fold, URL preserve;
-  handoff/out_of_scope still force zero questions (safety)
+Only TECHNICAL presentation lives here: factual "similar product" disclosure,
+channel block folding, URL preservation and the zero-question rail for
+handoff/out_of_scope (safety). Voice and commercial style — openers, closings,
+emoji, how many questions, CTAs — belong to the published persona, never to a
+regex editor.
+
+Modes (`AGENT_PRESENTER_MODE`, kept for configuration compatibility):
+- thin — the technical pipeline (default)
+- full — alias of the same technical pipeline; it used to rewrite style
+  (opener/CTA/question surgery) and the emergency rollback forces it, so it
+  must not behave as a second persona
 - shadow — outbound uses full; metadata records thin preview + diff
 """
 
@@ -19,35 +26,6 @@ from .models import AgentResult, IncomingMessage
 
 PresenterMode = Literal["full", "thin", "shadow"]
 
-_GENERIC_OPENERS = re.compile(
-    r"^\s*(claro[!.,\s]*|com certeza[!.,\s]*|sera um prazer[!.,\s]*|"
-    r"será um prazer[!.,\s]*|com o maior prazer[!.,\s]*)",
-    flags=re.IGNORECASE,
-)
-_REPEATED_NAME = re.compile(
-    r"^\s*(olá|ola|oi)[,\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁ-ú'-]{1,40})[!,.\s]+",
-    flags=re.IGNORECASE,
-)
-_EMOJI_RE = re.compile(
-    "["
-    "\U0001F300-\U0001FAFF"
-    "\U00002700-\U000027BF"
-    "\U0001F1E0-\U0001F1FF"
-    "]+",
-    flags=re.UNICODE,
-)
-_QUESTION_RE = re.compile(r"\?")
-_CTA_RE = re.compile(
-    r"\b(quer que eu|posso (?:te )?ajudar|deseja|vamos finalizar|"
-    r"posso preparar|segue o link)\b",
-    flags=re.IGNORECASE,
-)
-_ROBOTIC_CLOSING = re.compile(
-    r"(?:\n|^)\s*(estou (?:à|a) disposi[cç][aã]o|"
-    r"qualquer d[uú]vida[^.!\n]*|"
-    r"fico no aguardo)[.!]?\s*$",
-    flags=re.IGNORECASE,
-)
 _URL_RE = re.compile(r"https?://[^\s<>()]+", flags=re.IGNORECASE)
 
 
@@ -62,10 +40,6 @@ def resolve_presenter_mode(
     if configured in {"full", "thin", "shadow"}:
         return configured  # type: ignore[return-value]
     return "thin"
-
-
-def strip_generic_opener(text: str) -> str:
-    return _GENERIC_OPENERS.sub("", text or "", count=1).lstrip(" ,.-")
 
 
 def limit_questions(text: str, *, max_questions: int = 1) -> str:
@@ -86,20 +60,6 @@ def limit_questions(text: str, *, max_questions: int = 1) -> str:
             questions += 1
         kept.append(sentence)
     return " ".join(kept).strip() if kept else (text or "").strip()
-
-
-def soften_emoji_excess(text: str, *, max_emoji_runs: int = 1) -> str:
-    runs = list(_EMOJI_RE.finditer(text or ""))
-    if len(runs) <= max_emoji_runs:
-        return text or ""
-    out = text or ""
-    for match in reversed(runs[max_emoji_runs:]):
-        out = out[: match.start()] + out[match.end() :]
-    return re.sub(r"[ \t]{2,}", " ", out).strip()
-
-
-def strip_robotic_closing(text: str) -> str:
-    return _ROBOTIC_CLOSING.sub("", text or "").rstrip()
 
 
 def split_whatsapp_blocks(text: str, *, max_blocks: int = 3) -> str:
@@ -139,23 +99,6 @@ def mark_similar_product_language(text: str, metadata: dict[str, Any]) -> str:
     return prefix + (text or "").lstrip()
 
 
-def _dedupe_ctas(value: str) -> str:
-    cta_matches = list(_CTA_RE.finditer(value))
-    if len(cta_matches) <= 1:
-        return value
-    sentences = re.split(r"(?<=[.!?])\s+", value)
-    kept: list[str] = []
-    seen_cta = False
-    for sentence in sentences:
-        has_cta = bool(_CTA_RE.search(sentence))
-        if has_cta and seen_cta:
-            continue
-        if has_cta:
-            seen_cta = True
-        kept.append(sentence)
-    return " ".join(kept).strip()
-
-
 def _max_blocks(profile: ChannelProfile) -> int:
     if profile.channel == "whatsapp":
         return 3
@@ -193,33 +136,15 @@ def present_reply_text_full(
     metadata: dict[str, Any] | None = None,
     profile: ChannelProfile | None = None,
 ) -> str:
-    """Legacy Phase-12 presenter with opener/CTA/question surgery."""
-    profile = profile or get_channel_profile(channel)
-    metadata = metadata or {}
-    original = text or ""
-    value = strip_generic_opener(original)
-    value = strip_robotic_closing(value)
-    value = soften_emoji_excess(
-        value, max_emoji_runs=1 if profile.channel != "widget" else 2
+    """Same technical pipeline as ``thin`` — no style rewriting (see module doc)."""
+    return present_reply_text_thin(
+        text,
+        channel=channel,
+        intent=intent,
+        metadata=metadata,
+        profile=profile,
     )
-    value = mark_similar_product_language(value, metadata)
 
-    max_questions = 1
-    if intent in {"handoff", "out_of_scope"}:
-        max_questions = 0
-    value = limit_questions(value, max_questions=max_questions)
-
-    if profile.channel in {"whatsapp", "instagram", "facebook"}:
-        value = _dedupe_ctas(value)
-
-    max_blocks = _max_blocks(profile)
-    if profile.channel in {"whatsapp", "instagram", "facebook"}:
-        value = split_whatsapp_blocks(value, max_blocks=max_blocks)
-
-    if intent in {"general", "greeting"} and not metadata.get("used_commerce_provider"):
-        value = limit_questions(value, max_questions=1)
-
-    return preserve_urls(original, value).strip()
 
 
 def present_reply_text(

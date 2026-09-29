@@ -6,7 +6,7 @@ instead of constructing AsyncOpenAI/OpenAI on every call.
 
 from __future__ import annotations
 
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient, DefaultHttpxClient, OpenAI
 
 from .config import get_settings
 
@@ -23,6 +23,23 @@ def _client_fingerprint(key: str) -> tuple[str, float, int]:
     return key, timeout, retries
 
 
+def _count_sdk_request() -> None:
+    """Charge every real HTTP request (SDK retries included) to the turn budget."""
+    from .runtime_context import get_current_turn
+
+    runtime = get_current_turn()
+    if runtime is not None:
+        runtime.register_sdk_http_request()
+
+
+async def _count_sdk_request_async(_request) -> None:
+    _count_sdk_request()
+
+
+def _count_sdk_request_sync(_request) -> None:
+    _count_sdk_request()
+
+
 def get_async_openai_client(*, api_key: str | None = None) -> AsyncOpenAI:
     """Return a process-wide AsyncOpenAI client (recreated if key/timeouts change)."""
     global _async_client, _async_client_fingerprint
@@ -34,6 +51,9 @@ def get_async_openai_client(*, api_key: str | None = None) -> AsyncOpenAI:
             api_key=key,
             timeout=fingerprint[1],
             max_retries=fingerprint[2],
+            http_client=DefaultAsyncHttpxClient(
+                event_hooks={"request": [_count_sdk_request_async]}
+            ),
         )
         _async_client_fingerprint = fingerprint
     return _async_client
@@ -50,6 +70,9 @@ def get_sync_openai_client(*, api_key: str | None = None) -> OpenAI:
             api_key=key,
             timeout=fingerprint[1],
             max_retries=fingerprint[2],
+            http_client=DefaultHttpxClient(
+                event_hooks={"request": [_count_sdk_request_sync]}
+            ),
         )
         _sync_client_fingerprint = fingerprint
     return _sync_client

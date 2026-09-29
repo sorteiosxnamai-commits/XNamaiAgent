@@ -929,35 +929,13 @@ def _cart_state(
 def _cart_next_metadata(
     state: CommerceConversationState,
 ) -> dict[str, Any]:
-    if state.checkout_channel_preference is None:
-        return {
-            "purchase_stage": "cart_created",
-            "pending_action": "choose_checkout_channel",
-            "pending_action_product_ids": [],
-        }
-    if state.checkout_channel_preference == "whatsapp":
-        if not state.shipping_quotes:
-            pending = "awaiting_shipping_zipcode"
-            blockers = ["shipping_zipcode_missing"]
-        elif not state.selected_shipping:
-            pending = "awaiting_shipping_selection"
-            blockers = ["shipping_not_selected"]
-        else:
-            pending = "awaiting_checkout_data"
-            blockers = []
-        print("[sales.checkout.next_requirement]", {
-            "purchase_stage": "shipping",
-            "pending_action": pending,
-            "blocker_codes": blockers,
-        })
-        return {
-            "purchase_stage": "shipping",
-            "pending_action": pending,
-            "pending_action_product_ids": [],
-        }
+    # Adicionar um item abre/atualiza o RASCUNHO. Não empurre o atacadista
+    # imediatamente para canal, frete ou pagamento: ele pode montar um mix com
+    # muitos produtos e pedir revisão somente quando terminar.
     return {
-        "purchase_stage": "cart_created",
+        "purchase_stage": "draft_building",
         "clear_pending_action": True,
+        "order_draft_open": True,
     }
 
 
@@ -1006,7 +984,10 @@ def _reconciled_cart_result(
         "changed": changed,
     })
     return AgentResult(
-        reply_text="Estado factual do carrinho confirmado.",
+        reply_text=(
+            "O item está no rascunho do pedido. Pode enviar outros produtos e "
+            "quantidades; quando terminar, diga ‘finalizei os itens’ para revisarmos."
+        ),
         intent="commerce",
         handoff_required=False,
         commercial_data={
@@ -1490,12 +1471,17 @@ async def _create_cart_items_checkout_impl(
     )
     status = "cart_partial_failure" if partial else "cart_created"
     reply = (
-        "Carrinho atualizado parcialmente."
+        "Atualizei parcialmente o rascunho do pedido. Pode continuar enviando "
+        "outros produtos e quantidades enquanto verificamos o item pendente."
         if partial
-        else "Carrinho atualizado."
+        else (
+            "Adicionei os itens ao rascunho do pedido. Pode enviar outros produtos "
+            "e quantidades na mesma mensagem; quando terminar, diga "
+            "‘finalizei os itens’ para revisarmos."
+        )
     )
     print("[sales.cart.state]", {
-        "purchase_stage": "cart_created",
+        "purchase_stage": "draft_building",
         "has_cart_session": True,
     })
     log_purchase_progress(
@@ -1557,16 +1543,10 @@ async def _create_cart_items_checkout_impl(
             "domain": "commerce",
             "cart_materially_changed": True,
             "active_product": active.model_dump(mode="json"),
-            "purchase_stage": "cart_created",
+            "purchase_stage": "draft_building",
+            "order_draft_open": True,
             "cart_state": cart_state,
-            **(
-                {
-                    "pending_action": "choose_checkout_channel",
-                    "pending_action_product_ids": [],
-                }
-                if not partial
-                else {}
-            ),
+            "clear_pending_action": True,
             "used_commerce_provider": True,
         },
     )

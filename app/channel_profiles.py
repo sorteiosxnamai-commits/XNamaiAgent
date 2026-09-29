@@ -72,7 +72,7 @@ def channel_system_hint(channel: str | None) -> str:
     if profile.channel == "whatsapp":
         return (
             f"Canal: whatsapp. {shared} Use 1–3 blocos curtos, "
-            "uma ideia por bloco, no máximo um CTA."
+            "uma ideia por bloco."
         )
     if profile.channel == "instagram":
         return (

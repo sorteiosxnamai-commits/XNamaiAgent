@@ -11,15 +11,23 @@ from app.response_presenter import (
 from app.channel_profiles import channel_system_hint
 
 
-def test_full_strips_generic_opener_and_limits_questions():
-    text = present_reply_text(
-        "Claro! O ChargeMax custa R$ 10,00. Quer que eu reserve? Posso preparar o frete também?",
-        channel="whatsapp",
-        intent="commerce",
-        mode="full",
-    )
-    assert not text.lower().startswith("claro")
-    assert text.count("?") <= 1
+def test_full_does_not_rewrite_style():
+    """Abertura, perguntas e CTAs sao decisao da persona publicada, nao de regex.
+
+    O rollback de emergencia forca ``full``: se ele editasse estilo, viraria
+    uma segunda persona justamente no momento de crise.
+    """
+    raw = "Claro! O ChargeMax custa R$ 10,00. Quer que eu reserve? Posso preparar o frete também?"
+    text = present_reply_text(raw, channel="whatsapp", intent="commerce", mode="full")
+    assert text == raw
+    assert text == present_reply_text(raw, channel="whatsapp", intent="commerce", mode="thin")
+
+
+def test_style_editing_helpers_are_gone():
+    import app.response_presenter as presenter
+
+    for helper in ("strip_generic_opener", "strip_robotic_closing", "soften_emoji_excess", "_dedupe_ctas"):
+        assert not hasattr(presenter, helper), helper
 
 
 def test_thin_preserves_second_commerce_question():
@@ -40,7 +48,7 @@ def test_thin_preserves_second_commerce_question():
         mode="full",
     )
     assert thin.count("?") == 2
-    assert full.count("?") <= 1
+    assert full == thin
     assert "Claro" not in thin  # no opener in source
 
 
@@ -75,7 +83,8 @@ def test_compose_greeting_handoff_and_long_message(monkeypatch):
             IncomingMessage(channel="whatsapp", text="oi"),
             AgentResult(reply_text="Com certeza! Olá!", intent="greeting"),
         )
-        assert "Com certeza" not in greeting.reply_text
+        # Estilo pertence a persona: o presenter nao corta a abertura.
+        assert greeting.reply_text.startswith("Com certeza")
 
         handoff = compose_outbound_reply(
             IncomingMessage(channel="whatsapp", text="atendente"),
@@ -117,11 +126,11 @@ def test_shadow_outbound_is_full_with_thin_preview(monkeypatch):
         meta = result.response_metadata["presentation"]
         assert meta["mode"] == "shadow"
         assert meta["applied"] == "full"
-        assert not result.reply_text.lower().startswith("claro")
-        assert result.reply_text.count("?") <= 1
+        # full e thin agora sao o mesmo pipeline tecnico: nada de estilo cortado.
+        assert result.reply_text == raw
         assert meta["thin_preview"].count("?") == 2
-        assert meta["diff"]["texts_differ"] is True
-        assert meta["diff"]["questions_dropped_by_full"] >= 1
+        assert meta["diff"]["texts_differ"] is False
+        assert meta["diff"]["questions_dropped_by_full"] == 0
     finally:
         get_settings.cache_clear()
 
@@ -153,7 +162,9 @@ def test_audio_disabled_on_instagram_profile():
 def test_style_voice_single_source_in_channel_hint():
     hint = channel_system_hint("whatsapp")
     assert STYLE_VOICE_RULES in hint
-    assert "Claro" in hint
+    # Voz e estilo comercial pertencem a persona publicada, nao ao codigo.
+    for voice_rule in ("Claro", "Com certeza", "CTA", "forçar venda"):
+        assert voice_rule not in hint
 
 
 def test_prompt_layer_order_documents_compiler_stack():

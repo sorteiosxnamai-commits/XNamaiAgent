@@ -1,0 +1,241 @@
+{
+ "vazio": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {},
+  "known_preferences_count": 0,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "budget",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": false,
+  "force_retrieval": false
+ },
+ "categoria": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {},
+  "known_preferences_count": 0,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "budget",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": true,
+  "force_retrieval": false
+ },
+ "orcamento_marca": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {
+   "budget": {
+    "min": null,
+    "max": 500.0
+   },
+   "brand": "MarcaB"
+  },
+  "known_preferences_count": 2,
+  "unknown_preferences": [
+   "attributes",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": true,
+  "force_retrieval": false
+ },
+ "atributos_cor": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {
+   "color": "preto",
+   "attributes": [
+    "USB-C"
+   ]
+  },
+  "known_preferences_count": 2,
+  "unknown_preferences": [
+   "brand",
+   "budget",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": true,
+  "force_retrieval": false
+ },
+ "sem_preferencia": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {},
+  "known_preferences_count": 2,
+  "unknown_preferences": [
+   "attributes",
+   "budget",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [
+   "color",
+   "brand"
+  ],
+  "recent_questions": [],
+  "subject_identifiable": true,
+  "force_retrieval": false
+ },
+ "orcamento_minmax": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {
+   "budget": {
+    "min": 100.0,
+    "max": 300.0
+   }
+  },
+  "known_preferences_count": 1,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": false,
+  "force_retrieval": false
+ },
+ "modelo_ref": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {},
+  "known_preferences_count": 0,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "budget",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": true,
+  "force_retrieval": false
+ },
+ "forcar_busca": {
+  "clarification_count": 2,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": true,
+  "known_preferences": {},
+  "known_preferences_count": 0,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "budget",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [
+   "Qual o modelo?",
+   "Qual o modelo?"
+  ],
+  "subject_identifiable": true,
+  "force_retrieval": true
+ },
+ "perguntas_recentes": {
+  "clarification_count": 2,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {},
+  "known_preferences_count": 0,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "budget",
+   "color",
+   "material",
+   "occasion",
+   "recipient",
+   "style"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [
+   "Qual o modelo?",
+   "Qual o modelo?"
+  ],
+  "subject_identifiable": false,
+  "force_retrieval": false
+ },
+ "ocasiao_destinatario": {
+  "clarification_count": 0,
+  "enough_information_to_search": false,
+  "ready_for_retrieval": false,
+  "stop_clarification": false,
+  "known_preferences": {
+   "style": "discreto",
+   "material": "couro",
+   "occasion": "presente",
+   "recipient": "mae"
+  },
+  "known_preferences_count": 4,
+  "unknown_preferences": [
+   "attributes",
+   "brand",
+   "budget",
+   "color"
+  ],
+  "explicit_no_preferences": [],
+  "recent_questions": [],
+  "subject_identifiable": false,
+  "force_retrieval": false
+ }
+}

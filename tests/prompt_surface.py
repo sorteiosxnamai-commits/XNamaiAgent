@@ -50,13 +50,15 @@ def render_prompt_surface() -> dict[str, str]:
 
     _grab(out, prompt_compiler, "prompt_compiler", ("FIXED_SAFETY_POLICY",))
     _grab(out, prompt_layers, "prompt_layers", (
-        "PROMPT_LAYER_ORDER", "STYLE_VOICE_RULES", "RESPONDER_STYLE_GROUNDING",
+        "PROMPT_LAYER_ORDER", "STYLE_VOICE_RULES",
     ))
 
     # --- critique / judge ---------------------------------------------------
     from app import response_critique
 
-    _grab(out, response_critique, "response_critique", ("CRITIQUE_JUDGE_SYSTEM_PROMPT",))
+    _grab(out, response_critique, "response_critique", (
+        "CRITIQUE_JUDGE_SYSTEM_PROMPT", "REGENERATION_CONTRACT",
+    ))
 
     # --- interpretacao de turno --------------------------------------------
     from app import turn_understanding

@@ -79,14 +79,31 @@ def already_said(
     return False
 
 
-def choose_greeting_reply(recent_turns: list[dict[str, Any]] | None = None) -> str:
+def choose_greeting_reply(
+    recent_turns: list[dict[str, Any]] | None = None,
+    persona_identity: dict[str, Any] | None = None,
+) -> str:
     """Pick a greeting that was not already sent in this conversation.
 
     Goal: do not re-send the same phrase to the same person. Prefer a fresh
     variant; if every canned greeting was used, fall back to a short nudge
     that is not in the recent set.
     """
-    for variant in _GREETING_VARIANTS:
+    identity = persona_identity or {}
+    agent_name = str(identity.get("agent_name") or "").strip()
+    brand = str(identity.get("brand") or "").strip()
+    variants = list(_GREETING_VARIANTS)
+    if agent_name and brand:
+        variants = [
+            (
+                f"Olá! Eu sou a {agent_name}, assistente virtual da {brand}. "
+                "Como posso te ajudar? 😊"
+            ),
+            f"Oi! Aqui é a {agent_name}, da {brand}. O que você procura hoje? 😊",
+            *variants[1:],
+        ]
+
+    for variant in variants:
         if not already_said(variant, recent_turns):
             return variant
 

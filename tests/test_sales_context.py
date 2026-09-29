@@ -127,7 +127,7 @@ async def test_interpreter_uses_recent_turns_for_short_followups(
     ("text", "interpretation", "expected_domain"),
     [
         ("quem ganhou o jogo ontem?", SalesInterpretation(domain="out_of_scope", references_previous_context=False, needs_clarification=False, confidence=0.99), "out_of_scope"),
-        ("como funciona o sorteio?", SalesInterpretation(domain="raffle", references_previous_context=False, needs_clarification=False, confidence=0.99), "raffle"),
+        ("vocês têm loja física?", SalesInterpretation(domain="store_general", references_previous_context=False, needs_clarification=False, confidence=0.99), "store_general"),
         (
             "preciso de um produto para dar de presente, não queria gastar muito",
             SalesInterpretation(

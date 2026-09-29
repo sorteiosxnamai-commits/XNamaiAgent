@@ -77,11 +77,32 @@ async def test_purchase_guidance_answers_how_to_buy_without_searching(catalog):
     )
 
     assert "https://xnamai.meuspedidos.com.br/" in result.reply_text
-    assert "tipo de produto" in result.reply_text
+    assert "cadastro" in result.reply_text.casefold()
+    assert "R$ 800,00" in result.reply_text
+    assert "forma de entrega" in result.reply_text
+    assert "Club" not in result.reply_text
+    assert "pedido de atacado variado" not in result.reply_text
     assert "modelo ou estilo" not in result.reply_text.lower()
     assert result.response_metadata["active_topic"] == "purchase_guidance"
     assert result.response_metadata["used_commerce_provider"] is False
     assert state.pending_commerce_action is None
+    assert catalog == []
+
+
+async def test_exact_whatsapp_purchase_question_never_becomes_product_search(catalog):
+    state = CommerceConversationState(
+        pending_followup={"question": "Como posso ajudar?"},
+    )
+    result, state = await turn("como faço para comprar na xnamai?", state)
+
+    assert "cadastro" in result.reply_text.casefold()
+    assert "CPF ou CNPJ" in result.reply_text
+    assert "Club" not in result.reply_text
+    assert result.reply_text.count("https://xnamai.meuspedidos.com.br/") == 1
+    assert "Não localizei" not in result.reply_text
+    assert result.safety_reason != "recommendation_no_match"
+    assert result.response_metadata["active_topic"] == "purchase_guidance"
+    assert result.response_metadata["used_commerce_provider"] is False
     assert catalog == []
 
 
@@ -92,7 +113,8 @@ async def test_model_of_what_resumes_purchase_guidance_without_catalog_search(ca
     )
     result, state = await turn("modelo de quê?", state)
 
-    assert "catálogo oficial da XNamai" in result.reply_text
+    assert "https://xnamai.meuspedidos.com.br/" in result.reply_text
+    assert "cadastro" in result.reply_text.casefold()
     assert "Não encontrei" not in result.reply_text
     assert state.pending_commerce_action is None
     assert catalog == []

@@ -5,7 +5,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from .models import AgentResult, PurchaseItem, SalesInterpretation
+from .models import (
+    LEGACY_INTERPRETATION_DOMAINS,
+    AgentResult,
+    PurchaseItem,
+    SalesInterpretation,
+)
 
 def normalize_variant_identity(value: Any) -> str | None:
     """Return the canonical XNamaiAgent identity for an optional provider variant."""
@@ -144,7 +149,7 @@ MAX_PRESENTED_PRODUCTS = 10
 
 
 class CommerceConversationState(BaseModel):
-    active_domain: Literal["commerce", "raffle"] | None = None
+    active_domain: Literal["commerce"] | None = None
     active_topic: str | None = None
     active_product: CommerceProductReference | None = None
     last_presented_products: list[PresentedCommerceProduct] = Field(default_factory=list)
@@ -164,6 +169,14 @@ class CommerceConversationState(BaseModel):
     # produtos?"). Deliberadamente separado de `pending_action` do checkout:
     # um e pergunta de conversa, o outro e etapa de compra com efeito real.
     pending_commerce_action: str | None = None
+    # Generic continuation for a question the AGENT itself just asked outside
+    # the deterministic commerce/registration flows (e.g. a free-text answer
+    # ending in "quer saber mais?"). Deliberately minimal — just enough for
+    # the next turn's short reply ("sim"/"não"/"prossiga") to be grounded
+    # against the question that prompted it, instead of being misread as an
+    # unrelated fresh message. Cleared as soon as it is consumed or the
+    # customer clearly changes subject.
+    pending_followup: dict[str, Any] | None = None
     # Id do cliente NA FONTE COMERCIAL. Sem ele o pedido nao existe, e por isso
     # a revisao tem um estado proprio para a ausencia em vez de listar o campo
     # junto com os outros que faltam.
@@ -174,6 +187,7 @@ class CommerceConversationState(BaseModel):
     # Oferta institucional do Club é mostrada no máximo uma vez por contexto.
     club_offer_shown: bool = False
     club_membership_status: Literal["member", "non_member"] | None = None
+    club_flow_stage: Literal["awaiting_account", "awaiting_subscription", "complete"] | None = None
     # Condicao COMERCIAL (prazo) da fonte, distinta de `selected_payment_option`,
     # que modela FORMA de pagamento (pix/cartao/boleto, parcelas, desconto).
     # Dois escalares em vez de um modelo novo: o pedido so precisa do id, e o
@@ -198,6 +212,16 @@ class CommerceConversationState(BaseModel):
     @classmethod
     def normalize_cart_variant_id(cls, value: Any) -> str | None:
         return normalize_variant_identity(value)
+
+    @field_validator("active_domain", mode="before")
+    @classmethod
+    def read_legacy_active_domain(cls, value: Any) -> Any:
+        # Estado persistido pelo produto anterior pode trazer "raffle". Um valor
+        # invalido faria ``from_payload`` descartar o estado INTEIRO (carrinho
+        # incluso); le-se como ausencia de dominio ativo.
+        if isinstance(value, str) and value in LEGACY_INTERPRETATION_DOMAINS:
+            return None
+        return value
 
     selected_payment_method: Literal[
         "pix",
@@ -548,10 +572,6 @@ def apply_commerce_domain_context(
         previous_domain == "commerce"
         and interpretation.domain != "commerce"
         and interpretation.domain != "greeting"
-        and not (
-            interpretation._source != "openai"
-            and interpretation.domain == "raffle"
-        )
         and not interpretation.domain_change_explicit
     ):
         return interpretation.model_copy(update={"domain": "commerce"}), True
@@ -632,8 +652,23 @@ def evolve_commerce_state(
 ) -> CommerceConversationState:
     state = previous.model_copy(deep=True)
     metadata = result.response_metadata or {}
+    # Domain-agnostic: a question the agent itself asked (any domain, not just
+    # commerce) must be resolvable next turn. Applied before the commerce-only
+    # cut below so a "general" answer ending in a question is not silently
+    # dropped on the floor.
+    if "pending_followup" in metadata:
+        followup = metadata["pending_followup"]
+        state.pending_followup = followup if isinstance(followup, dict) else None
+    if result.handoff_required and state.pending_action in {
+        "awaiting_customer_registration_data",
+        "awaiting_customer_registration_confirmation",
+    }:
+        # Handoff encerra o cadastro em andamento: a equipe assume, e o
+        # proximo turno nao pode confirmar/criar sozinho.
+        state.pending_action = None
+        state.customer_registration = {**state.customer_registration, "draft": {}, "status": "handoff"}
     domain = metadata.get("domain")
-    if domain in {"commerce", "raffle"}:
+    if domain == "commerce":
         state.active_domain = domain
     if domain != "commerce":
         return state
@@ -706,7 +741,15 @@ def evolve_commerce_state(
         state.active_topic = str(metadata["active_topic"])
     if metadata.get("purchase_stage"):
         state.purchase_stage = str(metadata["purchase_stage"])
-    if metadata.get("clear_pending_action"):
+    registration_pending = state.pending_action in {
+        "awaiting_customer_registration_data",
+        "awaiting_customer_registration_confirmation",
+    }
+    if metadata.get("clear_pending_action") and not (
+        # Uma pergunta comercial no meio do cadastro nao encerra o cadastro:
+        # so o proprio fluxo (conclusao/cancelamento/erro) ou um handoff limpa.
+        registration_pending and "customer_registration_state" not in metadata
+    ):
         state.pending_action = None
         state.pending_action_product_ids = []
     pending_action = metadata.get("pending_action")
@@ -826,6 +869,9 @@ def evolve_commerce_state(
     membership_status = metadata.get("club_membership_status")
     if membership_status in {"member", "non_member"}:
         state.club_membership_status = membership_status
+    club_flow_stage = metadata.get("club_flow_stage")
+    if club_flow_stage in {"awaiting_account", "awaiting_subscription", "complete"}:
+        state.club_flow_stage = club_flow_stage
     order_state = metadata.get("order_state")
     if isinstance(order_state, dict):
         for field in (

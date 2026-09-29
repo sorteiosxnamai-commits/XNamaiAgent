@@ -19,8 +19,20 @@ from pydantic import ValidationError
 from .commerce_router import (
     extract_product_query,
     handle_commerce_message,
-    resolve_commerce_action,
     _product_lines,
+)
+from .sales.qualification_slots import (
+    known_preferences as qualification_known_preferences,
+    slots_from_interpretation,
+    subject_identifiable as qualification_subject_identifiable,
+)
+from .sales.intent_router import (
+    domain_from_text,
+    goal_for_intent,
+    intent_from_interpretation,
+    intent_from_text,
+    is_greeting as _is_greeting,
+    route_sales_intent,
 )
 from .category_resolver import CategoryResolver
 from .checkout_service import checkout_capabilities, select_checkout_channel
@@ -30,9 +42,7 @@ from .checkout_data_service import (
     should_repair_checkout_data,
     update_checkout_data,
 )
-from .capability_catalog import runtime_commerce_capabilities
-from .club_xnamai import handle_club_turn, maybe_append_club_offer
-from .customer_registration import handle_customer_registration_turn
+from .club_xnamai import maybe_append_club_offer
 from .cart_service import (
     CartItemRequest,
     create_cart_checkout,
@@ -59,6 +69,7 @@ from .guardrails import (
     detect_commerce_inquiry,
 )
 from .models import AgentResult, IncomingMessage, SalesInterpretation
+from .site_knowledge import STORE_URL
 from .turn_runtime import LLMCallBudgetExceeded
 from .payment_service import (
     inspect_current_cart,
@@ -114,16 +125,17 @@ Não produza fatos comerciais nem diga que um produto existe.
 """.strip()
 
 SALES_RESPONDER_INSTRUCTIONS = """
-Você é um vendedor objetivo e prestativo da XNamai.
+Você redige a resposta comercial ao cliente da XNamai.
 Use exclusivamente os fatos comerciais retornados pela fonte oficial no bloco FACTS.
 Não invente produto, preço, estoque, promoção, disponibilidade, Pix, parcelamento ou cupom.
 Se um fato não estiver em FACTS, diga que não foi informado.
-Responda em português do Brasil, de forma curta para WhatsApp.
-Estilo: responda primeiro ao pedido; sem aberturas genéricas (Claro/Com certeza);
-no máximo uma pergunta principal por mensagem comercial; preserve URLs completas;
-no máximo um CTA. Não termine toda resposta automaticamente com outra pergunta;
-deixe o cliente reagir quando os produtos já foram apresentados.
-Apresente normalmente no máximo três opções relevantes.
+Responda em português do Brasil, respeitando o formato do canal. Preserve URLs completas.
+Em buscas de atacado ou abastecimento, apresente normalmente até seis opções
+relevantes e variadas, agrupando por categoria quando houver mais de uma. Em uma
+consulta muito específica, mostre somente as correspondências realmente confirmadas.
+Trate o carrinho como pedido em rascunho: depois de incluir itens, convide o cliente
+a enviar outros produtos e quantidades. Só conduza para revisão, frete ou pagamento
+quando ele disser que terminou ou pedir explicitamente para fechar.
 Quando FACTS contiver uma lista de produtos, preserve a ordem recebida e numere as opções
 como 1, 2 e 3. Não altere essa ordem, pois ela será usada nas referências posteriores.
 Quando FACTS.match_status for ambiguous, apresente as correspondências plausíveis e peça
@@ -152,7 +164,7 @@ lista o que o agente pode fazer; não afirme incapacidade se a capacidade existi
 """.strip()
 
 SALES_CLARIFICATION_INSTRUCTIONS = """
-Você é um vendedor da XNamai no WhatsApp.
+Você redige a pergunta de esclarecimento do atendimento da XNamai.
 Faça uma resposta curta para obter no máximo DUAS informações relacionadas que
 realmente mudariam a busca. Considere o histórico, a interpretação e DISCOVERY_STATE.
 Não transforme a conversa em questionário. Não pergunte novamente informação já
@@ -166,6 +178,8 @@ ou estilo?" sem antes deixar clara a categoria do produto.
 Não afirme produto, preço, estoque, promoção ou condição comercial, pois a fonte oficial ainda
 não foi consultada. Responda apenas com uma frase curta ou até duas perguntas simples
 e relacionadas.
+Quando suggested_question estiver presente, pergunte a mesma informação factual que ela pede;
+não acrescente critérios nem produtos.
 """.strip()
 
 OUT_OF_SCOPE_REPLY = "Posso ajudar por aqui com o atendimento da XNamai."
@@ -406,91 +420,15 @@ SALES_RESPONDER_INSTRUCTIONS = (
     f"{SALES_RESPONDER_INSTRUCTIONS}\n\n{CHECKOUT_FLOW_INSTRUCTIONS}"
 )
 
-_ACTION_TO_PLAN = {
-    "product_search": "product_search",
-    "product_price": "price",
-    "product_inventory": "inventory",
-    "coupon_search": "coupon",
-}
-
-
-def _is_greeting(text: str | None) -> bool:
-    normalized = " ".join((text or "").lower().strip().split()).strip("!?.,")
-    return normalized in {"oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "oi tudo bem", "olá tudo bem", "ola tudo bem"}
-
-
 def deterministic_scope(text: str | None) -> dict[str, Any]:
+    """Domain + keyword plan when the interpreter is unavailable (Intent Router)."""
     value = (text or "").strip()
-    normalized = value.lower()
-    if _is_greeting(value):
-        return {"domain": "greeting", "action": "greeting", "_source": "fallback"}
-    if detect_commerce_inquiry(value) or normalized.startswith(("tem ", "vocês têm ", "voces tem ", "vende ")) or any(term in normalized for term in ("comprar", "adquirir", "quero ", "procuro", "busco", "orçamento", "orcamento", "comparar", "recomende")):
+    domain = domain_from_text(value, commerce_inquiry=detect_commerce_inquiry(value))
+    if domain == "commerce":
         plan = deterministic_sales_plan(value) or {}
         return {"domain": "commerce", **plan, "_source": "fallback"}
-    store_terms = ("xnamai", "xnamai", "loja", "pedido", "compra", "atendimento comercial", "catálogo", "catalogo")
-    if any(term in normalized for term in store_terms):
-        return {"domain": "store_general", "action": "store_general", "_source": "fallback"}
-    return {"domain": "out_of_scope", "action": "scope_refusal", "_source": "fallback"}
-
-
-def _normalize_semantic_plan(parsed: dict[str, Any]) -> dict[str, Any] | None:
-    domain = parsed.get("domain")
-    if domain not in {"commerce", "raffle", "greeting", "store_general", "out_of_scope"}:
-        return None
-    normalized: dict[str, Any] = {"domain": domain, "action": parsed.get("action"), "_source": "openai"}
-    if domain != "commerce":
-        return normalized
-    action = parsed.get("action")
-    goal = parsed.get("goal")
-    if not action and goal:
-        action = {"find": "product_search", "recommend": "recommendation", "compare": "product_comparison", "inspect": "product_price", "buy": "purchase_intent", "discover": "clarification"}.get(goal)
-    allowed = {"purchase_intent", "product_search", "recommendation", "product_price", "product_inventory", "product_comparison", "coupon_search", "clarification"}
-    if action not in allowed:
-        return None
-    subject = parsed.get("subject") if isinstance(parsed.get("subject"), dict) else {}
-    constraints_input = parsed.get("constraints") if isinstance(parsed.get("constraints"), dict) else {}
-    query = subject.get("query") or parsed.get("product_query") or subject.get("product_type") or parsed.get("product_type") or subject.get("model") or parsed.get("model") or subject.get("reference") or parsed.get("reference") or subject.get("ean") or parsed.get("ean") or ""
-    filters: dict[str, Any] = {}
-    for key in ("brand", "model", "reference", "ean", "budget_min", "budget_max", "attributes"):
-        value = subject.get(key) if key in {"brand", "model", "reference", "ean"} else constraints_input.get(key, parsed.get(key))
-        if value is not None:
-            filters[key] = value
-    attributes = constraints_input.get("attributes", parsed.get("attributes"))
-    if isinstance(attributes, list) and attributes:
-        query = " ".join([str(query), *[str(item) for item in attributes]]).strip()
-    normalized.update({
-        "intent": action,
-        "goal": goal or {"purchase_intent": "buy", "product_search": "find", "recommendation": "recommend", "product_comparison": "compare", "product_price": "inspect", "product_inventory": "inspect", "coupon_search": "inspect", "clarification": "discover"}.get(action),
-        "subject": {"product_type": subject.get("product_type") or parsed.get("product_type"), "query": str(query).strip(), "brand": filters.get("brand"), "model": filters.get("model"), "reference": filters.get("reference"), "ean": filters.get("ean")},
-        "constraints": {
-            "budget_min": filters.get("budget_min"),
-            "budget_max": filters.get("budget_max"),
-            "attributes": filters.get("attributes") or [],
-            "color": constraints_input.get("color"),
-            "style": constraints_input.get("style"),
-            "material": constraints_input.get("material"),
-            "explicit_no_preferences": constraints_input.get("explicit_no_preferences") or [],
-        },
-        "information_needed": parsed.get("information_needed") or ["catalog"],
-        "needs_clarification": bool(parsed.get("needs_clarification")),
-        "clarification_question": parsed.get("clarification_question"),
-        "query": str(query).strip(),
-        "filters": filters,
-        "budget_max": parsed.get("budget_max"),
-        "product_type": parsed.get("product_type"),
-    })
-    return normalized
-
-
-def _parse_scope(content: str | None) -> dict[str, Any] | None:
-    text = (content or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
-    try:
-        parsed = json.loads(text)
-    except (TypeError, ValueError):
-        return None
-    return _normalize_semantic_plan(parsed) if isinstance(parsed, dict) else None
+    action = {"greeting": "greeting", "store_general": "store_general"}.get(domain, "scope_refusal")
+    return {"domain": domain, "action": action, "_source": "fallback"}
 
 
 def _fallback_interpretation(text: str | None) -> SalesInterpretation:
@@ -498,16 +436,7 @@ def _fallback_interpretation(text: str | None) -> SalesInterpretation:
     subject = legacy.get("subject") if isinstance(legacy.get("subject"), dict) else {}
     constraints = legacy.get("constraints") if isinstance(legacy.get("constraints"), dict) else {}
     filters = legacy.get("filters") if isinstance(legacy.get("filters"), dict) else {}
-    fallback_goal = legacy.get("goal") or {
-        "purchase_intent": "buy",
-        "product_search": "find",
-        "price": "inspect",
-        "inventory": "inspect",
-        "coupon": "inspect",
-        "recommendation": "recommend",
-        "product_comparison": "compare",
-        "clarification": "discover",
-    }.get(legacy.get("intent"))
+    fallback_goal = legacy.get("goal") or goal_for_intent(legacy.get("intent"))
     explicit_catalog_search = bool(
         legacy.get("intent") == "product_search"
         and (
@@ -663,34 +592,7 @@ def interpretation_to_plan(
         query_parts = []
     query = " ".join(query_parts).strip()
 
-    information_needed = set(interpretation.information_needed)
-    inspect_intent = (
-        "inventory" if "inventory" in information_needed
-        else "coupon" if "coupons" in information_needed
-        else "price" if information_needed.intersection({"price", "payment"})
-        else "product_search"
-    )
-    goal_to_intent = {
-        "discover": "clarification",
-        "find": "product_search",
-        "recommend": "recommendation",
-        "compare": "product_comparison",
-        "inspect": inspect_intent,
-        "buy": "clarification",
-        "after_sales": "clarification",
-    }
-    retrieval_signal = any((
-        interpretation.enough_information_to_search,
-        interpretation.ready_for_retrieval,
-        interpretation.stop_clarification,
-    ))
-    if retrieval_signal and interpretation.goal in {"discover", "recommend", "buy"}:
-        intent = "recommendation"
-    else:
-        intent = "clarification" if interpretation.needs_clarification else goal_to_intent.get(
-            interpretation.goal or "discover",
-            "clarification",
-        )
+    intent = intent_from_interpretation(interpretation)
     filters = {
         key: value
         for key, value in {
@@ -927,12 +829,8 @@ async def interpret_message(
 def deterministic_sales_plan(text: str | None) -> dict[str, Any] | None:
     from .product_vocabulary import extract_product_category
 
-    normalized = (text or "").lower()
-    purchase = any(term in normalized for term in ("quero comprar", "quero adquirir", "quero um ", "quero uma ", "gostaria de comprar", "gostaria de um ", "procuro", "busco", "recomende"))
-    action = resolve_commerce_action(text)
-    if purchase and not any(term in normalized for term in ("quanto custa", "preço", "preco", "estoque", "disponibilidade")):
-        action = "purchase_intent"
-    if not action:
+    intent = intent_from_text(text)
+    if not intent:
         return None
     query = extract_product_query(text)
     budget_max = None
@@ -958,19 +856,19 @@ def deterministic_sales_plan(text: str | None) -> dict[str, Any] | None:
     fallback_product_type = None
     fallback_model = None
     if query and not ean_match and not reference:
-        if action == "product_search":
+        if intent == "product_search":
             fallback_model = query
             fallback_product_type = extract_product_category(query)
         else:
             fallback_product_type = (
                 extract_product_category(query)
-                or (query.split()[0] if action == "purchase_intent" else query)
+                or (query.split()[0] if intent == "purchase_intent" else query)
             )
     plan: dict[str, Any] = {
-        "intent": "purchase_intent" if action == "purchase_intent" else _ACTION_TO_PLAN.get(action, "product_search"),
+        "intent": intent,
         "query": query,
         "filters": {"budget_max": budget_max} if budget_max is not None else {},
-        "goal": "recommend" if budget_max is not None or (len(query.split()) > 1 and action == "purchase_intent") else ("buy" if action == "purchase_intent" else None),
+        "goal": "recommend" if budget_max is not None or (len(query.split()) > 1 and intent == "purchase_intent") else ("buy" if intent == "purchase_intent" else None),
         "subject": {
             "product_type": fallback_product_type,
             "query": query,
@@ -981,34 +879,6 @@ def deterministic_sales_plan(text: str | None) -> dict[str, Any] | None:
     }
     plan["subject"].update({"brand": None, "model": fallback_model})
     return plan
-
-
-def _parse_plan(content: str | None) -> dict[str, Any] | None:
-    text = (content or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
-    try:
-        parsed = json.loads(text)
-    except (TypeError, ValueError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    allowed_intents = {"product_search", "price", "inventory", "coupon", "recommendation"}
-    intent = parsed.get("intent")
-    if intent not in allowed_intents:
-        return None
-    query = parsed.get("query")
-    if query is not None and not isinstance(query, str):
-        return None
-    filters = parsed.get("filters")
-    if not isinstance(filters, dict):
-        filters = {}
-    return {
-        "intent": intent,
-        "query": (query or "").strip(),
-        "filters": {key: value for key, value in filters.items() if key in {"brand", "category_id", "budget_max", "style", "color"}},
-        "budget_max": parsed.get("budget_max"),
-    }
 
 
 async def plan_sales_request(message: IncomingMessage) -> dict[str, Any] | None:
@@ -1096,39 +966,18 @@ def _consecutive_clarification_count(recent_turns: list[dict[str, Any]] | None) 
     return count
 
 
-def _known_preferences(interpretation: SalesInterpretation) -> dict[str, Any]:
-    preferences = interpretation.preferences
-    known: dict[str, Any] = {}
-    if preferences.budget_min is not None or preferences.budget_max is not None:
-        known["budget"] = {
-            "min": preferences.budget_min,
-            "max": preferences.budget_max,
-        }
-    for field in ("color", "style", "material", "occasion", "recipient"):
-        value = getattr(preferences, field)
-        if value:
-            known[field] = value
-    if interpretation.subject.brand:
-        known["brand"] = interpretation.subject.brand
-    if preferences.attributes:
-        known["attributes"] = preferences.attributes
-    return known
-
-
-def _subject_identifiable(interpretation: SalesInterpretation) -> bool:
-    subject = interpretation.subject
-    return any((subject.product_type, subject.brand, subject.model, subject.reference, subject.ean))
-
-
 def _discovery_state(
     interpretation: SalesInterpretation,
     recent_turns: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
     clarification_count = _consecutive_clarification_count(recent_turns)
-    known_preferences = _known_preferences(interpretation)
+    # "O que sabemos" vem dos Qualification Slots; o que segue (contagem de
+    # perguntas, force_retrieval) e gate de esclarecimento e fica aqui.
+    qualification = slots_from_interpretation(interpretation)
+    known_preferences = qualification_known_preferences(qualification)
     explicit_no_preferences = list(dict.fromkeys(interpretation.preferences.explicit_no_preferences))
     known_preferences_count = len(known_preferences) + len(explicit_no_preferences)
-    subject_identifiable = _subject_identifiable(interpretation)
+    subject_identifiable = qualification_subject_identifiable(qualification)
     enough_information = interpretation.enough_information_to_search
     force_retrieval = subject_identifiable and any((
         enough_information,
@@ -1232,18 +1081,138 @@ async def _generic_catalog_fast_path(
             ACTION_SELECT_PRODUCT,
             ACTION_SHOW_MEDIA,
             ACTION_SHOW_MORE_MEDIA,
+            ACTION_PURCHASE_GUIDANCE,
             ACTION_START_PURCHASE,
+            ACTION_TRANSACTION,
+            LOCAL_CART_ACTIONS,
             READ_ONLY_ACTIONS,
             resolve_commerce_turn,
         )
 
         decisao = resolve_commerce_turn(message.text or "", state=state)
+        from .order_service import is_order_lookup_request
+        if is_order_lookup_request(message.text):
+            return None
+        from .commerce.generic_catalog import normalize_text
+        curto = normalize_text(message.text or "").strip(" ?!.")
+        if curto == "nao quero cadastrar" and state.pending_action is None:
+            return AgentResult(
+                reply_text="Tudo bem, não vou iniciar um cadastro. Posso ajudar com produtos ou pedidos.",
+                intent="general", response_metadata={"domain": "commerce", "response_source": "contextual_action"},
+            )
+        if curto in {"o mais barato", "qual o mais barato", "mais barato"} and state is not None:
+            from decimal import Decimal, InvalidOperation
+            apresentados = list(state.last_presented_products or [])
+            if not apresentados:
+                return AgentResult(
+                    reply_text="Só tenho o produto selecionado no momento. Quer ver outras opções para comparar preços?",
+                    intent="commerce", safety_reason="commerce_clarification",
+                    response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                       "response_source": "contextual_clarification"},
+                )
+            precos = []
+            for item in apresentados:
+                detalhe = await execute_tool("get_product", {"product_id": item.product_id})
+                produto = detalhe.get("product") if isinstance(detalhe.get("product"), dict) else detalhe
+                try:
+                    preco = Decimal(str(produto.get("price"))) if detalhe.get("ok") else None
+                except (InvalidOperation, TypeError, ValueError):
+                    preco = None
+                if preco is None or not preco.is_finite():
+                    return AgentResult(
+                        reply_text="Não consegui confirmar o preço de todos os modelos apresentados para comparar.",
+                        intent="commerce", safety_reason="product_price_unavailable",
+                        response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                           "response_source": "contextual_clarification"},
+                    )
+                precos.append((preco, item.position))
+            menor = min(preco for preco, _ in precos)
+            posicoes = [posicao for preco, posicao in precos if preco == menor]
+            if len(posicoes) > 1:
+                return AgentResult(
+                    reply_text="Os modelos apresentados de menor preço empataram. Qual posição você prefere?",
+                    intent="commerce", safety_reason="commerce_clarification",
+                    response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                       "response_source": "contextual_clarification"},
+                )
+            from .commerce.turn_flow import run_commerce_turn
+            escolha = await run_commerce_turn(str(posicoes[0]), state=state, execute=execute_tool)
+            resposta = _render_commerce_turn(escolha, state)
+            if resposta is not None:
+                resposta.reply_text = "O mais barato entre os modelos apresentados é:\n" + resposta.reply_text
+            return resposta
+        if decisao.action == ACTION_TRANSACTION and state is not None and not state.cart_session_id:
+            itens = list(state.cart_items or [])
+            if curto.startswith("nao ") or curto.startswith("agora nao"):
+                resposta = "Tudo bem. Não iniciarei o pagamento agora; seu carrinho continua disponível."
+                etapa = "shopping"
+            elif not itens:
+                resposta = (
+                    "Para seguir ao pagamento, primeiro preciso de um item no carrinho. "
+                    "Se quiser o produto escolhido, diga 'coloca no carrinho'."
+                    if state.active_product else
+                    "Para seguir ao pagamento, escolha um produto e adicione-o ao carrinho."
+                )
+                etapa = "shopping"
+            elif "condicao" in curto or "forma" in curto:
+                resposta = "As condições de pagamento precisam ser confirmadas na revisão do pedido. Diga 'vamos fechar' para conferir seu carrinho."
+                etapa = "checkout"
+            elif curto.startswith("como "):
+                resposta = "Para pagar, primeiro revisamos os itens do carrinho. Diga 'vamos fechar' para conferir o pedido antes de confirmar."
+                etapa = "checkout"
+            else:
+                resposta = "Seu carrinho está pronto para revisão. Diga 'vamos fechar' para conferir os itens antes de pagar."
+                etapa = "checkout"
+            return AgentResult(
+                reply_text=resposta, intent="commerce",
+                response_metadata={"domain": "commerce", "active_topic": "checkout",
+                                   "purchase_stage": etapa, "response_source": "contextual_action",
+                                   "commerce_action": "checkout_question", "used_commerce_provider": False},
+            )
+        if state is not None and not state.active_product and len(state.last_presented_products) > 1 and curto in {"sim", "nao", "esse", "essa", "aquele"}:
+            pergunta = (
+                "Qual modelo você quer descartar: o primeiro ou o segundo?" if curto == "nao" else
+                "Qual deles você quer: o primeiro ou o segundo modelo?"
+            )
+            return AgentResult(
+                reply_text=pergunta, intent="commerce", safety_reason="commerce_clarification",
+                response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                   "response_source": "contextual_clarification", "used_commerce_provider": False},
+            )
+        if state is not None and not state.active_product and not state.last_presented_products and state.last_catalog_query and curto in {"nao esse", "me mostra outro", "outro"}:
+            resposta = (
+                "Ainda não encontrei um modelo para substituir. Qual tipo de produto você procura?"
+                if curto == "nao esse" else
+                "Ainda não tenho uma alternativa encontrada. Você aceita mudar alguma característica do produto?"
+            )
+            return AgentResult(
+                reply_text=resposta, intent="commerce", safety_reason="commerce_clarification",
+                response_metadata={"domain": "commerce", "active_topic": "product_catalog",
+                                   "response_source": "contextual_clarification", "used_commerce_provider": False},
+            )
+        if (
+            state is not None and state.active_product
+            and curto in {"outro", "outra", "me mostra outro", "mostra outro", "tem outro", "tem outra"}
+        ):
+            apresentados = [
+                item for item in (state.last_presented_products or [])
+                if item.product_id != state.active_product.product_id
+            ]
+            if len(apresentados) == 1:
+                from .commerce.turn_flow import run_commerce_turn
+                escolha = await run_commerce_turn(str(apresentados[0].position), state=state, execute=execute_tool)
+                return _render_commerce_turn(escolha, state)
         decidiveis = READ_ONLY_ACTIONS | {
+            ACTION_PURCHASE_GUIDANCE,
             ACTION_START_PURCHASE,
             ACTION_CONFIRM_PENDING,
             ACTION_REJECT_PENDING,
-        }
+        } | LOCAL_CART_ACTIONS
         if decisao.action not in decidiveis:
+            return None
+        if decisao.action in LOCAL_CART_ACTIONS and state is not None and not (
+            state.active_product or state.last_presented_products or state.cart_items
+        ):
             return None
         # Busca e selecao sem contexto nenhum continuam passando pelo fluxo
         # legado antes, para nao atropelar interpretacao mais rica que ele
@@ -1288,6 +1257,11 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
         OUTCOME_MEDIA_UNAVAILABLE,
         OUTCOME_PRODUCT_NOT_FOUND,
         OUTCOME_PROVIDER_UNAVAILABLE,
+        OUTCOME_CART,
+        OUTCOME_ORDER_INCOMPLETE,
+        OUTCOME_ORDER_READY,
+        OUTCOME_ORDER_REVIEW,
+        OUTCOME_PURCHASE_GUIDANCE,
         OUTCOME_PURCHASE_INTENT,
     )
     from .site_knowledge import STORE_URL
@@ -1325,11 +1299,34 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
 
     print("[sales.turn]", {"outcome": resultado.outcome, "action": resultado.action})
 
+    if resultado.outcome == OUTCOME_PURCHASE_GUIDANCE:
+        return AgentResult(
+            reply_text=(
+                "Para comprar na XNamai, primeiro faça seu cadastro. Com CNPJ, "
+                f"o cadastro é feito diretamente no catálogo: {STORE_URL} "
+                "Com CPF, o cadastro é feito pelo atendimento.\n\n"
+                "Depois da liberação, escolha os produtos e as quantidades, "
+                "adicione ao carrinho, finalize o pedido e selecione a forma de entrega. "
+                "O pedido mínimo publicado atualmente é de R$ 800,00.\n\n"
+                "Você quer se cadastrar com CPF ou CNPJ?"
+            ),
+            intent="commerce",
+            handoff_required=False,
+            response_metadata=_metadados(
+                used_commerce_provider=False,
+                active_topic="purchase_guidance",
+                club_offer_shown=bool(getattr(state, "club_offer_shown", False)),
+            ),
+        )
+
     if resultado.outcome == OUTCOME_PURCHASE_INTENT:
         reply, offered = maybe_append_club_offer(
-            f"Você pode comprar pelo catálogo oficial da XNamai: {STORE_URL} "
-            "Se quiser ajuda para encontrar algo, diga o tipo de produto ou o que "
-            "você precisa — por exemplo, cabo, carregador, fone ou capa.",
+            "Vamos montar um pedido de atacado variado 🛒 Você pode enviar, em uma "
+            "única mensagem, vários produtos ou categorias e as quantidades que "
+            "procura — pode incluir mais de um tipo de produto. "
+            "Vou manter tudo em rascunho para você continuar adicionando "
+            "itens e só revisaremos quando disser que terminou. "
+            f"Veja o catálogo oficial da XNamai: {STORE_URL}",
             state=state,
         )
         return AgentResult(
@@ -1339,6 +1336,8 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
             response_metadata=_metadados(
                 used_commerce_provider=False,
                 active_topic="purchase_guidance",
+                purchase_stage="draft_building",
+                order_draft_open=True,
                 club_offer_shown=offered or getattr(state, "club_offer_shown", False),
             ),
         )
@@ -1359,6 +1358,79 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 used_commerce_provider=False,
                 active_topic="product_catalog",
                 club_offer_shown=offered or bool(getattr(state, "club_offer_shown", False)),
+            ),
+        )
+
+    if resultado.outcome == OUTCOME_CART and state is not None:
+        itens = list(state.cart_items or [])
+        resumo = ", ".join(f"{item.quantity} × {item.name or 'produto'}" for item in itens)
+        return AgentResult(
+            reply_text=(f"Carrinho atualizado: {resumo}." if itens else "Seu carrinho está vazio."),
+            intent="commerce", commercial_data={"cart_items": resultado.products},
+            response_metadata=_metadados(
+                active_topic="cart", purchase_stage="shopping", used_commerce_provider=False,
+                cart_state={"cart_items": [item.model_dump(mode="json") for item in itens]},
+                commerce_action=resultado.action,
+            ),
+        )
+
+    if resultado.outcome in (OUTCOME_ORDER_INCOMPLETE, OUTCOME_ORDER_REVIEW, OUTCOME_ORDER_READY):
+        revisao = getattr(resultado, "review", None)
+        _MISSING_TEXT = {
+            "customer_id": "Para fechar o pedido, primeiro preciso confirmar seu cadastro. Diga 'quero me cadastrar' para continuarmos.",
+            "payment_condition": "Para fechar o pedido, me diga qual condição de pagamento você prefere.",
+            "preco_unitario": "Não consegui confirmar o preço de um dos itens do carrinho agora. Vou verificar novamente em instantes.",
+            "quantidade": "A quantidade de um dos itens do carrinho ficou inválida. Pode confirmar quantas unidades você quer?",
+            "estoque_insuficiente": "Um dos itens do carrinho não tem estoque suficiente no momento.",
+            "itens": "Seu carrinho está vazio. Escolha um produto para eu adicionar antes de fechar o pedido.",
+        }
+        if resultado.outcome == OUTCOME_ORDER_INCOMPLETE:
+            motivo = next((codigo for codigo in (resultado.missing or []) if codigo in _MISSING_TEXT), None)
+            if motivo is None and (revisao.unconfirmed if revisao else []):
+                texto = "Ainda estou confirmando o estoque de um dos itens do carrinho antes de fechar o pedido."
+            else:
+                texto = _MISSING_TEXT.get(
+                    motivo, "Ainda falta uma informação para fechar o pedido. Pode me dizer o que deseja ajustar?"
+                )
+            return AgentResult(
+                reply_text=texto,
+                intent="commerce",
+                safety_reason="commerce_clarification",
+                response_metadata=_metadados(
+                    active_topic="checkout", purchase_stage="checkout", used_commerce_provider=False,
+                    commerce_action=resultado.action,
+                ),
+            )
+        if resultado.outcome == OUTCOME_ORDER_REVIEW:
+            linhas = quebra.join(
+                f"{linha.quantity} × {linha.name or linha.product_id}"
+                + (f" — R$ {linha.subtotal:.2f}" if linha.subtotal is not None else "")
+                for linha in (revisao.lines if revisao else [])
+            )
+            total = f"Total: R$ {revisao.total:.2f}" if revisao and revisao.total is not None else ""
+            texto = quebra.join(
+                parte for parte in (
+                    "Confira seu pedido antes de confirmar:", linhas, total,
+                    "Se estiver certo, responda 'confirmo o pedido'.",
+                ) if parte
+            )
+            return AgentResult(
+                reply_text=texto,
+                intent="commerce",
+                response_metadata=_metadados(
+                    active_topic="checkout", purchase_stage="checkout", used_commerce_provider=False,
+                    commerce_action=resultado.action,
+                ),
+            )
+        return AgentResult(
+            reply_text=(
+                "Seu pedido está pronto para confirmação. Nossa equipe vai concluir o "
+                "fechamento com você em seguida."
+            ),
+            intent="commerce",
+            response_metadata=_metadados(
+                active_topic="checkout", purchase_stage="checkout", used_commerce_provider=False,
+                commerce_action=resultado.action,
             ),
         )
 
@@ -1484,7 +1556,15 @@ async def generate_clarification_reply(
         interpretation.clarification_question
         or "Qual característica ou preferência é mais importante para você?"
     )
-    if interpretation._source == "openai" and interpretation.clarification_question:
+    # A pergunta do interpretador e rascunho de um CLASSIFICADOR, sem persona.
+    # Com persona publicada habilitada, ela passa pelo compositor (que injeta a
+    # persona) como suggested_question; sem persona, segue direto como antes.
+    persona_voice = bool(getattr(settings, "agent_db_persona_enabled", False))
+    if (
+        interpretation._source == "openai"
+        and interpretation.clarification_question
+        and not persona_voice
+    ):
         return _mark_sales_result(
             AgentResult(
                 reply_text=html.unescape(interpretation.clarification_question.strip()),
@@ -1521,12 +1601,31 @@ async def generate_clarification_reply(
         "context_note": context_note,
         "DISCOVERY_STATE": discovery_state or _discovery_state(interpretation, recent_turns),
     }
+    if interpretation.clarification_question:
+        request_context["suggested_question"] = interpretation.clarification_question
     try:
         from .openai_errors import OpenAIGatewayError
         from .openai_gateway import generate_text_output
+        from .prompt_compiler import (
+            legacy_contract_extra_blocks,
+            resolve_system_instructions,
+        )
 
+        clarification_contract = (
+            f"{SALES_CLARIFICATION_INSTRUCTIONS}\n\n"
+            f"{channel_system_hint(message.channel)}"
+        )
+        clarification_instructions = resolve_system_instructions(
+            fallback_instructions=clarification_contract,
+            incoming=message,
+            recent_turns=recent_turns,
+            extra_system_blocks=legacy_contract_extra_blocks(
+                clarification_contract,
+                tag="sales_clarification_contract",
+            ),
+        )
         clarification_messages = [
-            {"role": "system", "content": SALES_CLARIFICATION_INSTRUCTIONS},
+            {"role": "system", "content": clarification_instructions},
             *normalized_history,
             {"role": "user", "content": json.dumps(request_context, ensure_ascii=False)},
         ]
@@ -1573,7 +1672,7 @@ async def generate_clarification_reply(
 async def _sales_response_with_openai(
     message: IncomingMessage,
     plan: dict[str, Any],
-    tray_result: AgentResult,
+    provider_result: AgentResult,
     interpretation: SalesInterpretation | None = None,
     state: CommerceConversationState | None = None,
     recent_turns: list[dict[str, Any]] | None = None,
@@ -1584,7 +1683,7 @@ async def _sales_response_with_openai(
     )
 
     settings = get_settings()
-    if not settings.openai_api_key or tray_result.safety_reason in {
+    if not settings.openai_api_key or provider_result.safety_reason in {
         "commerce_provider_unavailable", "product_match_failed", "product_not_found",
         "ambiguous_product", "product_context_missing", "coupon_not_found",
         "order_not_found", "order_status_technical_failure",
@@ -1593,7 +1692,7 @@ async def _sales_response_with_openai(
         "customer_orders_lookup_technical_failure",
     }:
         return None
-    if (tray_result.commercial_data or {}).get("input_template"):
+    if (provider_result.commercial_data or {}).get("input_template"):
         return None
     try:
         from .openai_errors import OpenAIGatewayError
@@ -1655,7 +1754,7 @@ async def _sales_response_with_openai(
                         ),
                         "AVAILABLE_CAPABILITIES": build_capability_catalog(),
                         "RESPONSE_CONTRACT": _responder_contract(state),
-                        "FACTS": tray_result.commercial_data or {"summary": tray_result.reply_text},
+                        "FACTS": provider_result.commercial_data or {"summary": provider_result.reply_text},
                     },
                     ensure_ascii=False,
                 ),
@@ -1690,13 +1789,13 @@ async def _sales_response_with_openai(
             reply_text=html.unescape(content.strip()),
             intent="commerce",
             handoff_required=False,
-            safety_reason=tray_result.safety_reason,
-            commercial_data=tray_result.commercial_data,
-            response_metadata=dict(tray_result.response_metadata),
+            safety_reason=provider_result.safety_reason,
+            commercial_data=provider_result.commercial_data,
+            response_metadata=dict(provider_result.response_metadata),
         )
         final_result.response_metadata.setdefault(
             "factual_fallback_text",
-            tray_result.reply_text,
+            provider_result.reply_text,
         )
         if envelope is not None:
             final_result.response_metadata["agent_turn_envelope"] = envelope.model_dump(
@@ -1708,7 +1807,7 @@ async def _sales_response_with_openai(
             goal=plan.get("goal"),
             response_source="openai",
             used_openai_responder=True,
-            used_commerce_provider=bool(tray_result.response_metadata.get("used_commerce_provider", True)),
+            used_commerce_provider=bool(provider_result.response_metadata.get("used_commerce_provider", True)),
         )
     except (APIError, OpenAIGatewayError, LLMCallBudgetExceeded, ValueError, TypeError) as exc:
         print("[sales.responder] failed", {"error_type": type(exc).__name__})
@@ -2373,7 +2472,11 @@ async def _execute_compiled_product_retrieval(
         if product_lookup_failed:
             print("[sales.retrieval.empty]", {"reason": "catalog_lookup_failed"})
             return AgentResult(
-                reply_text="Não consegui consultar as informações da loja neste momento. Tente novamente em instantes.",
+                reply_text=(
+                    "Não consegui consultar os produtos da loja neste momento. "
+                    "Você pode ver preços e disponibilidade no catálogo oficial: "
+                    f"{STORE_URL}"
+                ),
                 intent="commerce",
                 handoff_required=False,
                 safety_reason="commerce_provider_unavailable",
@@ -2388,7 +2491,11 @@ async def _execute_compiled_product_retrieval(
                 safety_reason="product_not_found",
             )
         return AgentResult(
-            reply_text="Não encontrei opções disponíveis para esses critérios agora.",
+            reply_text=(
+                "Não localizei uma opção que confirme esses critérios agora. "
+                "Posso refazer a busca priorizando a característica mais importante "
+                f"para você, ou você pode consultar o catálogo oficial: {STORE_URL}"
+            ),
             intent="commerce",
             handoff_required=False,
             safety_reason="recommendation_no_match",
@@ -2464,7 +2571,11 @@ async def _execute_compiled_product_retrieval(
                 safety_reason="product_not_found",
             )
         return AgentResult(
-            reply_text="Encontrei produtos no catálogo, mas nenhum atende aos critérios objetivos informados agora.",
+            reply_text=(
+                "Encontrei itens relacionados, mas nenhum confirma todos os critérios "
+                "que você informou. Qual característica é indispensável para eu "
+                "refazer a busca sem te mostrar opções inadequadas?"
+            ),
             intent="commerce",
             handoff_required=False,
             safety_reason="recommendation_no_match",
@@ -2532,8 +2643,8 @@ async def _execute_compiled_product_retrieval(
                         )
                 else:
                     # Sem fallback de fornecedor: o indice vazio e apenas
-                    # observado. A setting AGENT_CATALOG_INDEX_FALLBACK_TO_TRAY
-                    # saiu do Settings e nao pode voltar por getattr default.
+                    # observado. A setting de fallback para o fornecedor
+                    # anterior saiu do Settings e nao pode voltar por getattr default.
                     print(
                         "[catalog.index.empty]",
                         {"reason": "catalog_index_empty_or_unavailable"},
@@ -3098,7 +3209,7 @@ async def handle_sales_message(
 ) -> AgentResult | None:
     history_token = _sales_recent_turns.set(recent_turns)
     try:
-        return await _handle_sales_message_inner(
+        result = await _handle_sales_message_inner(
             message,
             facts,
             customer_context,
@@ -3108,6 +3219,58 @@ async def handle_sales_message(
         )
     finally:
         _sales_recent_turns.reset(history_token)
+    if result is not None:
+        _attach_dialogue_observation(
+            result,
+            message=message,
+            interpretation=semantic_plan if isinstance(semantic_plan, SalesInterpretation) else None,
+            commerce_state=commerce_state,
+        )
+    return result
+
+
+def _attach_dialogue_observation(
+    result: AgentResult,
+    *,
+    message: IncomingMessage,
+    interpretation: SalesInterpretation | None,
+    commerce_state: CommerceConversationState | None,
+) -> None:
+    """MESSAGE -> INTENT -> DIALOGUE PHASE -> QUALIFICATION, recorded for this turn.
+
+    Observation only: nothing decides from it yet (the Scope Send Gate will).
+    Never raises into the reply path.
+    """
+    try:
+        from .sales.dialogue_phase import resolve_dialogue_phase
+        from .sales.qualification_slots import build_qualification_state
+
+        intent = None
+        if interpretation is not None and interpretation.domain == "commerce":
+            intent = route_sales_intent(intent_from_interpretation(interpretation))
+        dialogue = resolve_dialogue_phase(
+            commerce_state,
+            intent=intent,
+            interpretation=interpretation,
+            message_text=message.text,
+            handoff_active=bool(result.handoff_required),
+        )
+        observation: dict[str, Any] = {
+            "phase": dialogue.phase,
+            "state_phase": dialogue.state_phase,
+            "handoff_active": dialogue.handoff_active,
+        }
+        if interpretation is not None:
+            qualification = build_qualification_state(
+                interpretation,
+                message_text=message.text,
+                state_preferences=commerce_state.active_preferences if commerce_state else None,
+            )
+            observation["qualification"] = qualification.summary()
+        result.response_metadata = dict(result.response_metadata or {})
+        result.response_metadata["dialogue"] = observation
+    except Exception as exc:  # noqa: BLE001 - observation never breaks a reply
+        print("[sales.dialogue.observation_failed]", {"error_type": type(exc).__name__})
 
 
 async def _handle_sales_message_inner(
@@ -3128,20 +3291,34 @@ async def _handle_sales_message_inner(
         )
     state = commerce_state or CommerceConversationState()
 
-    club_result = handle_club_turn(message.text, state=state)
-    if club_result is not None:
-        return club_result
+    from .account_flows import handle_account_flows
 
-    registration_result = await handle_customer_registration_turn(
-        message.text,
-        state=state,
-        execute=execute_tool,
-        registration_enabled=(
-            "create_customer" in runtime_commerce_capabilities()
-        ),
-    )
-    if registration_result is not None:
-        return registration_result
+    account_result = await handle_account_flows(message, state=state, execute=execute_tool)
+    if account_result is not None:
+        return account_result
+
+    # Uma pergunta sobre mix, preços e modelo comercial pede orientação,
+    # não uma busca literal do texto inteiro como se ele fosse um SKU.
+    from .store_guidance import build_store_guidance
+
+    store_guidance = build_store_guidance(message.text, interpretation)
+    if store_guidance is not None:
+        return _mark_sales_result(
+            AgentResult(
+                reply_text=store_guidance.reply_text,
+                intent="commerce",
+                handoff_required=False,
+                response_metadata={
+                    "active_topic": "store_product_overview",
+                    "guidance_topics": list(store_guidance.topics),
+                },
+            ),
+            interpretation=interpretation,
+            goal=interpretation.goal if interpretation else "discover",
+            response_source="official_store_guidance",
+            used_openai_responder=False,
+            used_commerce_provider=False,
+        )
 
     # Pergunta generica de catalogo ("o que voces vendem?") nao sobrevive ao
     # resto desta funcao: ha ramos que devolvem None antes do fast path mais
@@ -4025,7 +4202,7 @@ async def _handle_sales_message_inner(
                 elif candidates:
                     unresolved_candidates = [
                         candidate
-                        for candidate in candidates[:3]
+                        for candidate in candidates[:CUSTOMER_RESULT_LIMIT]
                         if isinstance(candidate, dict)
                     ]
                     log_purchase_progress(
@@ -4094,7 +4271,7 @@ async def _handle_sales_message_inner(
             unresolved_purchase_items = 1
             unresolved_candidates = [
                 candidate
-                for candidate in lookup_products[:3]
+                for candidate in lookup_products[:CUSTOMER_RESULT_LIMIT]
                 if isinstance(candidate, dict)
             ]
             log_purchase_progress(
@@ -4728,8 +4905,12 @@ async def _handle_sales_message_inner(
             fallback_reason=cart_result.safety_reason or "sales_responder_unavailable",
         )
     discovery_state = _discovery_state(interpretation, recent_turns) if interpretation else None
-    if discovery_state and discovery_state["force_retrieval"] and plan.get("intent") == "clarification":
-        plan = {**plan, "intent": "recommendation"}
+    route = route_sales_intent(
+        plan.get("intent"),
+        force_retrieval=bool(discovery_state and discovery_state["force_retrieval"]),
+    )
+    if route is not None and route.forced_retrieval:
+        plan = {**plan, "intent": route.intent}
     print("[sales.agent] planner", {
         "source": plan.get("_source", "fallback"),
         "action": plan.get("intent"),
@@ -4785,24 +4966,17 @@ async def _handle_sales_message_inner(
             used_commerce_provider=False,
         )
 
-    action = {
-        "product_search": "product_search",
-        "recommendation": "product_search",
-        "product_comparison": "product_search",
-        "price": "product_price",
-        "inventory": "product_inventory",
-        "coupon": "coupon_search",
-    }.get(str(plan.get("intent")))
+    action = route.commerce_action if route is not None else None
     if not action:
         return None
 
     if interpretation is not None and resolved_product is not None:
-        tray_result = await _execute_contextual_product_lookup(
+        provider_result = await _execute_contextual_product_lookup(
             interpretation,
             resolved_product,
         )
     elif interpretation is not None and action == "product_search":
-        tray_result = await _execute_compiled_product_retrieval(interpretation)
+        provider_result = await _execute_compiled_product_retrieval(interpretation)
     else:
         queries = [str(plan.get("query") or "").strip()]
         code_value = re.sub(r"^(?:ean|sku|ref(?:er[êe]ncia)?)\s+", "", queries[0], flags=re.IGNORECASE)
@@ -4816,11 +4990,11 @@ async def _handle_sales_message_inner(
             if brand:
                 queries.append(brand)
         queries = list(dict.fromkeys(query for query in queries if query or action == "coupon_search"))
-        tray_result = None
+        provider_result = None
         last_raw_result = None
         for attempt, query in enumerate(queries[:3], start=1):
             attempt_plan = {**plan, "query": query, "subject": {**(plan.get("subject") or {}), "query": query}}
-            print("[sales.agent] tray_request", {"capability": action, "attempt": attempt, "strategy": "initial" if attempt == 1 else "progressive"})
+            print("[sales.agent] commerce_request", {"capability": action, "attempt": attempt, "strategy": "initial" if attempt == 1 else "progressive"})
             raw_result = await handle_commerce_message(
                 message,
                 facts,
@@ -4829,23 +5003,23 @@ async def _handle_sales_message_inner(
                 query=query,
             )
             last_raw_result = raw_result
-            print("[sales.agent] tray_result", {"ok": raw_result is not None and raw_result.safety_reason != "commerce_provider_unavailable", "results_count": len((raw_result.commercial_data or {}).get("products", [])) if raw_result else 0})
-            tray_result = _ranked_result(raw_result, attempt_plan) if raw_result else None
-            if tray_result:
-                print("[sales.agent] ranking", {"input_count": len((raw_result.commercial_data or {}).get("products", [])), "output_count": len((tray_result.commercial_data or {}).get("products", []))})
+            print("[sales.agent] commerce_result", {"ok": raw_result is not None and raw_result.safety_reason != "commerce_provider_unavailable", "results_count": len((raw_result.commercial_data or {}).get("products", [])) if raw_result else 0})
+            provider_result = _ranked_result(raw_result, attempt_plan) if raw_result else None
+            if provider_result:
+                print("[sales.agent] ranking", {"input_count": len((raw_result.commercial_data or {}).get("products", [])), "output_count": len((provider_result.commercial_data or {}).get("products", []))})
                 break
             if raw_result and raw_result.safety_reason == "commerce_provider_unavailable":
-                tray_result = raw_result
+                provider_result = raw_result
                 break
             if raw_result and raw_result.safety_reason not in {"product_not_found", "ambiguous_product"}:
-                tray_result = raw_result
+                provider_result = raw_result
                 break
-        if tray_result is None:
-            tray_result = last_raw_result
-    if tray_result is None:
+        if provider_result is None:
+            provider_result = last_raw_result
+    if provider_result is None:
         return None
     if interpretation is not None:
-        tray_result.response_metadata.update({
+        provider_result.response_metadata.update({
             "active_topic": interpretation.active_topic,
             "purchase_stage": interpretation.purchase_stage,
             "active_preferences": interpretation.preferences.model_dump(
@@ -4854,10 +5028,10 @@ async def _handle_sales_message_inner(
             ),
         })
         if resolved_product is not None:
-            tray_result.response_metadata["active_product"] = resolved_product.model_dump(mode="json")
+            provider_result.response_metadata["active_product"] = resolved_product.model_dump(mode="json")
     if (
         plan.get("intent") in {"purchase_intent", "recommendation", "clarification"}
-        and tray_result.safety_reason == "product_not_found"
+        and provider_result.safety_reason == "product_not_found"
         and not (discovery_state and discovery_state["force_retrieval"])
     ):
         if interpretation:
@@ -4872,27 +5046,27 @@ async def _handle_sales_message_inner(
     final = await _sales_response_with_openai(
         message,
         plan,
-        tray_result,
+        provider_result,
         interpretation,
-        evolve_commerce_state(state, tray_result),
+        evolve_commerce_state(state, provider_result),
     )
     print("[sales.agent] responder", {"source": "openai" if final else "deterministic_fallback"})
     if final:
         return final
-    technical_failure = tray_result.safety_reason in {
+    technical_failure = provider_result.safety_reason in {
         "commerce_provider_unavailable",
         "product_match_failed",
     }
     response_source = "technical_fallback" if technical_failure else "deterministic_fallback"
     return _mark_sales_result(
-        tray_result,
+        provider_result,
         interpretation=interpretation,
         goal=plan.get("goal"),
         response_source=response_source,
         used_openai_responder=False,
         used_commerce_provider=True,
         fallback_reason=(
-            tray_result.safety_reason
+            provider_result.safety_reason
             if response_source == "technical_fallback"
             else "sales_responder_unavailable"
         ),

@@ -8,7 +8,7 @@ O cadastro de cliente possui fluxo determinístico próprio: coleta PF/PJ, valid
 os dados, mostra uma revisão mascarada e exige confirmação explícita antes de
 `create_customer`. A mutação fica desligada por padrão e só é habilitada após
 homologação com `MERCOS_CUSTOMER_MUTATIONS_ENABLED=true`. Consulte a
-[comparação com a base NSAgent](docs/nsagent_xnamai_customer_registration_analysis.md).
+[comparação com a base de referência](docs/nsagent_xnamai_customer_registration_analysis.md).
 
 Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-reliability.md).
 

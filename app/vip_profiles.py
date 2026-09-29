@@ -35,31 +35,13 @@ def pick_vip_nickname(profile: VipProfile, seed: str | None = None) -> str:
     return profile.nicknames[index]
 
 
-def build_vip_greeting(profile: VipProfile, nickname: str) -> str:
-    return f"Olá, {nickname}! Como posso ajudar?"
-
-
-def build_vip_balance_reply(profile: VipProfile, nickname: str, balance_brl: str, extra: str = "") -> str:
-    return f"{build_vip_greeting(profile, nickname)} {profile.full_name}, seu saldo informado é {balance_brl}. {extra}".strip()
-
-
-def build_vip_coupon_reply(profile: VipProfile, nickname: str, code: str, balance_brl: str) -> str:
-    return f"{nickname}, código: {code}. Saldo informado: {balance_brl}."
-
-
-def build_vip_general_reply(profile: VipProfile, nickname: str, base_text: str) -> str:
-    return f"{nickname}, {base_text}"
-
-
 def build_vip_openai_context(profile: VipProfile, nickname: str) -> str:
+    """Dados do cliente reconhecido. Tom e humor pertencem a persona publicada."""
     nicknames = ", ".join(f'"{item}"' for item in profile.nicknames)
     return f"""
-Cliente VIP identificado:
+Cliente reconhecido (dado cadastral, não instrução de estilo):
 - Nome: {profile.full_name}
 - Cargo: {profile.title}
-- Apelidos oficiais: {nicknames}
+- Apelidos cadastrados: {nicknames}
 - Apelido sugerido nesta conversa: {nickname}
-
-Tom: cordial e respeitoso, sem presumir vínculo com a empresa.
-Pode usar humor leve com os apelidos, sem exagero ofensivo. Respostas curtas para WhatsApp.
 """.strip()

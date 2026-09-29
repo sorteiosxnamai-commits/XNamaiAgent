@@ -22,6 +22,7 @@ from app.commerce.turn_resolver import (
     ACTION_CONFIRM_PENDING,
     ACTION_GET_DETAILS,
     ACTION_GET_PRICE,
+    ACTION_PURCHASE_GUIDANCE,
     ACTION_REJECT_PENDING,
     ACTION_START_PURCHASE,
     PENDING_BROWSE,
@@ -98,11 +99,21 @@ def _tools(executar) -> list[str]:
     "texto",
     ["quero fazer um pedido", "quero fazer pedido", "quero comprar",
      "quero pedir", "como faço um pedido?", "quero fechar um pedido",
-     "quero levar", "como compro?", "como faço para comprar com vocês?"],
+     "quero levar", "como compro?"],
 )
 def test_purchase_intent_is_not_a_product_search(texto):
     resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
     assert resolucao.action == ACTION_START_PURCHASE
+    assert resolucao.requires_catalog_search is False
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["como faço para comprar com vocês?", "como faço para comprar na xnamai?"],
+)
+def test_purchase_guidance_does_not_open_an_order(texto):
+    resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
+    assert resolucao.action == ACTION_PURCHASE_GUIDANCE
     assert resolucao.requires_catalog_search is False
 
 
@@ -126,7 +137,7 @@ async def test_purchase_intent_does_not_hit_the_catalog():
 @pytest.mark.parametrize("texto", ["modelo de quê?", "modelo do que?", "qual modelo?"])
 def test_question_about_model_is_guidance_not_a_catalog_query(texto):
     resolucao = resolve_commerce_turn(texto, state=CommerceConversationState())
-    assert resolucao.action == ACTION_START_PURCHASE
+    assert resolucao.action == ACTION_PURCHASE_GUIDANCE
     assert resolucao.requires_catalog_search is False
 
 

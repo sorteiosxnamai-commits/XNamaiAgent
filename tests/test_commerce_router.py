@@ -57,6 +57,59 @@ async def test_agent_commerce_calls_tray_before_openai(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_how_to_buy_xnamai_is_resolved_before_interpreter_or_catalog(monkeypatch):
+    from app import openai_agent
+
+    monkeypatch.setattr(openai_agent, "load_recent_conversation_turns", lambda **_k: [])
+
+    async def interpreter_must_not_run(*_args, **_kwargs):
+        raise AssertionError("institutional purchase guidance must preempt interpreter")
+
+    async def catalog_must_not_run(*_args, **_kwargs):
+        raise AssertionError("XNamai must not be searched as a product")
+
+    monkeypatch.setattr(openai_agent, "interpret_message", interpreter_must_not_run)
+    monkeypatch.setattr("app.sales_agent.execute_tool", catalog_must_not_run)
+
+    result = await openai_agent.generate_agent_reply_async(
+        IncomingMessage(text="como faço para comprar na xnamai?"),
+        {},
+    )
+
+    assert "cadastro" in result.reply_text.casefold()
+    assert "CPF ou CNPJ" in result.reply_text
+    assert "Club" not in result.reply_text
+    assert "Não localizei" not in result.reply_text
+    assert result.safety_reason != "recommendation_no_match"
+    assert result.response_metadata["response_source"] == "persona_purchase_guidance"
+    assert result.response_metadata["used_openai_interpreter"] is False
+    assert result.response_metadata["used_commerce_provider"] is False
+
+
+@pytest.mark.asyncio
+async def test_async_greeting_uses_active_persona_identity(monkeypatch):
+    from app import openai_agent
+
+    monkeypatch.setattr(openai_agent, "load_recent_conversation_turns", lambda **_k: [])
+    result = await openai_agent.generate_agent_reply_async(
+        IncomingMessage(text="ola"),
+        {
+            "_active_persona_identity": {
+                "agent_name": "Mai",
+                "brand": "XNamai",
+                "persona_version_id": 86,
+            }
+        },
+    )
+
+    assert "Mai" in result.reply_text
+    assert "XNamai" in result.reply_text
+    assert result.reply_text != "Olá! Como posso ajudar?"
+    assert result.response_metadata["response_source"] == "local_greeting"
+    assert result.response_metadata["persona_identity_applied"] is True
+
+
+@pytest.mark.asyncio
 async def test_inventory_searches_then_checks_single_product(monkeypatch):
     calls = []
 

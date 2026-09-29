@@ -20,3 +20,6 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .tox/
+
+# notas locais de ferramentas de agente (nao versionar)
+.superpowers/

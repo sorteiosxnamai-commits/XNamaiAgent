@@ -96,6 +96,7 @@ async def sync_resource(
     writer: PageWriter,
     max_pages: int = DEFAULT_MAX_PAGES,
     provider: str = PROVIDER_NAME,
+    strict_records: bool = False,
 ) -> SyncOutcome:
     """Sincroniza um recurso a partir do cursor confirmado.
 
@@ -119,6 +120,10 @@ async def sync_resource(
 
         records = normalize_page(resource, page.data)
         outcome.skipped += len(page.data) - len(records)
+        if strict_records and len(page.data) != len(records):
+            outcome.ok = False
+            outcome.error_code = "invalid_response"
+            return outcome
 
         if records:
             try:

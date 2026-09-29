@@ -313,3 +313,50 @@ async def test_interpreter_fallback_is_observable_and_only_then_controls_scope(m
     assert result.response_metadata["response_source"] == "deterministic_fallback"
     assert result.response_metadata["used_openai_interpreter"] is False
     assert result.response_metadata["fallback_reason"] == "openai_api_key_missing"
+
+
+@pytest.mark.asyncio
+async def test_unmapped_message_is_composed_by_ai_instead_of_template(monkeypatch):
+    import app.openai_agent as openai_agent
+    import app.openai_gateway as openai_gateway
+    import app.prompt_compiler as prompt_compiler
+
+    settings = _settings(openai_api_key="test-key")
+    monkeypatch.setattr(openai_agent, "get_settings", lambda: settings)
+    monkeypatch.setattr(openai_agent, "load_recent_conversation_turns", lambda **_kwargs: [])
+    monkeypatch.setattr(openai_agent, "commerce_tools_available", lambda: False)
+
+    async def interpret_as_general(*_args, **_kwargs):
+        interpreted = SalesInterpretation(
+            domain="store_general",
+            goal=None,
+            references_previous_context=False,
+            needs_clarification=False,
+            confidence=0.91,
+        )
+        interpreted._source = "openai"
+        return interpreted
+
+    monkeypatch.setattr(openai_agent, "interpret_message", interpret_as_general)
+    monkeypatch.setattr(
+        prompt_compiler,
+        "resolve_system_instructions",
+        lambda **_kwargs: "PERSONA ATIVA: Mai, assistente da XNamai.",
+    )
+    captured = {}
+
+    async def compose(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return SimpleNamespace(text="Resposta contextual formulada pela Mai.")
+
+    monkeypatch.setattr(openai_gateway, "generate_text_output", compose)
+
+    result = await openai_agent.generate_agent_reply_async(
+        IncomingMessage(text="Tenho uma situação diferente para explicar"),
+        {"_active_persona_identity": {"agent_name": "Mai", "brand": "XNamai"}},
+    )
+
+    assert result.reply_text == "Resposta contextual formulada pela Mai."
+    assert result.response_metadata["response_source"] == "openai"
+    assert result.response_metadata["used_openai_responder"] is True
+    assert captured["messages"][0]["content"].startswith("PERSONA ATIVA")

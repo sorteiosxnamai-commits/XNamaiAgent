@@ -1,8 +1,8 @@
 """Authority hierarchy for agent facts (Phase 3 + Etapa 5).
 
-Security rules (immutable code) always win over persona, memory, Tray,
-customer text, and history. Commercial numbers/links come only from Tray
-(live preferred) or the official owning service. Persona may shape tone
+Security rules (immutable code) always win over persona, memory, the commerce
+provider, customer text, and history. Commercial numbers/links come only from the
+commerce provider (live preferred) or the official owning service. Persona may shape tone
 only — never volatile price/stock/payment data.
 """
 
@@ -63,7 +63,6 @@ EntityType = Literal[
     "shipping",
     "cart",
     "customer",
-    "raffle",
     "policy",
     "other",
 ]
@@ -142,7 +141,7 @@ def infer_source_for_payload_key(
         return FactSource.CATALOG_SNAPSHOT
     if from_local_db or any(
         token in lowered
-        for token in ("balance", "coupon", "raffle", "sorteio", "particip")
+        for token in ("balance", "coupon")
     ):
         return FactSource.LOCAL_DATABASE
     if from_commerce_state or factual == "conversation_ref" or any(

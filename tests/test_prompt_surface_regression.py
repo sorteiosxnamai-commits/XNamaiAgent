@@ -96,9 +96,9 @@ def test_no_empty_interpolation_reaches_the_model():
 
     for block, text in render_prompt_surface().items():
         for pattern in (
-            r"WhatsApp[ 	]+[.,]",
-            r"em[ 	]+[.,]",
-            r"acesse[ 	]+[.,]",
+            r"\bWhatsApp[ 	]+[.,]",
+            r"\bem[ 	]+[.,]",
+            r"\bacesse[ 	]+[.,]",
             r"\([ 	]*\)",
         ):
             assert not re.search(pattern, text, flags=re.IGNORECASE), (

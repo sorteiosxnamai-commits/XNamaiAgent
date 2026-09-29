@@ -23,8 +23,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "list_coupons", "description": "Consultar cupons quando a conversa precisar disso.", "parameters": {"type": "object", "properties": {"code": {"type": "string"}, "limit": {"type": "integer", "maximum": 5}}, "additionalProperties": False}}},
     {"type": "function", "function": {"name": "get_coupon", "description": "Consultar detalhes de um cupom.", "parameters": {"type": "object", "properties": {"coupon_id": {"type": "string"}}, "required": ["coupon_id"], "additionalProperties": False}}},
 ]
-#: Capacidades comerciais reconhecidas pelo executor. Identico ao baseline,
-#: menos a chave "raffle": o dominio de sorteio saiu do runtime na Parte 1.
+#: Capacidades comerciais reconhecidas pelo executor.
 TOOL_REGISTRY: dict[str, tuple[str, ...]] = {
     "commerce": ("search_products", "get_product", "get_product_link", "check_inventory", "list_categories", "get_category", "get_category_tree", "list_product_variants", "get_product_variant", "search_customer", "get_customer", "create_customer", "list_coupons", "get_coupon", "create_cart", "get_cart", "get_cart_complete", "set_cart_item_quantity", "delete_cart", "get_payment_options", "quote_shipping", "list_shipping_methods", "create_order", "list_orders", "get_order", "get_order_complete", "get_order_payment"),
 }
@@ -83,7 +82,7 @@ def commerce_tools_available() -> bool:
 
     Gating generico por provider — nunca por env de fornecedor. Com o
     ``NullCommerceProvider`` isto e False e nenhuma tool comercial chega ao
-    modelo, exatamente como no baseline sem Tray configurado.
+    modelo, exatamente como no baseline sem provider configurado.
     """
     return bool(getattr(get_commerce_provider(), "available", False))
 
@@ -148,6 +147,10 @@ async def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> di
             "status_code": getattr(exc, "status_code", None),
         }
 
+    # Explicit status: "provider down" must never read as "no such product".
+    from .result_status import RESULT_STATUS_KEY, with_result_status
+
+    with_result_status(result)
     elapsed_ms = (time.perf_counter() - started) * 1000
     record_commerce_observation(
         tool=name,
@@ -165,6 +168,7 @@ async def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> di
         "elapsed_ms": round(elapsed_ms),
         "error": result.get("error") if isinstance(result, dict) else None,
         "code": result.get("code") if isinstance(result, dict) else None,
+        "status": result.get(RESULT_STATUS_KEY) if isinstance(result, dict) else None,
     })
     print("[sales.tool]", {"tool": name, "success": ok})
     return result

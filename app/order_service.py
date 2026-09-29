@@ -200,6 +200,21 @@ def extract_order_reference(text: str | None) -> str | None:
 
 def is_order_lookup_request(text: str | None) -> bool:
     folded = _fold_text(text)
+    # Carrinho/rascunho ainda nao e um pedido criado no provedor. Frases como
+    # "fiz um pedido no carrinho" devem continuar no fluxo de montagem e
+    # revisao, nunca pedir um numero de pedido para consultar status.
+    cart_signals = (
+        "carrinho",
+        "rascunho",
+        "finalizar a compra",
+        "finalizar o pedido",
+        "finalizar meu pedido",
+        "fechar a compra",
+        "fechar o pedido",
+        "revisar o pedido",
+    )
+    if any(signal in folded for signal in cart_signals):
+        return False
     if extract_order_reference(text):
         return True
     # Short follow-ups after an order was discussed in the same thread.

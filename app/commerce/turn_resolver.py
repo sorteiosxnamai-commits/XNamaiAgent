@@ -21,7 +21,7 @@ sem banco e sem modelo — e o mesmo raciocinio vale se a fonte comercial mudar.
 uma foto significa outra foto, depois de detalhes significa disponibilidade. Por
 isso a resolucao le texto E ultima acao E produto ativo E lista apresentada.
 
-*Nunca escolher por sorteio.* Havendo dois carregadores plausiveis, afirmar um
+*Nunca escolher ao acaso.* Havendo dois carregadores plausiveis, afirmar um
 deles produz preco e estoque do produto errado — e o cliente nao tem como
 perceber a troca. Ambiguidade vira pergunta, sempre.
 """
@@ -46,6 +46,7 @@ ACTION_SHOW_MORE_MEDIA = "show_more_media"
 ACTION_COMPARE = "compare_products"
 ACTION_REJECT_PRODUCT = "reject_product"
 ACTION_CORRECT_REFERENCE = "correct_reference"
+ACTION_PURCHASE_GUIDANCE = "purchase_guidance"
 ACTION_START_PURCHASE = "start_purchase"
 ACTION_TRANSACTION = "transaction"
 ACTION_ADD_TO_CART = "add_to_cart"
@@ -124,6 +125,7 @@ _POSICOES = {
 _CURRENT_WORDS = frozenset({
     "esse", "essa", "este", "esta", "isso", "ele", "ela", "dele", "dela",
     "mesmo", "desse", "dessa", "deste", "nesse",
+    "aquele", "aquela",
 })
 
 _PRICE = (
@@ -194,10 +196,14 @@ _CLEAR_CART = (
 _REVIEW_ORDER = (
     "pode fechar", "fecha o pedido", "fechar pedido", "quero fechar",
     "quero finalizar", "finaliza o pedido", "finalizar pedido",
+    "como faco para finalizar", "como finalizar", "como finalizo",
+    "finalizar meu pedido", "finalizar o meu pedido",
     "vamos finalizar", "vamos fechar", "pode concluir", "quero concluir",
     "concluir pedido", "revisa o pedido", "revisar pedido", "revisar antes",
     "antes de fechar", "prosseguir com o pedido", "prosseguir com a compra",
     "quero prosseguir", "fechar a compra", "finalizar a compra",
+    "finalizei os itens", "terminei de escolher", "terminei os itens",
+    "nao quero mais nada", "nao vou adicionar mais", "pode revisar o rascunho",
 )
 
 #: Confirmacao explicita: nao pede para ver, autoriza o que ja foi visto.
@@ -218,6 +224,18 @@ _PURCHASE = (
     "como faco pedido", "como compro", "como faco para comprar",
     "fazer uma compra", "realizar um pedido", "efetuar pedido",
 )
+
+_PURCHASE_GUIDANCE = (
+    "como faco para comprar",
+    "como comprar com voces",
+    "comprar com voces",
+)
+
+
+def is_purchase_guidance_request(text: str | None) -> bool:
+    """Compra institucional sem SKU: orientar a jornada, nunca buscar produto."""
+    normalizado = normalize_text(text or "")
+    return _contem(normalizado, _PURCHASE_GUIDANCE)
 
 # Resposta comum quando uma orientação de compra foi vaga (por exemplo,
 # "qual modelo você procura?"). Isso é um pedido de esclarecimento sobre o
@@ -282,6 +300,7 @@ _NON_PRODUCT = frozenset({
     "primeiro", "primeira", "segundo", "segunda", "terceiro", "terceira",
     "quarto", "quarta", "quinto", "quinta", "ultimo", "ultima", "anterior",
     "outra", "outro", "outros", "outras", "mais", "proxima", "proximo",
+    "aquele", "aquela", "barato", "barata",
     "seguinte", "parecido", "parecida", "similar", "nao", "sim",
     "posso", "consigo", "da", "pra", "poderia",
     "pedido", "pedidos", "compra", "compras", "comprar", "pedir", "levar",
@@ -400,7 +419,19 @@ def cart_quantity(normalizado: str) -> tuple[int, bool] | None:
     """
     numero = re.search(r"\b(\d{1,3})\b", normalizado)
     if not numero:
-        return None
+        if not re.fullmatch(
+            r"(?:quero|coloca|poe|adiciona|remove|tira|retira) "
+            r"(?:um|uma|dois|duas|tres|quatro|cinco)(?: no carrinho)?",
+            normalizado,
+        ):
+            return None
+        por_extenso = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4, "cinco": 5}
+        palavra = next((value for word, value in por_extenso.items() if re.search(rf"\b{word}\b", normalizado)), None)
+        if palavra is None:
+            return None
+        if re.search(r"\b(?:remove|tira|retira)\b", normalizado):
+            return -palavra, True
+        return palavra, bool(re.search(r"\bmais\b|\bacrescent|\bsoma\b", normalizado))
     quantidade = int(numero.group(1))
     incremental = bool(re.search(r"\bmais\b|\bacrescent|\bsoma\b", normalizado))
     return quantidade, incremental
@@ -520,7 +551,7 @@ def _detectar_acao(normalizado: str, state) -> tuple[str, str | None]:
     # Uma dúvida sobre a pergunta do atendente não pode virar busca literal por
     # "modelo de que". Retome a orientação de compra e explique as categorias.
     if enxuto in _PURCHASE_GUIDANCE_FOLLOWUP:
-        return ACTION_START_PURCHASE, None
+        return ACTION_PURCHASE_GUIDANCE, None
 
     # 1. resposta a uma pergunta que o proprio bot fez. So conta como resposta
     #    quando existe pergunta pendente — "sim" solto nao inventa acao.
@@ -550,7 +581,11 @@ def _detectar_acao(normalizado: str, state) -> tuple[str, str | None]:
     if _contem(normalizado, _TRANSACTION):
         return ACTION_TRANSACTION, None
 
-    # 3. intencao de comprar sem produto: operacao, nunca nome de produto.
+    # 3. Perguntar COMO comprar pede orientacao, sem abrir um pedido.
+    if is_purchase_guidance_request(normalizado):
+        return ACTION_PURCHASE_GUIDANCE, None
+
+    # 3.1 intencao de comprar sem produto: operacao, nunca nome de produto.
     if _contem(normalizado, _PURCHASE):
         return ACTION_START_PURCHASE, None
 
@@ -561,6 +596,8 @@ def _detectar_acao(normalizado: str, state) -> tuple[str, str | None]:
         return ACTION_CONFIRM_ORDER, None
     if _contem(normalizado, _REMOVE_CART):
         return ACTION_REMOVE_FROM_CART, None
+    if re.fullmatch(r"(?:remove|tira|retira) (?:um|uma|dois|duas|tres|\d{1,3})", normalizado) and len(state.cart_items or []) == 1:
+        return ACTION_SET_QUANTITY, None
     if _contem(normalizado, _SHOW_CART_STRONG):
         return ACTION_SHOW_CART, None
     if _contem(normalizado, _SHOW_CART) and not _contem(normalizado, _ADD_CART):
@@ -642,7 +679,7 @@ def resolve_commerce_turn(text: str, *, state) -> CommerceTurnResolution:
     # pelo bloco de rejeicao abaixo, que interpretaria "nao" como recusa de
     # produto em vez de resposta a pergunta do bot.
     if acao in {ACTION_CONFIRM_PENDING, ACTION_REJECT_PENDING, ACTION_TRANSACTION,
-                ACTION_START_PURCHASE}:
+                ACTION_PURCHASE_GUIDANCE, ACTION_START_PURCHASE}:
         return resolucao
 
     # --- rejeicao / correcao ------------------------------------------------

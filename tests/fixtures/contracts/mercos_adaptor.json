@@ -1,0 +1,22 @@
+{
+  "_source": "Gerado executando as rotas REAIS do MercosAdaptor (GET/POST /v1/customers) com a Mercos substituida por MockTransport. Dados sinteticos. Regenerado e comparado por tests/test_official_repo_contracts.py::test_adaptor_fixture_matches_the_real_adaptor (cross_repo).",
+  "customers_page": {
+    "resource": "customers",
+    "count": 1,
+    "pageCursor": "2026-09-01T00:00:00",
+    "nextCursor": null,
+    "data": [
+      {
+        "id": 42,
+        "razao_social": "Cliente Sintetico",
+        "tipo": "F",
+        "cnpj": "52998224725",
+        "excluido": false,
+        "ultima_alteracao": "2026-09-01T00:00:00"
+      }
+    ]
+  },
+  "customer_created": {
+    "id": "321"
+  }
+}

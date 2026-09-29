@@ -54,3 +54,27 @@ def test_only_one_active_per_tenant_persona(monkeypatch):
     actives = [p for p in repo.list_persona_versions() if p.status == "active"]
     assert len(actives) == 1
     assert actives[0].id == b.id
+
+
+def test_activation_is_isolated_by_workspace(monkeypatch):
+    InMemoryPersonaStore().install(monkeypatch)
+    xnamai = repo.create_persona_version(
+        instructions="persona xnamai\n",
+        name="XNamai",
+        workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
+    )
+    other = repo.create_persona_version(
+        instructions="persona outro workspace\n",
+        name="Outro",
+        workspace_id="11111111-1111-4111-8111-111111111111",
+    )
+
+    repo.activate_persona_version(xnamai.id)
+    repo.activate_persona_version(other.id)
+
+    assert repo.get_active_persona(
+        workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30"
+    ).id == xnamai.id
+    assert repo.get_active_persona(
+        workspace_id="11111111-1111-4111-8111-111111111111"
+    ).id == other.id

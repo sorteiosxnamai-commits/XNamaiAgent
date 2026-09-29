@@ -17,11 +17,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
 from openai import (
-    APIError,
-    APITimeoutError,
     AsyncOpenAI,
     BadRequestError,
-    RateLimitError,
 )
 from pydantic import BaseModel
 
@@ -32,12 +29,11 @@ from .openai_errors import (
     OpenAIGatewayError,
     OpenAIIncompleteError,
     OpenAIInvalidToolArgumentsError,
-    OpenAIRateLimitGatewayError,
     OpenAIRefusalError,
     OpenAISchemaError,
-    OpenAITimeoutGatewayError,
     OpenAIToolLoopDisabledError,
     OpenAIUnknownToolError,
+    gateway_error_for,
 )
 from .openai_runtime import execute_openai_call
 
@@ -527,15 +523,9 @@ def _store_flag(explicit: bool | None) -> bool:
 
 
 def _map_api_error(exc: Exception) -> OpenAIGatewayError:
-    if isinstance(exc, OpenAIGatewayError):
-        return exc
-    if isinstance(exc, (APITimeoutError, asyncio.TimeoutError)):
-        return OpenAITimeoutGatewayError(str(exc)[:240])
-    if isinstance(exc, RateLimitError):
-        return OpenAIRateLimitGatewayError(str(exc)[:240])
-    if isinstance(exc, APIError):
-        return OpenAIGatewayError(str(exc)[:240], code="openai_api_error")
-    return OpenAIGatewayError(str(exc)[:240])
+    # Taxonomy (rate_limited / quota_exhausted / timeout / provider_unavailable /
+    # invalid_request / auth_error / ...) lives in openai_errors.
+    return gateway_error_for(exc)
 
 
 class ChatCompletionsGateway:
@@ -1405,7 +1395,7 @@ class CanaryOpenAIGateway:
         max_rounds: int = 4,
         temperature: float | None = 0.3,
     ) -> ToolLoopResult:
-        # No Chat fallback here: tool loops can mutate Tray/cart/order state.
+        # No Chat fallback here: tool loops can mutate provider/cart/order state.
         primary, mode_label = self._resolve_gateways()
         result = await primary.run_tool_loop(
             model=model,

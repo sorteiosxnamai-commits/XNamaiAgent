@@ -60,6 +60,17 @@ def has_resumable_commerce(
     return commerce_state_resumable_score(state) >= 20
 
 
+#: Registration is a state machine with terminal outcomes (created, cancelled,
+#: unavailable, ...); an older donor must never resurrect a review/data-
+#: collection step the latest turn already moved past. Order/cart recovery
+#: below stays donor-driven on purpose — only registration is pinned to the
+#: primary turn.
+_REGISTRATION_PENDING_ACTIONS = frozenset({
+    "awaiting_customer_registration_data",
+    "awaiting_customer_registration_confirmation",
+})
+
+
 def merge_commerce_states(
     primary: dict[str, Any] | None,
     fallback: dict[str, Any] | None,
@@ -69,6 +80,23 @@ def merge_commerce_states(
     donor = dict(fallback or {})
     if not donor:
         return base
+    # Captured before `_merge_commerce_states` mutates `base` in place (it may
+    # copy a stale `pending_action` from `donor` onto `base` while recovering
+    # order fields) — the override below must use the turn's true values.
+    primary_registration = base.get("customer_registration")
+    primary_pending_action = base.get("pending_action")
+    primary_customer_id = base.get("mercos_customer_id")
+    merged = _merge_commerce_states(base, donor)
+    if primary_registration:
+        merged["customer_registration"] = primary_registration
+        if merged.get("pending_action") in _REGISTRATION_PENDING_ACTIONS:
+            merged["pending_action"] = primary_pending_action
+        if primary_customer_id:
+            merged["mercos_customer_id"] = primary_customer_id
+    return merged
+
+
+def _merge_commerce_states(base: dict[str, Any], donor: dict[str, Any]) -> dict[str, Any]:
     if commerce_state_resumable_score(base) >= commerce_state_resumable_score(donor):
         # Still recover order fields if a later greeting/cart turn wiped them.
         if not base.get("order_id") and donor.get("order_id"):
@@ -112,6 +140,42 @@ def merge_commerce_states(
 def is_short_affirmation(text: str | None) -> bool:
     folded = _fold(text).strip("!?.,")
     return folded in _SHORT_AFFIRMATIONS
+
+
+#: Extra affirmations that mean "yes, continue" for a generic follow-up
+#: question — broader than `_SHORT_AFFIRMATIONS` (payment-context words like
+#: "sim"/"ok" already covered there), never a phrase from any one conversation.
+_FOLLOWUP_AFFIRM_WORDS = _SHORT_AFFIRMATIONS | {
+    "claro", "quero", "prossiga", "prossegue", "continue", "continua", "vai",
+    "manda", "manda ver", "quero sim", "com certeza", "positivo", "confirmo",
+}
+_FOLLOWUP_REJECT_WORDS = frozenset({
+    "nao", "nao quero", "agora nao", "nao agora", "depois", "nao obrigado",
+    "nao, obrigado", "nao precisa", "deixa pra la", "deixa para la",
+})
+
+
+def resolve_followup_response(
+    text: str | None, pending_followup: dict[str, Any] | None
+) -> str:
+    """AFFIRM / REJECT / NEW_TOPIC / UNRESOLVED for a reply to the agent's own
+    last question. Only ever classifies — never executes a mutation itself.
+    """
+    if not pending_followup:
+        return "UNRESOLVED"
+    folded = _fold(text).strip("!?.,")
+    if not folded:
+        return "UNRESOLVED"
+    if folded in _FOLLOWUP_AFFIRM_WORDS:
+        return "AFFIRM"
+    if folded in _FOLLOWUP_REJECT_WORDS:
+        return "REJECT"
+    # A short "não ..." (few words) is still a rejection of THIS question; a
+    # longer one carries a new subject and is left for normal routing (the
+    # customer's actual words already say what they want next).
+    if folded.split()[0] in {"nao", "não"} and len(folded.split()) <= 3:
+        return "REJECT"
+    return "NEW_TOPIC"
 
 
 def is_soft_greeting(text: str | None) -> bool:

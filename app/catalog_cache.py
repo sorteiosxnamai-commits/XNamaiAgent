@@ -162,7 +162,7 @@ def store_catalog_cache(cache_key: str, products: list[dict[str, Any]]) -> None:
                         len(unique),
                         now,
                         expires,
-                        to_jsonb({"source": "tray_brand_or_category"}),
+                        to_jsonb({"source": "commerce_brand_or_category"}),
                     ),
                 )
     except Exception as exc:  # noqa: BLE001

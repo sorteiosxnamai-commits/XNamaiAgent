@@ -1,8 +1,8 @@
 """Detecta quando a Central ChatBô assumiu a conversa (humano no comando).
 
-O pause NÃO é permanente: só silencia o bot enquanto houver evidência de
-atividade do atendente nos últimos N minutos (default 15). Sem atividade
-recente — mesmo com assigned_to preso — o agente volta a atender.
+O agente fica pausado até a conversa ser concluída ou até transcorrer o limite
+de inatividade humana (15 minutos por padrão). Mensagem do cliente não renova
+esse relógio; apenas atividade real do atendente renova.
 """
 
 from __future__ import annotations
@@ -283,13 +283,7 @@ def touch_human_activity(incoming: IncomingMessage) -> bool:
 
 
 def human_takeover_active(incoming: IncomingMessage) -> bool:
-    """True only while a human is actively handling the thread.
-
-    Requires takeover signal in ChatBô (`assigned_to` / `bot_activated=false`)
-    AND recent attendant activity within `human_takeover_idle_minutes`.
-
-    Stuck `assigned_to` without recent human activity does NOT mute the bot.
-    """
+    """True while takeover exists and human activity is inside the idle limit."""
     keys = _candidate_keys(incoming)
     state_key = _primary_state_key(incoming)
     if not keys or not state_key:
@@ -307,7 +301,6 @@ def human_takeover_active(incoming: IncomingMessage) -> bool:
 
     idle = timedelta(minutes=_idle_minutes())
     now = datetime.now(timezone.utc)
-
     last_activity: datetime | None = None
     activity_source = "none"
     try:
@@ -337,9 +330,8 @@ def human_takeover_active(incoming: IncomingMessage) -> bool:
                 logger.warning("human_takeover state seed failed: %s", exc)
 
     if last_activity is None:
-        # First time we observe takeover without human timestamps: start a
-        # single 15‑min window — only if we can persist it. If persist fails,
-        # fail open so a stuck assigned_to never mutes forever.
+        # Primeira observação: inicia uma janela única, desde que seja
+        # possível persistir. Se falhar, não deixa assigned_to travar o bot.
         seeded = now
         try:
             _upsert_pause_state(
@@ -363,19 +355,6 @@ def human_takeover_active(incoming: IncomingMessage) -> bool:
                 },
             )
             return False
-
-    if last_activity is None:
-        log_event(
-            "human_takeover.allow",
-            {
-                "reason": "no_recent_human_activity",
-                "state_key": state_key,
-                "assigned_to_present": bool(takeover_row.get("assigned_to")),
-                "bot_activated": takeover_row.get("bot_activated"),
-                "idle_minutes": _idle_minutes(),
-            },
-        )
-        return False
 
     age = now - last_activity
     if age >= idle:

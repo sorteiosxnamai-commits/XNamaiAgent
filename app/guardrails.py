@@ -4,6 +4,9 @@ import re
 from .product_vocabulary import mentions_product_category
 
 HUMAN_SUPPORT_KEYWORDS = (
+    "falar com uma pessoa",
+    "falar com um humano",
+    "falar com humano",
     "falar com atendente",
     "falar com um atendente",
     "atendente humano",
@@ -14,6 +17,8 @@ HUMAN_SUPPORT_KEYWORDS = (
     "falar com vocês",
     "falar com voces",
     "quero um humano",
+    "quero falar com um humano",
+    "quero falar com humano",
     "quero atendente",
     "preciso de ajuda",
     "contato de vendas",

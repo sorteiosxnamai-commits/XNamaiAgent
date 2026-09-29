@@ -10,13 +10,6 @@ MAX_MEMORY_NOTES = 15
 MAX_RECENT_TOPICS = 12
 
 INTENT_TOPIC_LABELS: dict[str, str] = {
-    "balance_inquiry": "saldo do cartão presente",
-    "coupon_code": "código do cartão presente",
-    "simulation": "simulação de uso do cartão",
-    "raffle_history": "histórico de participações",
-    "current_raffle": "sorteio aberto",
-    "available_numbers": "números disponíveis",
-    "rules_inquiry": "regras do sorteio",
     "preferred_name_update": "preferência de nome",
     "human_support": "atendimento humano",
     "commerce": "catálogo e produtos",

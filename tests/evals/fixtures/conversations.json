@@ -615,15 +615,15 @@
       }
     },
     {
-      "id": "tray_error_001",
-      "category": "tray_error",
+      "id": "commerce_error_001",
+      "category": "commerce_error",
       "input": "tem FKT-110C?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
       "expected": {
         "domain": "commerce",
-        "intent": "tray_error",
+        "intent": "commerce_error",
         "must_call_tools": [
           "search_products"
         ],
@@ -734,15 +734,15 @@
       }
     },
     {
-      "id": "raffle_info_001",
-      "category": "raffle_info",
+      "id": "legacy_domain_question_001",
+      "category": "legacy_domain_question",
       "input": "qual o sorteio atual?",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
       "expected": {
-        "domain": "raffle",
-        "intent": "raffle_info",
+        "domain": "out_of_scope",
+        "intent": "legacy_domain_question",
         "must_call_tools": [],
         "must_not_call_tools": [
           "create_cart",
@@ -1027,15 +1027,15 @@
       }
     },
     {
-      "id": "raffle_info_014",
-      "category": "raffle_info",
+      "id": "legacy_domain_question_014",
+      "category": "legacy_domain_question",
       "input": "meu saldo de números",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
       "expected": {
-        "domain": "raffle",
-        "intent": "raffle_info",
+        "domain": "out_of_scope",
+        "intent": "legacy_domain_question",
         "must_call_tools": [],
         "must_not_call_tools": [
           "create_order"
@@ -1050,15 +1050,15 @@
       }
     },
     {
-      "id": "raffle_info_015",
-      "category": "raffle_info",
+      "id": "legacy_domain_question_015",
+      "category": "legacy_domain_question",
       "input": "regras do sorteio",
       "channel": "whatsapp",
       "initial_state": {},
       "tool_fixtures": {},
       "expected": {
-        "domain": "raffle",
-        "intent": "raffle_info",
+        "domain": "out_of_scope",
+        "intent": "legacy_domain_question",
         "must_call_tools": [],
         "must_not_call_tools": [
           "create_order"

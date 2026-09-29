@@ -1,0 +1,47 @@
+# Outbound retries: drain the outbox every 5 minutes.
+# Same consumer as the daily process-inbox cron (process_outbox_batch); this one
+# never runs agent/LLM work. Chosen over a Vercel sub-daily cron (plan-dependent)
+# and over a persistent worker (no long-running process on Vercel).
+# See docs/outbox_runtime.md.
+
+name: Outbox Retry
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Never stack runs: the lease already prevents double sends, this avoids
+  # piling requests when GitHub delays schedules.
+  group: outbox-retry
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Process outbox
+        env:
+          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AGENT_BASE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing AGENT_BASE_URL or CRON_SECRET secrets"
+            exit 1
+          fi
+          BASE="${AGENT_BASE_URL%/}"
+          curl -fsS --max-time 120 -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${BASE}/api/cron/process-outbox" \
+            | tee /tmp/outbox.json
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("/tmp/outbox.json"))
+          print("summary:", json.dumps({k: data.get(k) for k in ("claimed", "sent", "failed", "dead", "receipt_pending")}))
+          if not data.get("ok", False):
+              sys.exit(1)
+          PY

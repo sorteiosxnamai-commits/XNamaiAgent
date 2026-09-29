@@ -10,7 +10,12 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
-from app.security import verify_brevo_webhook, verify_admin_token, verify_remarketing_cron
+from app.security import (
+    verify_admin_token,
+    verify_brevo_webhook,
+    verify_chatbo_sync_token,
+    verify_remarketing_cron,
+)
 from app.persona_admin_api import router as persona_admin_router
 from app.webhook_parser import (
     inbound_skip_reason,
@@ -28,7 +33,6 @@ from app.db import (
     has_successful_agent_response,
     inbound_message_exists,
     insert_agent_response,
-    insert_inbound_message,
     is_latest_inbound_message,
 )
 from app.inbound_coalesce import is_caption_echo_of_recent_image
@@ -70,6 +74,35 @@ def _commerce_health() -> dict:
     return commerce_sync_health()
 
 
+def _registration_capability_diagnostics() -> dict:
+    """TEMPORARY diagnostic booleans for the customer-registration commit gate.
+
+    Only booleans and a short non-secret status code (e.g. "stale",
+    "never_synced") — never a token, URL, document, or key. Remove once the
+    WhatsApp registration commit-gate investigation is closed.
+    """
+    try:
+        from app.commerce.provider import get_commerce_provider
+
+        provider = get_commerce_provider()
+        capabilities = provider.runtime_capabilities
+        index = getattr(provider, "_customer_index", None)
+        client = getattr(provider, "_client", None)
+        return {
+            "mercos_customer_mutations_enabled": bool(
+                getattr(client, "customer_mutations_enabled", False)
+            ),
+            "mercos_customer_index_ready": bool(index.ready) if index is not None else False,
+            "mercos_customer_index_not_ready_reason": (
+                index.not_ready_reason() if index is not None else "customer_index_not_configured"
+            ),
+            "mercos_lookup_customer_capability": "lookup_customer_by_document" in capabilities,
+            "mercos_create_customer_capability": "create_customer" in capabilities,
+        }
+    except Exception:  # noqa: BLE001 - diagnostics never break /api/health
+        return {"mercos_registration_diagnostics_error": True}
+
+
 def _request_trace_id(request: Request) -> str:
     supplied = (request.headers.get("x-request-id") or "").strip()
     if supplied and len(supplied) <= 64 and all(
@@ -102,6 +135,7 @@ async def turn_runtime_middleware(request: Request, call_next):
         trace_id=_request_trace_id(request),
         llm_budget=LLMCallBudget(
             max_calls=int(budget_cfg.get("max_calls", 2)),
+            max_transport_attempts=int(budget_cfg.get("max_transport_attempts", 8)),
             enforce=bool(budget_cfg.get("enforce", True)),
         ),
     )
@@ -414,6 +448,7 @@ async def health():
         # fornecedor.
         "commerce_tools_exposed": bool(get_commerce_provider().available),
         **_commerce_health(),
+        **_registration_capability_diagnostics(),
         "remarketing_enabled": getattr(settings, "remarketing_enabled", False),
         "remarketing_cron_configured": bool(
             getattr(settings, "remarketing_cron_secret", "")
@@ -1139,6 +1174,30 @@ async def commerce_product_sync_cron():
     return result
 
 
+@app.post(
+    "/api/admin/commerce/sync/customers",
+    dependencies=[Depends(verify_admin_token)],
+)
+async def commerce_customer_sync_admin():
+    from app.commerce.health import run_configured_customer_sync
+
+    result = await run_configured_customer_sync()
+    log_event("commerce.sync.customers", {**result, "trigger": "admin"})
+    return result
+
+
+@app.post(
+    "/api/cron/commerce/sync/customers",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def commerce_customer_sync_cron():
+    from app.commerce.health import run_configured_customer_sync
+
+    result = await run_configured_customer_sync()
+    log_event("commerce.sync.customers", {**result, "trigger": "cron"})
+    return result
+
+
 #: Frase exata que o corpo precisa trazer para o full refresh rodar.
 FULL_REFRESH_CONFIRMATION = "FULL_REFRESH_PRODUCTS"
 
@@ -1505,11 +1564,38 @@ async def ycloud_whatsapp_webhook(request: Request):
     )
 
     if event == YCLOUD_STATUS_EVENT:
-        log_event(
-            "ycloud.message_status_updated",
-            parse_ycloud_status_update(payload) or {"status": None},
+        status_update = parse_ycloud_status_update(payload) or {"status": None}
+        log_event("ycloud.message_status_updated", status_update)
+        external_id = status_update.get("external_id")
+        if not external_id:
+            return JSONResponse({"ok": True, "event": event, "skipped": "status_only"})
+        from app.channels.ycloud_whatsapp import (
+            ycloud_signature_age_seconds,
+            ycloud_status_recipient,
         )
-        return JSONResponse({"ok": True, "event": event, "skipped": "status_only"})
+
+        # Replay protection on top of the HMAC: an old signed callback is not
+        # allowed to move delivery state.
+        age = ycloud_signature_age_seconds(signature_header)
+        max_age = int(getattr(settings, "ycloud_status_webhook_max_age_seconds", 86400))
+        if age is None or age > max_age or age < -300:
+            log_event("ycloud.status.reconciliation_skipped", {"reason": "stale_or_future_signature"})
+            return JSONResponse({"ok": True, "event": event, "skipped": "stale_signature"})
+        from app.ingress.delivery_reconciliation import reconcile_provider_status
+
+        try:
+            reconciliation = reconcile_provider_status(
+                provider="ycloud",
+                external_id=external_id,
+                provider_status=status_update.get("status"),
+                event_id=status_update.get("event_id"),
+                recipient=ycloud_status_recipient(payload),
+                error_code=status_update.get("error_code"),
+            )
+        except Exception as exc:  # noqa: BLE001 — never 5xx a status callback
+            log_exception("ycloud.status.reconciliation_failed", exc)
+            reconciliation = {"outcome": "error"}
+        return JSONResponse({"ok": True, "event": event, "reconciliation": reconciliation.get("outcome")})
 
     if event != YCLOUD_INBOUND_EVENT:
         return JSONResponse(
@@ -1546,6 +1632,8 @@ async def ycloud_whatsapp_webhook(request: Request):
                 "reason": resolution.failure_code,
             }
         )
+
+    incoming.workspace_id = resolution.workspace_id
 
     runtime = get_current_turn()
     if runtime is not None:
@@ -1988,9 +2076,16 @@ async def cron_instagram_story_media_retention_get():
 )
 async def cron_process_inbox():
     from app.ingress.dispatch import process_pending_queues
+    from app.chatbo_sync import sync_pending_chatbo_turns
 
     result = await process_pending_queues()
-    return {**result["inbox"], "ok": result["ok"], "outbox": result["outbox"]}
+    chatbo = await sync_pending_chatbo_turns(limit=100)
+    return {
+        **result["inbox"],
+        "ok": result["ok"],
+        "outbox": result["outbox"],
+        "chatbo": chatbo,
+    }
 
 
 @app.get(
@@ -1999,6 +2094,96 @@ async def cron_process_inbox():
 )
 async def cron_process_inbox_get():
     return await cron_process_inbox()
+
+
+@app.post(
+    "/api/internal/chatbo/outbound",
+)
+async def chatbo_manual_outbound(body: dict):
+    """Entrega por YCloud uma mensagem de uso único já gravada pelo ChatBô."""
+    from uuid import UUID
+
+    from app.chatbo_manual_outbound import claim_message, finish_message
+    from app.channels.ycloud_whatsapp import send_ycloud_reply
+    from app.models import AgentResult, IncomingMessage
+
+    settings = get_settings()
+    expected_workspace = str(getattr(settings, "chatbo_workspace_id", "") or "").strip()
+    if not expected_workspace:
+        raise HTTPException(status_code=503, detail="chatbo_workspace_not_configured")
+    try:
+        message_id = str(UUID(str(body.get("messageId") or "")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="invalid_message_id") from None
+
+    claimed = claim_message(message_id, expected_workspace)
+    if not claimed:
+        raise HTTPException(status_code=409, detail="message_not_dispatchable")
+    if claimed.get("already_sent"):
+        return {"ok": True, "provider": "ycloud", "already_sent": True}
+
+    incoming = IncomingMessage(
+        workspace_id=expected_workspace,
+        provider="ycloud",
+        channel="whatsapp",
+        sender_phone=str(claimed.get("contact_phone") or ""),
+        sender_key=str(claimed.get("contact_phone") or ""),
+        text="",
+    )
+    result = AgentResult(reply_text=str(claimed.get("content") or ""))
+    result.with_response_metadata(outbox_correlation_id=message_id)
+    delivery = await send_ycloud_reply(incoming, result)
+    finish_message(message_id, expected_workspace, delivery)
+    if not delivery.get("ok"):
+        status_code = int(delivery.get("status_code") or 502)
+        if status_code < 400 or status_code > 599:
+            status_code = 502
+        raise HTTPException(
+            status_code=status_code,
+            detail=delivery.get("error") or "ycloud_send_failed",
+        )
+    return delivery
+
+
+@app.post(
+    "/api/cron/chatbo-sync",
+    dependencies=[Depends(verify_chatbo_sync_token)],
+)
+async def cron_chatbo_sync():
+    from app.chatbo_sync import sync_pending_chatbo_turns
+
+    return await sync_pending_chatbo_turns(limit=500)
+
+
+@app.get(
+    "/api/cron/chatbo-sync",
+    dependencies=[Depends(verify_chatbo_sync_token)],
+)
+async def cron_chatbo_sync_get():
+    return await cron_chatbo_sync()
+
+
+@app.post(
+    "/api/cron/process-outbox",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def cron_process_outbox():
+    """Outbox-only drain: same consumer as process-inbox, no LLM work.
+
+    Retries die after AGENT_OUTBOX_RETRY_WINDOW_SECONDS (default 15 min), so a
+    frequent scheduler must reach this — the daily process-inbox cron cannot.
+    """
+    from app.ingress.outbox_worker import process_outbox_batch
+
+    return await process_outbox_batch()
+
+
+@app.get(
+    "/api/cron/process-outbox",
+    dependencies=[Depends(verify_remarketing_cron)],
+)
+async def cron_process_outbox_get():
+    return await cron_process_outbox()
 
 
 @app.post("/api/test/agent")

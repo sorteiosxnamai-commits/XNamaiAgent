@@ -46,6 +46,35 @@ _PAID_RE = re.compile(
     r"\b(pago|pagamento (?:aprovado|confirmado)|pedido pago)\b",
     flags=re.IGNORECASE,
 )
+#: Commercial conditions and delivery promises: facts, not style. Each one must
+#: be backed by the provider payload of this turn.
+#: Needs installment CONTEXT: a bare "2x" also appears in product names
+#: ("Kit 2x Cabo USB-C") and must not count as a payment condition.
+_INSTALLMENT_RE = re.compile(
+    r"(\bem\s+(?:at[eé]\s+)?\d{1,2}\s*x\b"
+    r"|\b\d{1,2}\s*x\s+(?:de|sem|com)\b"
+    r"|\b\d{1,2}\s+vezes\b"
+    r"|\bparcel(?:a|as|ado|ada|amento)\b"
+    r"|\bsem juros\b)",
+    flags=re.IGNORECASE,
+)
+_FREE_SHIPPING_RE = re.compile(
+    r"\b(frete gr[aá]tis|frete zero|entrega gr[aá]tis|sem custo de frete)\b",
+    flags=re.IGNORECASE,
+)
+_PERCENT_DISCOUNT_RE = re.compile(
+    r"\b\d{1,2}\s*%\s*(?:de\s+)?(?:desconto|off)\b",
+    flags=re.IGNORECASE,
+)
+_IMMEDIATE_DELIVERY_RE = re.compile(
+    r"\b(pronta entrega|entrega imediata|envio imediato|sai hoje)\b",
+    flags=re.IGNORECASE,
+)
+_IMAGE_SENT_RE = re.compile(
+    r"\b(segue|enviei|mandei|aqui est[aá]|estou enviando)\s+(?:a\s+|uma\s+)?(foto|imagem)\b",
+    flags=re.IGNORECASE,
+)
+_INSTALLMENT_KEYS = ("installment", "parcel", "interest")
 _URL_KEYS = ("url", "link", "checkout")
 _ORDER_KEYS = ("order_id", "order_code", "pedido_id", "pedido_codigo")
 _MONEY_KEYS = (
@@ -89,6 +118,9 @@ class FactualViolation(BaseModel):
         "stock",
         "promo",
         "payment",
+        "condition",
+        "availability",
+        "image",
         "product_mix",
         "other",
     ]
@@ -468,7 +500,7 @@ def _risk_from_violations(violations: list[FactualViolation]) -> RiskLevel:
     kinds = {item.kind for item in violations}
     if "payment" in kinds or "order_id" in kinds:
         return "critical"
-    if "money" in kinds or "url" in kinds or "promo" in kinds or "stock" in kinds:
+    if kinds & {"money", "url", "promo", "stock", "condition", "availability", "image"}:
         return "high"
     if "product_mix" in kinds:
         return "medium"
@@ -488,6 +520,80 @@ def _add_violation(
     report.unsupported_claims.append(unsupported)
     if reason.endswith("_missing_evidence") or "not_present" in reason:
         report.missing_evidence.append(unsupported)
+
+
+def _payload_values(payload: Any, key_tokens: tuple[str, ...]) -> list[Any]:
+    """Every value whose key contains one of ``key_tokens`` (recursive)."""
+    found: list[Any] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if any(token in str(key).casefold() for token in key_tokens):
+                found.append(value)
+            found.extend(_payload_values(value, key_tokens))
+    elif isinstance(payload, list):
+        for item in payload:
+            found.extend(_payload_values(item, key_tokens))
+    return found
+
+
+def _has_value(values: list[Any]) -> bool:
+    return any(value not in (None, "", [], {}, False) for value in values)
+
+
+def _check_commercial_conditions(
+    report: FactualValidationReport,
+    *,
+    text: str,
+    pack: FactPack,
+    result: AgentResult,
+) -> None:
+    """Conditions, delivery promises and "here is the photo" need evidence."""
+    payload = pack.source_payload
+
+    def _claim(kind: str, claim: str, supported: bool, reason: str) -> None:
+        report.checked_claims += 1
+        if supported:
+            report.supported_claims.append(FactClaim(kind=kind, claim=claim, reason=f"{claim}_supported"))
+        else:
+            _add_violation(report, kind=kind, claim=claim, reason=reason)
+
+    if _INSTALLMENT_RE.search(text):
+        _claim(
+            "condition",
+            "installments",
+            _has_value(_payload_values(payload, _INSTALLMENT_KEYS)),
+            "installments_without_provider_evidence",
+        )
+    if _FREE_SHIPPING_RE.search(text):
+        free = _payload_values(payload, ("free_shipping",))
+        prices = _payload_values(payload.get("commercial_data", {}).get("shipping") or {}, ("price", "cost"))
+        _claim(
+            "condition",
+            "free_shipping",
+            _has_value(free) or any(_money_decimal(value) == 0 for value in prices),
+            "free_shipping_without_provider_evidence",
+        )
+    if _PERCENT_DISCOUNT_RE.search(text):
+        _claim(
+            "promo",
+            "percent_discount",
+            pack.has_promotional_price,
+            "percent_discount_without_promotional_price_evidence",
+        )
+    if _IMMEDIATE_DELIVERY_RE.search(text):
+        supported = any(
+            value is True for value in _payload_values(payload, ("immediate_delivery_supported",))
+        )
+        _claim("availability", "immediate_delivery", supported, "immediate_delivery_without_provider_evidence")
+    if _IMAGE_SENT_RE.search(text):
+        metadata = result.response_metadata or {}
+        image = (result.commercial_data or {}).get("image")
+        _claim(
+            "image",
+            "image_sent",
+            bool(metadata.get("outbound_image_url") or image),
+            "image_claimed_without_outbound_image",
+        )
 
 
 def validate_factual_response(
@@ -532,13 +638,13 @@ def validate_factual_response(
 
     # Public entry points are institutional facts; product/payment URLs still
     # require current tool evidence. Do not trust every path on these domains.
-    from .site_knowledge import SITE_URL, STORE_URL
-    institutional_urls = {SITE_URL, STORE_URL}
+    from .site_knowledge import official_public_urls
+    institutional_urls = {url.rstrip("/") for url in official_public_urls()}
 
     for raw_url in _URL_RE.findall(text):
         url = _clean_url(raw_url)
         report.checked_claims += 1
-        if url in institutional_urls or url in pack.trusted_urls or _trusted_domain(url, domains):
+        if url.rstrip("/") in institutional_urls or url in pack.trusted_urls or _trusted_domain(url, domains):
             report.supported_claims.append(
                 FactClaim(kind="url", claim=url, reason="url_supported")
             )
@@ -728,6 +834,9 @@ def validate_factual_response(
                 claim="paid",
                 reason="payment_confirmed_missing_evidence",
             )
+
+    if decision.domain == "commerce":
+        _check_commercial_conditions(report, text=text, pack=pack, result=result)
 
     if len(pack.product_ids) >= 2 and decision.domain == "commerce":
         mentioned = [

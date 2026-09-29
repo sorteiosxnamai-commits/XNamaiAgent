@@ -16,7 +16,7 @@ from app.request_principal import (
     principal_from_internal,
 )
 from app.story_commercial_policy import (
-    evidence_from_tray_product,
+    evidence_from_commerce_product,
     validate_commercial_answer,
 )
 from app.story_tenant import resolve_story_tenant
@@ -67,10 +67,10 @@ async def test_internal_principal_allows_explicit():
 
 
 def test_visual_candidate_cannot_authorize_price():
-    evidence = evidence_from_tray_product(
+    evidence = evidence_from_commerce_product(
         {"id": "1", "name": "MarcaD", "price": 100.0, "stock": 2, "url": "https://loja/p/1"},
         tenant_id="t1",
-        source="tray_api",
+        source="commerce_api",
     ).model_copy(update={"source": "visual_candidate"})
     violations = validate_commercial_answer(
         "Esse modelo custa R$ 100,00 e está disponível.",
@@ -82,7 +82,7 @@ def test_visual_candidate_cannot_authorize_price():
 
 
 def test_tray_evidence_allows_matching_price():
-    evidence = evidence_from_tray_product(
+    evidence = evidence_from_commerce_product(
         {
             "id": "42",
             "name": "MarcaD",
@@ -92,7 +92,7 @@ def test_tray_evidence_allows_matching_price():
             "url": "https://loja/p/42",
         },
         tenant_id="xnamai",
-        source="tray_api",
+        source="commerce_api",
     )
     assert evidence.price_cents == 189900
     assert evidence.authorizes_price()
@@ -106,10 +106,10 @@ def test_tray_evidence_allows_matching_price():
 
 
 def test_price_mismatch_blocked():
-    evidence = evidence_from_tray_product(
+    evidence = evidence_from_commerce_product(
         {"id": "42", "name": "MarcaD", "price": 1899.0, "stock": 1},
         tenant_id="xnamai",
-        source="tray_api",
+        source="commerce_api",
     )
     violations = validate_commercial_answer(
         "O valor é R$ 9,99.",
@@ -121,10 +121,10 @@ def test_price_mismatch_blocked():
 
 
 def test_tenant_leak_in_evidence_blocked():
-    evidence = evidence_from_tray_product(
+    evidence = evidence_from_commerce_product(
         {"id": "42", "name": "MarcaD", "price": 10.0},
         tenant_id="tenant_a",
-        source="tray_api",
+        source="commerce_api",
     )
     violations = validate_commercial_answer(
         "Valor R$ 10,00",

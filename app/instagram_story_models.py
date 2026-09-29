@@ -1,7 +1,7 @@
 """Instagram Story ↔ product association models (v8).
 
 Vision may describe and select among real catalog candidates only.
-Tray remains the sole authority for price/stock/URL.
+The commerce provider remains the sole authority for price/stock/URL.
 Private media URLs use SecretStr and must never enter logs or admin responses.
 """
 

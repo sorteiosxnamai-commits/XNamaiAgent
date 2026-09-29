@@ -45,3 +45,42 @@ async def with_retries(
 
 def is_transient_status(status_code: int | None) -> bool:
     return status_code in TRANSIENT_HTTP_STATUS
+
+
+# --- Non-idempotent sends (outbound messages) ------------------------------
+# A message POST is not idempotent and no provider used here offers an
+# idempotency key. Only failures that provably happened BEFORE the request
+# reached the provider are safe to repeat; everything after that is ambiguous.
+
+#: Raised before any byte reached the provider: safe to repeat the POST.
+NOT_SENT_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+)
+#: "Not accepted, try later".
+RETRYABLE_SEND_STATUS = frozenset({408, 425, 429, 502, 503})
+#: The provider may already have processed the request.
+UNKNOWN_SEND_STATUS = frozenset({500, 504})
+
+
+def classify_send_exception(exc: BaseException) -> str:
+    """``retryable`` only when the request never left; otherwise ``unknown``."""
+    if isinstance(exc, NOT_SENT_EXCEPTIONS):
+        return "retryable"
+    # Read/write timeout, reset mid-response, or a failure we cannot place
+    # before the POST (e.g. while parsing the response): may have landed.
+    return "unknown"
+
+
+def classify_send_status(status_code: int | None) -> str:
+    """``retryable`` | ``permanent`` | ``unknown`` for a non-2xx send response."""
+    if status_code is None:
+        return "unknown"
+    if status_code in RETRYABLE_SEND_STATUS:
+        return "retryable"
+    if status_code in UNKNOWN_SEND_STATUS or status_code >= 500:
+        return "unknown"
+    if 400 <= status_code < 500:
+        return "permanent"
+    return "retryable"

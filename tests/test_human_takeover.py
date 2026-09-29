@@ -55,7 +55,6 @@ def test_human_activity_ignores_customer_last_message():
 
 
 def test_stuck_assigned_without_activity_allows_bot_when_persist_fails(monkeypatch):
-    """If we cannot store the idle clock, never mute permanently."""
     monkeypatch.setenv("HUMAN_TAKEOVER_IDLE_MINUTES", "15")
     from app.config import get_settings
 
@@ -168,3 +167,19 @@ def test_human_takeover_active_within_idle(monkeypatch):
         assert human_takeover_active(incoming) is True
 
     get_settings.cache_clear()
+
+
+def test_closed_conversation_returns_control_to_bot():
+    incoming = IncomingMessage(
+        channel="whatsapp",
+        conversation_id="conv-closed",
+        sender_key="conv-closed",
+        text="voltei",
+    )
+    with patch(
+        "app.human_takeover._fetch_conversas_rows",
+        return_value=[
+            {"assigned_to": None, "bot_activated": True, "status": "closed"}
+        ],
+    ):
+        assert human_takeover_active(incoming) is False

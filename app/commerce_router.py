@@ -5,7 +5,6 @@ from typing import Any
 
 from .models import AgentResult, IncomingMessage
 from .commerce.tools import execute_tool
-from .product_vocabulary import mentions_product_category
 
 
 COMMERCE_UNAVAILABLE = "N\u00e3o consegui consultar as informa\u00e7\u00f5es da loja neste momento. Tente novamente em instantes."
@@ -98,28 +97,10 @@ def is_deictic_product_price_request(text: str | None) -> bool:
 
 
 def resolve_commerce_action(text: str | None) -> str | None:
-    normalized = (text or "").lower()
-    if any(term in normalized for term in ("cupom comercial", "cupom disponível", "cupom disponivel", "algum cupom")):
-        return "coupon_search"
-    if any(term in normalized for term in ("estoque", "disponibilidade", "disponível", "disponivel")):
-        return "product_inventory"
-    if any(term in normalized for term in ("pix", "parcelamento", "parcelar", "promocao", "promoção")):
-        return "product_price"
-    if any(
-        term in normalized
-        for term in (
-            "quanto custa",
-            "qual o preço",
-            "qual o preco",
-            "preço",
-            "preco",
-            "valor",
-        )
-    ):
-        return "product_price"
-    if mentions_product_category(text) or any(term in normalized for term in ("tem ", "vocês têm", "voces tem", "vende", "produto", "marca", "modelo", "sku", "ean")):
-        return "product_search"
-    return None
+    """Keyword capability — classification lives in the Intent Router."""
+    from .sales.intent_router import commerce_action_from_text
+
+    return commerce_action_from_text(text)
 
 
 def _log_route(action: str, tool: str, has_query: bool) -> None:
@@ -212,6 +193,28 @@ def _product_lines(
     return lines
 
 
+def _lookup_failure_result(tool_result: dict[str, Any]) -> AgentResult:
+    """Say "not found" only when the source ANSWERED that; otherwise, outage."""
+    from .commerce.result_status import CommerceResultStatus, result_status
+
+    status = result_status(tool_result)
+    if status is CommerceResultStatus.NOT_FOUND:
+        return AgentResult(
+            reply_text="Não encontrei esse produto no catálogo agora.",
+            intent="commerce",
+            handoff_required=False,
+            safety_reason="product_not_found",
+            response_metadata={"commerce_result_status": status.value},
+        )
+    return AgentResult(
+        reply_text=COMMERCE_UNAVAILABLE,
+        intent="commerce",
+        handoff_required=False,
+        safety_reason="commerce_provider_unavailable",
+        response_metadata={"commerce_result_status": status.value},
+    )
+
+
 def _product_result(action: str, products: list[dict[str, Any]]) -> AgentResult:
     if not products:
         return AgentResult(reply_text="N\u00e3o encontrei esse produto no cat\u00e1logo agora.", intent="commerce", handoff_required=False, safety_reason="product_not_found")
@@ -250,7 +253,7 @@ async def handle_commerce_message(
         _log_route(action, "list_coupons", bool(query))
         result = await execute_tool("list_coupons", {"limit": 3})
         if "error" in result:
-            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
+            return _lookup_failure_result(result)
         coupons = result.get("coupons") if isinstance(result.get("coupons"), list) else []
         if not coupons:
             return AgentResult(reply_text="N\u00e3o encontrei cupons comerciais dispon\u00edveis agora.", intent="commerce", handoff_required=False, safety_reason="coupon_not_found")
@@ -271,25 +274,25 @@ async def handle_commerce_message(
             _log_route(action, "check_inventory", False)
             inventory = await execute_tool("check_inventory", {"product_id": product_id})
             if "error" in inventory:
-                return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
+                return _lookup_failure_result(inventory)
             return AgentResult(reply_text="Consulta de estoque:\n" + "\n".join(_product_lines([remembered], inventory)), intent="commerce", handoff_required=False, commercial_data={"products": [remembered], "inventory": inventory})
         _log_route(action, "get_product", False)
         current = await execute_tool("get_product", {"product_id": product_id})
         if "error" in current:
-            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
+            return _lookup_failure_result(current)
         identity = {key: remembered.get(key) for key in ("id", "name", "reference", "ean", "brand") if remembered.get(key) is not None}
         return _product_result(action, [{**identity, **current}])
 
     _log_route(action, "search_products", True)
     search = await execute_tool("search_products", {"query": query, "limit": 3})
     if "error" in search:
-        return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
+        return _lookup_failure_result(search)
     products = _products(search)
     if action == "product_price" and len(products) == 1 and products[0].get("id"):
         _log_route(action, "get_product", True)
         current = await execute_tool("get_product", {"product_id": str(products[0]["id"])})
         if "error" in current:
-            return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
+            return _lookup_failure_result(current)
         identity = {key: products[0].get(key) for key in ("id", "name", "reference", "ean", "brand") if products[0].get(key) is not None}
         detail = {**identity, **current}
         _remember_product(message, detail)
@@ -310,5 +313,5 @@ async def handle_commerce_message(
     _log_route(action, "check_inventory", True)
     inventory = await execute_tool("check_inventory", {"product_id": str(product_id)})
     if "error" in inventory:
-        return AgentResult(reply_text=COMMERCE_UNAVAILABLE, intent="commerce", handoff_required=False, safety_reason="commerce_provider_unavailable")
+        return _lookup_failure_result(inventory)
     return AgentResult(reply_text="Consulta de estoque:\n" + "\n".join(_product_lines(products, inventory)), intent="commerce", handoff_required=False, commercial_data={"products": products, "inventory": inventory})

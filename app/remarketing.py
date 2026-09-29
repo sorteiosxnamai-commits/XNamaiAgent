@@ -531,7 +531,7 @@ def complete_paid_remarketing(
                 UPDATE public.ai_conversation_statuses
                 SET status = 'completed',
                     completed_at = %(now)s,
-                    completion_reason = 'payment_confirmed_by_tray',
+                    completion_reason = 'payment_confirmed_by_commerce',
                     next_scheduled_at = NULL,
                     updated_at = %(now)s
                 WHERE id = %(conversation_status_id)s

@@ -203,7 +203,7 @@ class MercosAdaptorClient:
         except ValueError:
             return None
         if isinstance(payload, dict):
-            details = payload.get("details")
+            details = payload.get("details") or payload.get("errors") or payload
             raw = None
             if isinstance(details, dict):
                 raw = details.get("tempo_ate_permitir_novamente")

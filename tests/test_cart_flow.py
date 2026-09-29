@@ -170,7 +170,8 @@ async def test_list_selection_revalidates_price_quantity_and_creates_cart(monkey
     assert len(create_payload["session_id"]) == 32
     int(create_payload["session_id"], 16)
     assert calls[2] == ("get_cart_complete", {"session_id": "SESSION-1"})
-    assert result.response_metadata["purchase_stage"] == "cart_created"
+    assert result.response_metadata["purchase_stage"] == "draft_building"
+    assert result.response_metadata["order_draft_open"] is True
     assert result.response_metadata["cart_state"]["cart_product_id"] == "B"
     assert result.response_metadata["cart_state"]["cart_quantity"] == 2
     assert result.response_metadata["cart_state"]["cart_url"] == (
@@ -237,7 +238,9 @@ async def test_successful_cart_post_is_not_downgraded_when_complete_lags(monkeyp
     assert result.commercial_data["cart"]["items"] == [
         {"product_id": "B", "variant_id": None, "quantity": 1, "original_price": None}
     ]
-    assert result.response_metadata["pending_action"] == "choose_checkout_channel"
+    assert result.response_metadata["purchase_stage"] == "draft_building"
+    assert result.response_metadata["order_draft_open"] is True
+    assert "pending_action" not in result.response_metadata
 
 
 @pytest.mark.asyncio
@@ -536,7 +539,7 @@ async def test_persistent_cart_state_is_loaded_by_evolution():
     assert updated.cart_id == "C1"
     assert updated.cart_session_id == "S1"
     assert updated.cart_url == "https://loja.example/checkout/S1"
-    assert updated.purchase_stage == "cart_created"
+    assert updated.purchase_stage == "draft_building"
     assert updated.active_product.product_id == "B"
 
 
@@ -653,10 +656,10 @@ async def test_product_803_cart_success_advances_purchase_stage():
 
     assert result.safety_reason is None
     assert result.commercial_data["cart"]["status"] == "cart_created"
-    assert result.response_metadata["purchase_stage"] == "cart_created"
+    assert result.response_metadata["purchase_stage"] == "draft_building"
     assert persisted.cart_session_id
     assert persisted.cart_url == "https://loja.example/checkout/S803"
-    assert persisted.purchase_stage == "cart_created"
+    assert persisted.purchase_stage == "draft_building"
 
 
 @pytest.mark.asyncio

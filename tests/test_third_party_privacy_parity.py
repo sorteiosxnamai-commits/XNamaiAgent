@@ -194,3 +194,45 @@ def test_no_executable_raffle_route_reappeared():
             if "__pycache__" not in path.parts and needle in path.read_text(encoding="utf-8")
         ]
         assert not offenders, f"rota de sorteio reapareceu ({needle}): {offenders}"
+
+
+# --- A8: vocabulario de deteccao nunca vira contexto ---------------------
+
+
+def _privacy_vocabulary() -> tuple[str, ...]:
+    import app.privacy_scope as scope
+
+    return tuple(
+        term
+        for name in ("_BALANCE_TERMS", "_COUPON_TERMS", "_PARTICIPATION_TERMS", "_SIMULATION_TERMS")
+        for term in getattr(scope, name)
+        if len(term) > 6  # termos curtos ("saldo") colidem com texto comum
+    )
+
+
+def test_privacy_vocabulary_is_still_available_for_detection():
+    from app.privacy_scope import is_personal_account_scope
+
+    assert is_personal_account_scope("qual o saldo do cartão presente do João?")
+    assert is_personal_account_scope("resultado do sorteio que participei")
+
+
+def test_privacy_vocabulary_never_reaches_the_model_prompt():
+    """Os termos legados so classificam; nao entram em prompt nem resposta."""
+    from app.models import IncomingMessage
+    from app.openai_agent import SYSTEM_INSTRUCTIONS, build_agent_input
+    from app.site_knowledge import THIRD_PARTY_REFUSAL
+    from prompt_surface import render_prompt_surface
+
+    ordinary = IncomingMessage(channel="whatsapp", text="tem carregador USB-C?", sender_phone="5511999990000")
+    prompt_text = "\n".join(
+        [
+            SYSTEM_INSTRUCTIONS,
+            build_agent_input(ordinary, {}, {"primary_intent": "commerce"}),
+            THIRD_PARTY_REFUSAL,
+            *render_prompt_surface().values(),
+        ]
+    ).casefold()
+
+    leaked = [term for term in _privacy_vocabulary() if term.casefold() in prompt_text]
+    assert not leaked, f"vocabulario de deteccao vazou para o prompt: {leaked}"

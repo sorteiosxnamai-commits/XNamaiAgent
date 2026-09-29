@@ -78,8 +78,8 @@ def format_payment_numbers(raw: Any) -> str | None:
     return str(raw)
 
 
-# --- Dominio de sorteio desativado fora do runtime (Parte 1) ---
-# As funcoes de sorteio (saldo, cupom pessoal, rodadas, pagamentos, numeros,
+# --- Dominio do produto anterior desativado fora do runtime (Parte 1) ---
+# As funcoes daquele dominio (saldo, cupom pessoal, rodadas, pagamentos, numeros,
 # participacoes) e os utilitarios de grade de numeros foram REMOVIDOS junto com
 # a feature: nao havia mais chamador de runtime, so testes da propria feature.
 # Sobra o perfil de cliente, que Task L preserva como contrato observavel, e os
@@ -88,7 +88,7 @@ def format_payment_numbers(raw: Any) -> str | None:
 
 def _resolve_account(phone: str | None, message_text: str | None) -> dict[str, Any]:
     # As duas guardas abaixo sao puras (normalize_phone e a heuristica de texto
-    # detect_third_party_account_inquiry) e NAO pertencem ao dominio de sorteio:
+    # detect_third_party_account_inquiry) e NAO pertencem ao dominio removido:
     # validacao de telefone e recusa de consulta a conta de terceiro sao
     # comportamento generico do agente. Ordem preservada do original.
     normalized = normalize_phone(phone)

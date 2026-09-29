@@ -16,6 +16,7 @@ from app.persona_policy import assert_persona_instructions_safe  # noqa: E402
 from app.persona_repository import (  # noqa: E402
     DEFAULT_PERSONA_KEY,
     DEFAULT_TENANT_ID,
+    DEFAULT_WORKSPACE_ID,
     activate_persona_version,
     create_persona_version,
     find_persona_by_hash,
@@ -77,6 +78,7 @@ def publish() -> dict:
         tenant_id=DEFAULT_TENANT_ID,
         persona_key=DEFAULT_PERSONA_KEY,
         instructions_hash=instructions_hash,
+        workspace_id=DEFAULT_WORKSPACE_ID,
     )
     action = "reused_existing"
     if target is None:
@@ -85,6 +87,7 @@ def publish() -> dict:
             name=PERSONA_NAME,
             tenant_id=DEFAULT_TENANT_ID,
             persona_key=DEFAULT_PERSONA_KEY,
+            workspace_id=DEFAULT_WORKSPACE_ID,
             source="user",
             created_by="codex_user_request",
             status="draft",
@@ -92,7 +95,9 @@ def publish() -> dict:
         )
         action = "created"
 
-    active_before = get_active_persona(DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY)
+    active_before = get_active_persona(
+        DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY, DEFAULT_WORKSPACE_ID
+    )
     activated = active_before is None or active_before.id != target.id
     if activated:
         target = activate_persona_version(
@@ -102,7 +107,9 @@ def publish() -> dict:
         )
 
     versions = list_persona_versions(DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY)
-    active_after = get_active_persona(DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY)
+    active_after = get_active_persona(
+        DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY, DEFAULT_WORKSPACE_ID
+    )
     if active_after is None or active_after.id != target.id:
         raise RuntimeError("persona_activation_verification_failed")
 

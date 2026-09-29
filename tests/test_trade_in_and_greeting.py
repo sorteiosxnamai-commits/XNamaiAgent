@@ -65,6 +65,18 @@ def test_greeting_avoids_repeating_same_phrase_to_same_person():
     assert reply2 not in {"Olá! Como posso ajudar?", reply}
 
 
+def test_active_persona_identity_is_applied_to_deterministic_greeting():
+    reply = choose_greeting_reply(
+        [],
+        {"agent_name": "Mai", "brand": "XNamai"},
+    )
+
+    assert "Mai" in reply
+    assert "XNamai" in reply
+    assert "assistente virtual" in reply
+    assert reply != "Olá! Como posso ajudar?"
+
+
 def test_fast_critique_dedupes_identical_greeting():
     incoming = IncomingMessage(channel="whatsapp", text="Boa tarde")
     result = AgentResult(

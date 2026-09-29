@@ -1,4 +1,4 @@
-"""ProductSnapshot model + short TTL cache for Tray reads (Phase 13)."""
+"""ProductSnapshot model + short TTL cache for commerce provider reads (Phase 13)."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class ProductSnapshot(BaseModel):
     retrieved_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    source: Literal["tray_adapter"] = "tray_adapter"
+    source: Literal["commerce_provider"] = "commerce_provider"
     match_kind: Literal["exact", "similar", "unknown"] = "unknown"
     tenant_id: str = "default"
 

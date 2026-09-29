@@ -128,7 +128,7 @@ async def resolve_product_image(
     })
     if not image_url:
         return AgentResult(
-            reply_text="A Tray não informou uma imagem oficial para este produto.",
+            reply_text="O catálogo oficial não informou uma imagem para este produto.",
             intent="commerce",
             handoff_required=False,
             safety_reason="product_image_not_available",

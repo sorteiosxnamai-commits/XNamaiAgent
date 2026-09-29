@@ -11,12 +11,27 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _no_real_database_connections(monkeypatch):
+def _no_real_database_connections(monkeypatch, request):
+    import os
+
     import psycopg
 
     def blocked(*args, **kwargs):
         raise AssertionError("teste tentou abrir conexão real de banco — use um fake")
 
+    # Excecao unica: testes `integration` falam com o banco DESCARTAVEL de
+    # TEST_DATABASE_URL — e somente com ele, nunca com DATABASE_URL de verdade.
+    disposable = os.getenv("TEST_DATABASE_URL", "").strip()
+    if disposable and request.node.get_closest_marker("integration"):
+        real_connect = psycopg.connect
+
+        def only_disposable(conninfo="", *args, **kwargs):
+            if conninfo != disposable:
+                raise AssertionError("teste de integracao so pode usar TEST_DATABASE_URL")
+            return real_connect(conninfo, *args, **kwargs)
+
+        monkeypatch.setattr(psycopg, "connect", only_disposable)
+        return
     monkeypatch.setattr(psycopg, "connect", blocked)
 
 @pytest.fixture(autouse=True, scope="session")
@@ -77,3 +92,23 @@ def _no_real_commerce_calls(monkeypatch):
         return real_sync_send(self, request, *args, **kwargs)
 
     monkeypatch.setattr(httpx.Client, "send", guarded_sync)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_payment_condition_cache():
+    """O cache de condicao de pagamento e por PROCESSO (`_CACHE` em
+    `payment_conditions.py`), com TTL de 30 minutos por design de producao.
+
+    Sem reset, o primeiro teste da sessao que fechar um pedido sem condicao
+    cadastrada grava "nenhuma ativa" nesse cache global, e qualquer teste
+    seguinte que dependa da condicao default (sem passar `cache=` explicito)
+    herda esse resultado velho pelo resto da sessao inteira.
+    """
+    from app.commerce.payment_conditions import _CACHE
+
+    anterior_rows, anterior_fetched_at = _CACHE.rows, _CACHE.fetched_at
+    _CACHE.rows, _CACHE.fetched_at = None, 0.0
+    try:
+        yield
+    finally:
+        _CACHE.rows, _CACHE.fetched_at = anterior_rows, anterior_fetched_at

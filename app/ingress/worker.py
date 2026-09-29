@@ -62,12 +62,19 @@ async def _send_reply(incoming: IncomingMessage, result: AgentResult) -> dict[st
     from app.brevo_client import send_brevo_reply
 
     send_result = await send_brevo_reply(incoming, result)
-    return {
+    info = {
         "ok": bool(send_result.ok),
         "status_code": send_result.status_code,
         "provider_response": send_result.model_dump(),
         "error": send_result.error,
     }
+    if not send_result.ok and send_result.status_code:
+        from app.http_resilience import classify_send_status
+
+        outcome = classify_send_status(send_result.status_code)
+        info["permanent"] = outcome == "permanent"
+        info["delivery_unknown"] = outcome == "unknown"
+    return info
 
 
 async def process_inbox_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +149,13 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
         incoming.raw["inbound_id"] = inbound_id
         incoming.raw["inbox_id"] = inbox_id
 
+    if inbound_id is not None:
+        from app.chatbo_sync import sync_chatbo_turn
+
+        # Mirror the customer message before model/provider work. A later call
+        # enriches the same idempotent turn with the agent response.
+        await sync_chatbo_turn(inbound_id=inbound_id)
+
     if has_successful_agent_response(inbound_id):
         mark_inbox_processed(inbox_id, processed_inbound_id=inbound_id, owner=owner)
         return {"ok": True, "inbox_id": inbox_id, "skipped": "already_sent"}
@@ -160,6 +174,7 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
         budget = build_llm_call_budget(execution_path="normal")
         runtime = TurnRuntimeContext(trace_id=f"inbox-{inbox_id}", inbound_id=inbound_id,
                                     llm_budget=LLMCallBudget(max_calls=budget.get("max_calls", 2),
+                                                            max_transport_attempts=budget.get("max_transport_attempts", 8),
                                                             enforce=budget.get("enforce", True)))
         token = set_current_turn(runtime)
         try:
@@ -183,8 +198,9 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
     send_ok = bool(send_info.get("ok"))
 
     try:
-        insert_agent_response(
+        response_id = insert_agent_response(
             {
+                "workspace_id": incoming.workspace_id,
                 "inbound_id": inbound_id,
                 "channel": incoming.channel,
                 "sender_key": incoming.sender_key,
@@ -198,6 +214,10 @@ async def _process_inbox_row_locked(row: dict[str, Any]) -> dict[str, Any]:
                 "provider_response": send_info,
             }
         )
+        if response_id is not None:
+            from app.chatbo_sync import sync_chatbo_turn
+
+            await sync_chatbo_turn(inbound_id=inbound_id, response_id=response_id)
     except Exception as exc:  # noqa: BLE001
         log_exception(
             "inbox.response_persist_failed",

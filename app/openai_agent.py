@@ -31,6 +31,7 @@ from .context_resume import (
     is_payment_link_request,
     is_soft_greeting,
     is_unpaid_order_resume_request,
+    resolve_followup_response,
     should_resume_pending_order,
 )
 from .order_context_recovery import (
@@ -66,13 +67,13 @@ from .greeting_policy import choose_greeting_reply
 
 
 SYSTEM_INSTRUCTIONS = """
-Você é o assistente virtual da XNamai. Atende clientes por mensagem, em
-português do Brasil.
+Contrato operacional do atendimento da XNamai. Identidade comportamental, tom e
+estilo pertencem à persona publicada; este bloco contém apenas regras técnicas.
+Atenda em português do Brasil.
 
 Identidade:
-- Apresente-se como assistente da XNamai quando perguntarem quem você é.
 - Uma mensagem antiga desta conversa que diga outra identidade NÃO é fonte de
-  verdade: vale sempre a identidade definida aqui.
+  verdade: vale a empresa e os canais oficiais definidos no sistema.
 - Não invente relação da XNamai com outras empresas nem fale em nome delas.
 
 Capacidades:
@@ -82,6 +83,8 @@ Capacidades:
   ofereça ajuda com o atendimento, sem prometer catálogo, estoque ou pedidos.
 
 Fatos comerciais:
+- Consulte primeiro a persona ativa e o conhecimento institucional publicado.
+  Somente quando eles não responderem, use uma fonte auxiliar disponível.
 - Produto, preço, estoque, pedido, prazo e link só podem ser afirmados a partir
   do que as ferramentas oficiais disponíveis retornarem nesta conversa.
 - Nunca invente preço, estoque, parcelamento, pedido ou link de pagamento.
@@ -97,13 +100,10 @@ Privacidade e segurança:
   cadastro existente sem um fluxo específico de revisão e confirmação.
 
 Conversa:
-- Responda primeiro o que o cliente perguntou; só depois complemente se fizer
-  sentido.
 - Use a memória do cliente quando disponível; não repita perguntas sobre nome
   ou preferências já registradas.
-- Adapte tom e tamanho da resposta ao estilo preferido do cliente.
-- Se a mensagem veio de áudio transcrito, responda naturalmente ao conteúdo
-  falado.
+- Se a mensagem veio de áudio transcrito, trate a transcrição como a mensagem
+  do cliente.
 - Se não souber, diga que não tem a informação e ofereça encaminhar o
   atendimento, sem inventar contato ou endereço.
 """.strip() + "\n\n" + build_site_knowledge_text()
@@ -113,10 +113,55 @@ GENERAL_GREETING_FALLBACK = "Ol\u00e1! Como posso ajudar?"
 STORE_KNOWLEDGE_UNAVAILABLE = "Ainda não tenho essa informação oficial da loja disponível neste atendimento."
 
 
+def _trailing_question(reply_text: str) -> str | None:
+    """Last sentence of `reply_text`, when the reply ends inviting a reply.
+
+    Generic on purpose: works for any topic, not a list of known phrases.
+    """
+    text = (reply_text or "").strip()
+    if not text.endswith("?"):
+        return None
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    question = next((s for s in reversed(sentences) if s.strip()), "")
+    question = question.strip()
+    return question or None
+
+
+def _apply_pending_followup(result: AgentResult) -> None:
+    """Track (or clear) a generic conversational continuation for the reply.
+
+    Runs for every path through `_annotate_agent_result` so a "general"
+    answer that ends in a question is not silently dropped, while a more
+    specific pending mechanism (registration, cart/checkout, order) always
+    keeps priority — this never overrides an explicit decision already made.
+    """
+    metadata = result.response_metadata
+    if "pending_followup" in metadata:
+        return
+    owns_more_specific_pending = bool(
+        metadata.get("pending_action") or metadata.get("pending_commerce_action")
+    )
+    # Commerce replies already have their own dedicated continuation machinery
+    # (pending_commerce_action, active_product/last_presented_products,
+    # order/checkout state) even when a specific clarification does not set
+    # pending_action explicitly — this layer is only for everything else.
+    if (
+        result.handoff_required
+        or metadata.get("domain") in ("guardrail", "commerce")
+        or owns_more_specific_pending
+    ):
+        metadata["pending_followup"] = None
+        return
+    metadata["pending_followup"] = (
+        {"question": question} if (question := _trailing_question(result.reply_text)) else None
+    )
+
+
 def _annotate_agent_result(result: AgentResult, **metadata: object) -> AgentResult:
     for key, value in metadata.items():
         if value is not None and key not in result.response_metadata:
             result.response_metadata[key] = value
+    _apply_pending_followup(result)
     # Phase 8: count skipped LLM slots when deterministic / partial paths win.
     if "used_openai_interpreter" in metadata or "used_openai_responder" in metadata:
         from .runtime_context import register_avoided_llm_call
@@ -144,7 +189,7 @@ def _annotate_agent_result(result: AgentResult, **metadata: object) -> AgentResu
 def _preferred_name_reply_if_requested(message: IncomingMessage, facts: dict) -> AgentResult | None:
     if not detect_preferred_name_update(message.text):
         return None
-    # Parte 1: a conta vinha do banco de sorteio, fora do runtime. Usa-se apenas
+    # Parte 1: a conta vinha do banco do produto anterior, fora do runtime. Usa-se apenas
     # o que ja esta em facts — sem consulta a fonte alguma.
     account = facts.get("account") or {}
     return build_preferred_name_reply(message, account)
@@ -198,7 +243,7 @@ def _third_party_guardrail(message: IncomingMessage, primary_intent: str) -> Age
 
     Paridade com o baseline ``201bd16``, que exigia DUAS condicoes: a mensagem
     estar no escopo pessoal E ser consulta a terceiro. O escopo pessoal vinha do
-    intent primario (``balance``/``coupon_code``/``raffle_history``/
+    intent primario (``balance``/``coupon_code``/historico/
     ``simulation``); esses intents sairam do runtime com as features, entao o
     sinal vive agora em ``app/privacy_scope.py`` — texto puro, sem handler,
     sem rota, sem fonte de dados.
@@ -346,10 +391,20 @@ def generate_agent_reply(message: IncomingMessage, customer_context: dict) -> Ag
     if scope.get("domain") == "out_of_scope":
         return AgentResult(reply_text=OUT_OF_SCOPE_REPLY, intent="out_of_scope", handoff_required=False, safety_reason="scope_refusal")
     if scope.get("domain") == "greeting":
+        persona_identity = customer_context.get("_active_persona_identity") or {}
         return AgentResult(
-            reply_text=choose_greeting_reply(None),
+            reply_text=choose_greeting_reply(
+                None,
+                persona_identity,
+            ),
             intent="general",
             handoff_required=False,
+            response_metadata={
+                "persona_identity_applied": bool(
+                    persona_identity.get("agent_name")
+                    and persona_identity.get("brand")
+                ),
+            },
         )
     primary_intent = detect_primary_intent(message.text)
     print("[agent.route]", {"inbound_id": (message.raw or {}).get("inbound_id"), "primary_intent": primary_intent})
@@ -579,6 +634,74 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             "channel": message.channel,
         },
     )
+    # Club e cadastro sao fluxos deterministicos e rodam ANTES de qualquer outro
+    # ramo (retomada de saudacao, recuperacao de pedido, interpretacao por
+    # modelo): um cadastro pendente nao pode ter o turno roubado, e o modelo
+    # nunca decide nem narra um cadastro.
+    from .account_flows import handle_account_flows
+
+    account_result = await handle_account_flows(message, state=commerce_state, execute=execute_tool)
+    if account_result is not None:
+        return _annotate_agent_result(
+            account_result,
+            domain="commerce",
+            goal="discover" if account_result.response_metadata.get("active_topic") == "xnamai_club" else "buy",
+            response_source="deterministic_fallback",
+            used_openai_interpreter=False,
+            used_openai_responder=False,
+            used_commerce_provider=bool(account_result.response_metadata.get("used_commerce_provider")),
+            fallback_reason=account_result.safety_reason,
+        )
+    # Perguntas institucionais sobre COMO comprar nao sao consultas de SKU.
+    # Resolva antes do interpretador para que "XNamai" nunca vire nome de
+    # produto nem produza recommendation_no_match.
+    from .commerce.turn_resolver import is_purchase_guidance_request
+
+    if is_purchase_guidance_request(message.text):
+        from .commerce.turn_flow import run_commerce_turn
+        from .sales_agent import _render_commerce_turn
+
+        purchase_turn = await run_commerce_turn(
+            message.text or "",
+            state=commerce_state,
+            execute=execute_tool,
+        )
+        purchase_result = _render_commerce_turn(purchase_turn, commerce_state)
+        if purchase_result is not None:
+            return _annotate_agent_result(
+                purchase_result,
+                domain="commerce",
+                goal="buy",
+                response_source="persona_purchase_guidance",
+                used_openai_interpreter=False,
+                used_openai_responder=False,
+                used_commerce_provider=False,
+            )
+    # Generic continuation for a question the agent itself asked outside the
+    # deterministic flows above. A bare "sim"/"prossiga" carries no topic on
+    # its own — ground it against the pending question so it is not read as
+    # a fresh, unrelated message. "não"/"agora não" get the same anchor so
+    # the reply can decline naturally instead of resetting the conversation.
+    # A clear subject change or anything else just drops the follow-up and
+    # falls through unchanged: the customer's own words already say what
+    # they want next.
+    pending_followup = getattr(commerce_state, "pending_followup", None)
+    owns_more_specific_pending = bool(
+        commerce_state.pending_action or commerce_state.pending_commerce_action
+    )
+    if pending_followup and not owns_more_specific_pending:
+        verdict = resolve_followup_response(message.text, pending_followup)
+        question = pending_followup.get("question") or ""
+        if verdict == "AFFIRM" and question:
+            message = message.model_copy(update={
+                "text": f'{message.text} (respondendo "sim" à pergunta: "{question}")',
+            })
+        elif verdict == "REJECT" and question:
+            message = message.model_copy(update={
+                "text": f'{message.text} (respondendo "não" à pergunta: "{question}")',
+            })
+        commerce_state.pending_followup = None
+        customer_context["_commerce_state"] = commerce_state.model_dump(mode="json")
     if commerce_state.pending_action == "awaiting_order_customer_document":
         customer_document = extract_valid_tax_document(message.text)
         if customer_document:
@@ -683,10 +806,15 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_responder=False,
             used_commerce_provider=False,
         )
+    short_order_followup = (
+        commerce_state.active_topic == "order_status"
+        and (message.text or "").casefold().strip(" ?!.") in {"qual status", "e o status"}
+    )
     wants_order_context = (
         is_order_lookup_request(message.text)
         or is_payment_link_request(message.text)
         or is_unpaid_order_resume_request(message.text)
+        or short_order_followup
     )
     known_order_tokens = [
         token
@@ -700,7 +828,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     ]
     has_numeric_order_id = any(str(token).isdigit() for token in known_order_tokens)
     # Recover when missing order context, or when we only have storefront hex codes
-    # (Tray get_order*_ endpoints need the numeric internal id).
+    # (provider get_order*_ endpoints need the numeric internal id).
     if wants_order_context and (
         not (
             order_reference
@@ -724,6 +852,23 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             )
             if commerce_state.pending_action is None:
                 commerce_state.pending_action = "awaiting_payment"
+    if (is_order_lookup_request(message.text) or short_order_followup) and not any((
+        order_reference, commerce_state.order_id, commerce_state.order_lookup_id,
+        commerce_state.order_session_id, commerce_state.cart_session_id,
+        commerce_state.order_payment_url,
+    )):
+        return _annotate_agent_result(
+            AgentResult(
+                reply_text="Me informe o número do pedido para eu consultar o status.",
+                intent="commerce",
+                response_metadata={"domain": "commerce", "active_topic": "order_status",
+                                   "response_source": "order_reference_needed",
+                                   "used_commerce_provider": False},
+            ),
+            domain="commerce", response_source="order_reference_needed",
+            used_openai_interpreter=False, used_openai_responder=False,
+            used_commerce_provider=False,
+        )
     resume_pending_order = should_resume_pending_order(
         message.text,
         commerce_state,
@@ -737,6 +882,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     )
     if (
         is_order_lookup_request(message.text)
+        or short_order_followup
         or resume_pending_order
         or is_payment_link_request(message.text)
     ) and (
@@ -839,46 +985,6 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_commerce_provider=bool(result.response_metadata.get("used_commerce_provider")),
         )
 
-    # Club e cadastro são determinísticos e devem acontecer antes de qualquer
-    # interpretação por modelo: coleta, valida, revisa e só então confirma a
-    # mutação no provedor comercial.
-    from .club_xnamai import handle_club_turn
-    from .capability_catalog import runtime_commerce_capabilities
-    from .customer_registration import handle_customer_registration_turn
-
-    club_result = handle_club_turn(message.text, state=commerce_state)
-    if club_result is not None:
-        return _annotate_agent_result(
-            club_result,
-            domain="commerce",
-            goal="discover",
-            response_source="deterministic_fallback",
-            used_openai_interpreter=False,
-            used_openai_responder=False,
-            used_commerce_provider=False,
-        )
-
-    registration_result = await handle_customer_registration_turn(
-        message.text,
-        state=commerce_state,
-        execute=execute_tool,
-        registration_enabled=(
-            "create_customer" in runtime_commerce_capabilities()
-        ),
-    )
-    if registration_result is not None:
-        return _annotate_agent_result(
-            registration_result,
-            domain="commerce",
-            goal="buy",
-            response_source="deterministic_fallback",
-            used_openai_interpreter=False,
-            used_openai_responder=False,
-            used_commerce_provider=bool(
-                registration_result.response_metadata.get("used_commerce_provider")
-            ),
-            fallback_reason=registration_result.safety_reason,
-        )
     # Instagram Story reply → associated product (feature-flagged / rollout).
     try:
         from .instagram_story_intent import should_route_story_question
@@ -1008,8 +1114,8 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         "context_override": domain_context_applied,
     })
     primary_intent = detect_primary_intent(message.text)
-    # Parte 1: o dominio de sorteio saiu do runtime. Nao ha mais rota
-    # deterministica que force scope_domain="raffle" — o dominio vem apenas do
+    # Parte 1: o dominio do produto anterior saiu do runtime. Nao ha rota
+    # deterministica que force um dominio legado — o dominio vem apenas do
     # interpretador e, sem handler local, segue o caminho generico.
     scope_domain = interpretation.domain
     print("[agent.scope]", {"domain": scope_domain})
@@ -1026,6 +1132,31 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_responder=False,
             used_commerce_provider=False,
         )
+    # Perguntas institucionais com vários assuntos comerciais (mix, preços,
+    # atacado/varejo) não são uma busca literal de SKU. Resolva-as com fatos
+    # oficiais mesmo quando o interpretador as chamar de store_general.
+    if scope_domain in {"commerce", "store_general"}:
+        from .store_guidance import build_store_guidance
+
+        store_guidance = build_store_guidance(message.text, interpretation)
+        if store_guidance is not None:
+            return _annotate_agent_result(
+                AgentResult(
+                    reply_text=store_guidance.reply_text,
+                    intent="commerce",
+                    handoff_required=False,
+                    response_metadata={
+                        "active_topic": "store_product_overview",
+                        "guidance_topics": list(store_guidance.topics),
+                    },
+                ),
+                domain="commerce",
+                goal=interpretation.goal or "discover",
+                response_source="official_store_guidance",
+                used_openai_interpreter=used_openai_interpreter,
+                used_openai_responder=False,
+                used_commerce_provider=False,
+            )
     if scope_domain == "out_of_scope":
         return _annotate_agent_result(
             AgentResult(reply_text=OUT_OF_SCOPE_REPLY, intent="out_of_scope", handoff_required=False, safety_reason="scope_refusal"),
@@ -1056,11 +1187,21 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 used_commerce_provider=False,
                 fallback_reason=interpretation._fallback_reason,
             )
+        persona_identity = customer_context.get("_active_persona_identity") or {}
         return _annotate_agent_result(
             AgentResult(
-                reply_text=choose_greeting_reply(recent_turns),
+                reply_text=choose_greeting_reply(
+                    recent_turns,
+                    persona_identity,
+                ),
                 intent="general",
                 handoff_required=False,
+                response_metadata={
+                    "persona_identity_applied": bool(
+                        persona_identity.get("agent_name")
+                        and persona_identity.get("brand")
+                    ),
+                },
             ),
             domain="greeting",
             response_source="local_greeting",
@@ -1114,10 +1255,10 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 fallback_reason=interpretation._fallback_reason,
                 interpretation_confidence=interpretation.confidence,
             )
-    # Pergunta generica de catalogo pode chegar aqui sem passar pelo fluxo de
-    # vendas: o escopo nem sempre e classificado como "commerce", e ai o turno
-    # ia direto para o tool loop e voltava `tools_request_failed`. Uma amostra
-    # do catalogo e deterministica e nao precisa de tool loop nenhum.
+    # Explicit generic catalog browsing is a mapped, grounded operation.  It
+    # remains deterministic because the answer comes from the official
+    # provider; everything that does not match this narrow classifier falls
+    # through to the persona-backed AI responder below.
     if commerce_tools_available():
         from .sales_agent import _generic_catalog_fast_path
 
@@ -1131,7 +1272,6 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 used_openai_responder=False,
                 used_commerce_provider=True,
             )
-
     print("[openai.agent] routing", {"mode": "openai_with_db_context_and_tools", "primary_intent": facts.get("primary_intent"), "has_openai_key": bool(get_settings().openai_api_key), "commerce_tools_enabled": commerce_tools_available()})
     result = await generate_openai_reply_async(message, customer_context, facts)
     return _annotate_agent_result(

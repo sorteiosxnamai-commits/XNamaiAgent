@@ -23,11 +23,42 @@ def test_history_cannot_override_identity():
     assert "não a anuncie" in SYSTEM_INSTRUCTIONS
 
 
-def test_public_knowledge_contains_no_unverified_commercial_terms():
+def test_public_knowledge_contains_no_inactive_business_terms():
     text = build_site_knowledge_text()
-    for term in ("R$", "Lotomania", "Cartão Presente", "+55"):
+    for term in ("Lotomania", "Cartão Presente", "+55"):
         assert term not in text
     assert "Não presuma políticas" in text
+
+
+def test_public_knowledge_explicitly_allows_cpf_and_cnpj_registration():
+    text = build_site_knowledge_text()
+    assert "tanto por CPF quanto por CNPJ" in text
+    assert "Nunca diga que o cadastro é exclusivo para CNPJ" in text
+    assert "Cadastro com CPF é feito pelo atendimento" in text
+
+
+def test_public_knowledge_contains_published_club_and_sales_policy():
+    text = build_site_knowledge_text()
+    for expected in (
+        "R$ 149,97 por mês",
+        "R$ 800,00",
+        "boleto não é aceito",
+        "ônibus para o Brás",
+    ):
+        assert expected in text
+    assert "primeira distribuidora do Brasil" not in text
+    assert "preço de quase caixa fechada" not in text
+    assert "taxa da operadora" not in text
+    assert "preços exibidos no catálogo já são preços exclusivos" not in text
+
+
+def test_persona_uses_emojis_naturally_without_forcing_them():
+    persona = (Path(__file__).resolve().parents[1] / "persona_xnamai.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Use emoji sempre que ele ajudar" in persona
+    assert "sem forçar" in persona
+    assert "sem colocar emoji em toda mensagem" in persona
 
 
 def test_no_vip_identity_is_preconfigured():

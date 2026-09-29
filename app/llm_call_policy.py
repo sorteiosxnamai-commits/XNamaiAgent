@@ -152,9 +152,18 @@ def resolve_turn_llm_budget(*, complex_turn: bool = False) -> dict[str, Any]:
     max_calls = max(base, complex_cap) if complex_turn else base
     return {
         "max_calls": max(0, max_calls),
+        "max_transport_attempts": _max_transport_attempts(settings),
         "enforce": bool(getattr(settings, "agent_llm_budget_enabled", True)),
         "complex_turn": complex_turn,
     }
+
+
+def _max_transport_attempts(settings: Any) -> int:
+    try:
+        value = int(getattr(settings, "agent_max_llm_transport_attempts_per_turn", 8) or 8)
+    except (TypeError, ValueError):
+        value = 8
+    return max(1, value)
 
 
 ExecutionPath = Literal["fast", "normal", "complex", "critical"]
@@ -189,6 +198,7 @@ def build_llm_call_budget(
         settings = get_settings()
         return {
             "max_calls": 1 if bool(getattr(settings, "agent_llm_budget_enabled", True)) else 0,
+            "max_transport_attempts": _max_transport_attempts(settings),
             "enforce": bool(getattr(settings, "agent_llm_budget_enabled", True)),
             "complex_turn": False,
             "execution_path": "fast",

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 import app.persona_repository as repo
 import app.prompt_compiler as compiler
 from app.models import IncomingMessage
@@ -261,3 +263,54 @@ def test_tenant_isolation(monkeypatch):
     assert "TENANT_B" not in compiled_a.instructions
     assert "TENANT_B" in compiled_b.instructions
     assert "TENANT_A" not in compiled_b.instructions
+
+
+@pytest.mark.parametrize(
+    "legit",
+    [
+        "Temos smartwatch compatível com Android e iOS.",
+        "Ajude o cliente a escolher um relógio inteligente para corrida.",
+        "Pulseiras para Apple Watch e capas para celular fazem parte do catálogo.",
+        "Relógios, watches, fones e carregadores podem aparecer no catálogo atual.",
+        "A Xnamai não faz sorteios nem promoções por sorteio.",
+        "Você é o assistente comercial oficial da XNamai, distribuidora de eletrônicos.",
+    ],
+)
+def test_product_words_alone_do_not_reject_a_persona(legit):
+    assert compiler._has_legacy_store_identity(legit) is False
+
+
+@pytest.mark.parametrize(
+    "stale",
+    [
+        "Você é o NewStoreAgent, atendente virtual.",
+        "Você é o assistente comercial oficial da New Store.",
+        "persona_key: newstore_commercial",
+        "Consulte https://www.sorteio" + "newstore.com.br/",
+        "Você é o NSAgent de atendimento.",
+        "Explique o sorteio e o saldo do Cartão Presente.",
+        "Informe o resultado do sorteio da Lotomania.",
+    ],
+)
+def test_legacy_identity_signals_reject_a_persona(stale):
+    assert compiler._has_legacy_store_identity(stale) is True
+
+
+def test_smartwatch_persona_is_used_not_replaced_by_fallback(monkeypatch):
+    InMemoryPersonaStore().install(monkeypatch)
+    _enable_persona(monkeypatch, enabled=True)
+    created = repo.create_persona_version(
+        instructions="Persona Xnamai. Vendemos smartwatch, relógio inteligente e pulseiras de Apple Watch.\n",
+        name="Catálogo com relógios",
+    )
+    repo.activate_persona_version(created.id)
+
+    compiled = compiler.compile_agent_prompt(
+        incoming=IncomingMessage(channel="whatsapp", text="oi"),
+        fallback_instructions="CONTRATO_ATUAL_XNAMAI",
+        audit=False,
+    )
+
+    assert compiled.used_db_persona is True
+    assert compiled.fallback_reason is None
+    assert "relógio inteligente" in compiled.instructions

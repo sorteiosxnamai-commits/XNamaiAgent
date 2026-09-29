@@ -62,6 +62,20 @@ CRITIQUE_JUDGE_SYSTEM_PROMPT = (
     "Não reescreva a resposta final aqui."
 )
 
+#: Contrato TECNICO da regeneracao. Tom e estilo vem da persona publicada,
+#: injetada por ``resolve_system_instructions``.
+REGENERATION_CONTRACT = (
+    "Você regenera a resposta ao cliente da XNamai usando o histórico, os fatos "
+    "já conhecidos e os novos resultados de API. "
+    "Não invente dados. Se houver payment_url nos fatos, envie o link. "
+    "Se commercial_data.products foi atualizado pela reconsulta, "
+    "apresente SOMENTE esses produtos (não os da resposta anterior). "
+    "Se a reconsulta search_products veio vazia, diga com honestidade "
+    "que não encontrou o que o cliente pediu — nunca reenvie a lista "
+    "anterior inadequada. "
+    "Responda em português do Brasil, respeitando o formato do canal."
+)
+
 
 class RecommendedApiCall(BaseModel):
     name: str
@@ -147,6 +161,50 @@ def apply_fast_deterministic_critique(
                 better_reply_hint=TRADE_IN_HANDOFF_MESSAGE,
             )
             return fixed, verdict, "fast_trade_in_handoff"
+
+    # Broad questions about assortment and commercial conditions must not
+    # collapse into a literal catalog miss or a terse clarification.
+    from .store_guidance import build_store_guidance
+
+    guidance = build_store_guidance(text)
+    weak_store_reply = bool(
+        result.safety_reason in {"recommendation_no_match", "product_not_found"}
+        or (
+            len(reply) < 120
+            and any(
+                cue in reply.casefold()
+                for cue in (
+                    "não encontrei",
+                    "nao encontrei",
+                    "qual produto",
+                    "qual preferência",
+                    "qual preferencia",
+                )
+            )
+        )
+    )
+    if guidance is not None and weak_store_reply:
+        fixed = result.model_copy(deep=True)
+        fixed.reply_text = guidance.reply_text
+        fixed.safety_reason = None
+        fixed.response_metadata = dict(fixed.response_metadata or {})
+        fixed.response_metadata.update({
+            "fast_critique": "store_guidance_recovered",
+            "active_topic": "store_product_overview",
+            "guidance_topics": list(guidance.topics),
+            "used_commerce_provider": False,
+        })
+        verdict = CritiqueVerdict(
+            score=35,
+            pass_check=False,
+            issues=["broad_store_question_treated_as_catalog_lookup"],
+            summary=(
+                "Pergunta ampla sobre produtos e condições foi tratada como "
+                "busca literal; resposta substituída por orientação oficial."
+            ),
+            better_reply_hint=guidance.reply_text,
+        )
+        return fixed, verdict, "fast_store_guidance"
 
     # 2) Do not re-send the same greeting this person already received.
     previous = _last_assistant_reply(recent_turns)
@@ -588,23 +646,31 @@ async def _regenerate_reply(
             and len(products) == 0
         )
 
+        from .channel_profiles import channel_system_hint
+        from .prompt_compiler import (
+            legacy_contract_extra_blocks,
+            resolve_system_instructions,
+        )
+
+        regeneration_contract = (
+            f"{REGENERATION_CONTRACT}\n\n"
+            f"{channel_system_hint(incoming.channel)}\n\n"
+            f"{format_capability_catalog_for_prompt()}"
+        )
+        # A resposta regenerada vai ao cliente: recebe a persona publicada pela
+        # mesma fonte do responder, nunca uma voz propria deste modulo.
+        system_instructions = resolve_system_instructions(
+            fallback_instructions=regeneration_contract,
+            incoming=incoming,
+            conversation_state=commerce_state,
+            recent_turns=recent_turns,
+            extra_system_blocks=legacy_contract_extra_blocks(
+                regeneration_contract,
+                tag="critique_regeneration_contract",
+            ),
+        )
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Você é o agente de RESPOSTA da XNamai. "
-                    "Regenera a resposta ao cliente usando o histórico, os fatos "
-                    "já conhecidos e os novos resultados de API. "
-                    "Não invente dados. Se houver payment_url nos fatos, envie o link. "
-                    "Se commercial_data.products foi atualizado pela reconsulta, "
-                    "apresente SOMENTE esses produtos (não os da resposta anterior). "
-                    "Se a reconsulta search_products veio vazia, diga com honestidade "
-                    "que não encontrou o que o cliente pediu — nunca reenvie a lista "
-                    "anterior inadequada. "
-                    "Resposta curta em português do Brasil para WhatsApp.\n\n"
-                    + format_capability_catalog_for_prompt()
-                ),
-            },
+            {"role": "system", "content": system_instructions},
             {
                 "role": "user",
                 "content": json.dumps(

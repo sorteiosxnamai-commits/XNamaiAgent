@@ -54,13 +54,16 @@ async def test_registration_requires_review_and_explicit_confirmation():
 
     async def execute(name, arguments):
         calls.append((name, arguments))
+        if name == "lookup_customer_by_document":
+            return {"ok": True, "found": False}
         return {"ok": True, "customer_id": "321"}
 
     state = CommerceConversationState()
     started = await handle_customer_registration_turn(
         "quero me cadastrar", state=state, execute=execute,
     )
-    assert "Tipo: PF ou PJ" in started.reply_text
+    # pede so o que falta (sem o formulario inteiro), e nada e enviado ainda
+    assert "CPF ou CNPJ" in started.reply_text and "e-mail" not in started.reply_text
     assert calls == []
     state = evolve_commerce_state(state, started)
     assert state.pending_action == PENDING_REGISTRATION_DATA
@@ -79,9 +82,10 @@ async def test_registration_requires_review_and_explicit_confirmation():
         "confirmo o cadastro", state=state, execute=execute,
     )
     assert "sucesso" in created.reply_text
-    assert len(calls) == 1
-    assert calls[0][0] == "create_customer"
-    assert calls[0][1] == customer_payload(state.customer_registration["draft"])
+    # duplicidade consultada ANTES da unica criacao
+    assert [name for name, _ in calls] == ["lookup_customer_by_document", "create_customer"]
+    assert calls[0][1] == {"document": "52998224725"}
+    assert calls[1][1] == customer_payload(state.customer_registration["draft"])
     state = evolve_commerce_state(state, created)
     assert state.mercos_customer_id == "321"
     assert state.pending_action is None
@@ -93,6 +97,8 @@ async def test_unknown_mutation_result_is_never_retried():
 
     async def execute(name, arguments):
         calls.append((name, arguments))
+        if name == "lookup_customer_by_document":
+            return {"ok": True, "found": False}
         return {"ok": False, "code": "mutation_state_unknown"}
 
     normalized, errors = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
@@ -106,7 +112,48 @@ async def test_unknown_mutation_result_is_never_retried():
     )
     assert result.handoff_required is True
     assert "Não vou reenviar" in result.reply_text
-    assert len(calls) == 1
+    assert [name for name, _ in calls] == ["lookup_customer_by_document", "create_customer"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["Oi", "Quero ver outra coisa", "Quero saber de outra coisa"])
+async def test_unrelated_message_during_confirmation_does_not_reflood_review(text):
+    """A greeting or topic change while awaiting confirmation must not
+    re-print the review on every turn — it defers to the rest of the agent,
+    and the pending confirmation survives untouched."""
+    normalized, errors = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
+    assert errors == {}
+    state = CommerceConversationState(
+        pending_action=PENDING_REGISTRATION_CONFIRMATION,
+        customer_registration={"status": "review", "draft": normalized},
+    )
+
+    async def execute(name, arguments):  # pragma: no cover - must never be called
+        raise AssertionError(f"unexpected tool call: {name}")
+
+    result = await handle_customer_registration_turn(text, state=state, execute=execute)
+    assert result is None
+    assert state.pending_action == PENDING_REGISTRATION_CONFIRMATION
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["ok", "beleza", "pode ser"])
+async def test_weak_affirmation_during_confirmation_still_reshows_review(text):
+    """Unlike a clear topic change, a weak affirmation plausibly means "yes"
+    and still gets the review re-shown so the customer can answer clearly."""
+    normalized, errors = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
+    assert errors == {}
+    state = CommerceConversationState(
+        pending_action=PENDING_REGISTRATION_CONFIRMATION,
+        customer_registration={"status": "review", "draft": normalized},
+    )
+
+    async def execute(name, arguments):  # pragma: no cover - must never be called
+        raise AssertionError(f"unexpected tool call: {name}")
+
+    result = await handle_customer_registration_turn(text, state=state, execute=execute)
+    assert result is not None
+    assert "Confira os dados" in result.reply_text
 
 
 @pytest.mark.asyncio
@@ -126,11 +173,26 @@ async def test_mercos_provider_creates_customer_only_when_gate_is_open():
         customer_mutations_enabled=True,
         transport=httpx.MockTransport(handler),
     )
-    provider = MercosCommerceProvider(client, tenant_id="xnamai")
+    from app.commerce.mercos.customer_index import CreationClaim, CustomerLookupResult, CustomerLookupStatus
+
+    class ClaimingIndex:
+        """Index that grants the claim (the lock itself is proven on PostgreSQL)."""
+
+        finished = []
+
+        def claim_creation(self, document):
+            return CreationClaim(True, CustomerLookupResult(CustomerLookupStatus.NOT_FOUND))
+
+        def finish_creation(self, document, *, outcome, customer_id=None):
+            self.finished.append((outcome, customer_id))
+
+    index = ClaimingIndex()
+    provider = MercosCommerceProvider(client, tenant_id="xnamai", customer_index=index)
     normalized, errors = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
     assert errors == {}
     result = await provider.execute("create_customer", customer_payload(normalized))
     assert result == {"ok": True, "customer_id": "321"}
+    assert index.finished == [("created", "321")]
     assert len(requests) == 1
     assert requests[0].method == "POST"
     assert requests[0].url.path == "/v1/customers"
@@ -148,13 +210,13 @@ async def test_registration_route_skips_openai_interpretation(monkeypatch):
     monkeypatch.setattr(agent, "load_recent_conversation_turns", lambda *_a, **_k: [])
     monkeypatch.setattr(
         "app.capability_catalog.runtime_commerce_capabilities",
-        lambda: frozenset({"create_customer"}),
+        lambda: frozenset({"create_customer", "lookup_customer_by_document"}),
     )
     result = await agent.generate_agent_reply_async(
         agent.IncomingMessage(text="quero me cadastrar"),
         {"_commerce_state": CommerceConversationState()},
     )
-    assert "Tipo: PF ou PJ" in result.reply_text
+    assert "CPF ou CNPJ" in result.reply_text
     assert result.response_metadata["used_openai_interpreter"] is False
     assert result.response_metadata["used_openai_responder"] is False
 
@@ -191,7 +253,7 @@ def test_build_provider_propagates_customer_mutation_gate():
         database_url="",
     )
     provider = build_mercos_provider(settings)
-    assert "create_customer" in provider.runtime_capabilities
+    assert "create_customer" not in provider.runtime_capabilities
 
 
 def test_customer_payload_is_redacted_from_observability():
@@ -209,7 +271,67 @@ def test_customer_payload_is_redacted_from_observability():
     ):
         assert private_value not in serialized
     assert redacted["razao_social"] == "[REDACTED]"
-    assert redacted["nome_fantasia"] == "[REDACTED]"
+    assert "nome_fantasia" not in redacted
     assert redacted["cnpj"] == "[REDACTED]"
-    assert redacted["email"] == "[REDACTED]"
+    assert redacted["emails"] == "[REDACTED]"
     assert redacted["telefones"] == "[REDACTED]"
+
+
+@pytest.mark.asyncio
+async def test_create_customer_alone_collects_but_does_not_commit(monkeypatch):
+    """Coleta continua disponível; confirmação exige busca e mutation."""
+    import app.openai_agent as agent
+
+    monkeypatch.setattr(agent, "load_recent_conversation_turns", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        "app.capability_catalog.runtime_commerce_capabilities",
+        lambda: frozenset({"create_customer"}),
+    )
+    result = await agent.generate_agent_reply_async(
+        agent.IncomingMessage(text="quero me cadastrar"),
+        {"_commerce_state": CommerceConversationState()},
+    )
+    assert result.safety_reason is None
+    assert "CPF" in result.reply_text
+
+
+@pytest.mark.asyncio
+async def test_create_customer_without_index_never_posts():
+    from app.commerce.mercos.client import MercosAdaptorClient
+    from app.commerce.mercos.provider import MercosCommerceProvider
+
+    requests = []
+    client = MercosAdaptorClient(
+        base_url="https://adaptor.example.com", api_key="internal", customer_mutations_enabled=True,
+        transport=httpx.MockTransport(lambda request: requests.append(request) or httpx.Response(201)),
+    )
+    normalized, _ = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
+    result = await MercosCommerceProvider(client, tenant_id="xnamai").execute(
+        "create_customer", customer_payload(normalized))
+    assert result["ok"] is False and result["lookup_status"] == "INDEX_NOT_READY"
+    assert requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "expected"), [
+    ("AMBIGUOUS", "ambiguous"), ("CREATION_PENDING", "creation_pending"),
+    ("INDEX_NOT_READY", "lookup_failed"), ("TIMEOUT", "lookup_failed"),
+])
+async def test_lookup_other_than_found_or_not_found_blocks_creation(status, expected):
+    calls = []
+
+    async def execute(name, arguments):
+        calls.append(name)
+        return {"ok": False, "status": status, "found": False, "customer_id": None}
+
+    normalized, _ = validate_registration_draft(parse_registration_fields(VALID_FIELDS))
+    state = CommerceConversationState(
+        pending_action=PENDING_REGISTRATION_CONFIRMATION,
+        customer_registration={"status": "review", "draft": normalized},
+    )
+    result = await handle_customer_registration_turn("confirmo o cadastro", state=state, execute=execute)
+    assert calls == ["lookup_customer_by_document"]  # zero POST
+    assert result.handoff_required is True
+    assert result.response_metadata["customer_registration_state"]["status"] == expected
+    for secret in ("52998224725", "maria@example.com"):
+        assert secret not in result.reply_text

@@ -461,7 +461,7 @@ async def hydrate_visual_matches(
             continue
         result = await execute_tool("get_product", {"product_id": str(product_id)})
         if "error" in result or not isinstance(result, dict):
-            # Fall back to indexed metadata if Tray lookup fails.
+            # Fall back to indexed metadata if the provider lookup fails.
             products.append({
                 "id": product_id,
                 "name": match.get("name"),

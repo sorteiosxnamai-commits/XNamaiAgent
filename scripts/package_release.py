@@ -50,6 +50,65 @@ EXCLUDE_FILE_GLOBS = (
 
 ALLOW_ENV_EXAMPLE = ".env.example"
 
+# --- Release policy -------------------------------------------------------
+# The package is an ALLOWLIST of top-level entries: anything new at the repo
+# root (local tool notes, editor config, debug dumps, scratch files) stays out
+# until someone adds it here on purpose. Inside the allowed entries the
+# exclusions below still apply.
+RELEASE_TOP_LEVEL_DIRS = frozenset(
+    {"api", "app", "scripts", "sql", "docs", "tests", ".github"}
+)
+RELEASE_TOP_LEVEL_FILES = frozenset(
+    {
+        "README.md",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "vercel.json",
+        "pytest.ini",
+        "persona_xnamai.txt",
+        ALLOW_ENV_EXAMPLE,
+        ".gitignore",
+    }
+)
+RELEASE_EXCLUDE_DIR_NAMES = EXCLUDE_DIR_NAMES | frozenset(
+    {
+        ".superpowers",
+        ".remember",
+        ".cursor",
+        ".idea",
+        ".vscode",
+        "coverage",
+        "logs",
+        "tmp",
+        "temp",
+    }
+)
+RELEASE_EXCLUDE_FILE_GLOBS = EXCLUDE_FILE_GLOBS + (
+    # logs, debug dumps and scratch files
+    "*.log",
+    "debug-*",
+    "*.tmp",
+    "*.temp",
+    "*.swp",
+    "*.swo",
+    "*~",
+    "*.bak",
+    "*.orig",
+    ".coverage.*",
+    # local credentials
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "id_rsa*",
+    "id_ed25519*",
+    "credentials*.json",
+    "service-account*.json",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.db",
+)
+
 SECRET_VAR_NAMES: tuple[str, ...] = (
     "OPENAI_API_KEY",
     "VERCEL_OIDC_TOKEN",
@@ -125,11 +184,11 @@ class SecretFinding(BaseModel):
     blocking: bool = Field(description="True only for real secrets")
 
 
-def _is_excluded_file(rel: Path) -> bool:
+def _is_excluded_file(rel: Path, globs: tuple[str, ...] = EXCLUDE_FILE_GLOBS) -> bool:
     name = rel.name
     if name == ALLOW_ENV_EXAMPLE:
         return False
-    for pattern in EXCLUDE_FILE_GLOBS:
+    for pattern in globs:
         if fnmatch.fnmatch(name, pattern):
             return True
     if name.startswith(".env"):
@@ -137,7 +196,19 @@ def _is_excluded_file(rel: Path) -> bool:
     return False
 
 
-def iter_release_files(root: Path) -> list[Path]:
+def _in_release_allowlist(rel: Path) -> bool:
+    top = rel.parts[0]
+    if len(rel.parts) == 1:
+        return top in RELEASE_TOP_LEVEL_FILES
+    return top in RELEASE_TOP_LEVEL_DIRS
+
+
+def iter_repository_files(root: Path) -> list[Path]:
+    """Every file worth scanning for secrets: caches and local ``.env*`` aside.
+
+    Deliberately BROADER than the release: a secret in a local note or a log is
+    still a leak, so ``scan_secrets.py`` uses this, not ``iter_release_files``.
+    """
     selected: list[Path] = []
     for path in root.rglob("*"):
         if not path.is_file():
@@ -152,6 +223,38 @@ def iter_release_files(root: Path) -> list[Path]:
             continue
         selected.append(path)
     return sorted(selected)
+
+
+def iter_release_files(root: Path) -> list[Path]:
+    """Files that go into the release ZIP: allowlist first, exclusions inside."""
+    selected: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            continue
+        if not _in_release_allowlist(rel):
+            continue
+        if any(part in RELEASE_EXCLUDE_DIR_NAMES for part in rel.parts):
+            continue
+        if _is_excluded_file(rel, RELEASE_EXCLUDE_FILE_GLOBS):
+            continue
+        selected.append(path)
+    return sorted(selected)
+
+
+def skipped_top_level_entries(root: Path) -> list[str]:
+    """Top-level names left out by the allowlist (names only, never contents)."""
+    return sorted(
+        entry.name + ("/" if entry.is_dir() else "")
+        for entry in root.iterdir()
+        if not (
+            (entry.is_dir() and entry.name in RELEASE_TOP_LEVEL_DIRS)
+            or (entry.is_file() and entry.name in RELEASE_TOP_LEVEL_FILES)
+        )
+    )
 
 
 def _strip_quotes(value: str) -> str:
@@ -310,6 +413,9 @@ def build_zip(
         )
 
     if dry_run:
+        skipped = skipped_top_level_entries(base)
+        if skipped:
+            print(f"info: outside release allowlist (not packaged): {', '.join(skipped)}")
         print(f"dry-run: would package {len(files)} files -> {out}")
         return out
 

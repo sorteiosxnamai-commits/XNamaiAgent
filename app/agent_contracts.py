@@ -10,7 +10,6 @@ from .models import AgentResult, IncomingMessage
 
 AgentDomain = Literal[
     "commerce",
-    "raffle",
     "store_general",
     "greeting",
     "guardrail",
@@ -162,7 +161,6 @@ def build_agent_decision(
     domain = str(metadata.get("domain") or "unknown")
     allowed_domains = {
         "commerce",
-        "raffle",
         "store_general",
         "greeting",
         "guardrail",

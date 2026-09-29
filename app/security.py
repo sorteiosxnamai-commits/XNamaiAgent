@@ -56,3 +56,16 @@ async def verify_remarketing_cron(
     expected = f"Bearer {settings.remarketing_cron_secret}"
     if not authorization or not _secure_equals(authorization, expected):
         raise HTTPException(status_code=401, detail="invalid_remarketing_cron_token")
+
+
+async def verify_chatbo_sync_token(
+    authorization: str | None = Header(default=None),
+) -> None:
+    """Authorize the one-off ChatBô backfill with its dedicated service token."""
+    settings = get_settings()
+    if not settings.chatbo_internal_token:
+        raise HTTPException(status_code=500, detail="chatbo_internal_token_not_configured")
+
+    expected = f"Bearer {settings.chatbo_internal_token}"
+    if not authorization or not _secure_equals(authorization, expected):
+        raise HTTPException(status_code=401, detail="invalid_chatbo_sync_token")

@@ -30,7 +30,6 @@ Intent = Literal[
     "commerce_inspect",
     "commerce_buy",
     "commerce_after_sales",
-    "raffle_info",
     "store_general",
     "out_of_scope",
     "human_handoff",
@@ -478,7 +477,6 @@ def _intent_to_domain_goal(
         "commerce_inspect": ("commerce", "inspect"),
         "commerce_buy": ("commerce", "buy"),
         "commerce_after_sales": ("commerce", "after_sales"),
-        "raffle_info": ("raffle", None),
         "store_general": ("store_general", None),
         "out_of_scope": ("out_of_scope", None),
         "human_handoff": ("store_general", None),
@@ -489,8 +487,6 @@ def _intent_to_domain_goal(
 def _goal_to_intent(domain: str, goal: str | None) -> Intent:
     if domain == "greeting":
         return "greeting"
-    if domain == "raffle":
-        return "raffle_info"
     if domain == "store_general":
         return "store_general"
     if domain == "out_of_scope":
