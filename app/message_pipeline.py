@@ -21,7 +21,7 @@ from app.observability import (
 )
 from app.working_memory import build_working_memory
 from app.factual_validator import apply_factual_validation
-from app.handoff_service import enrich_handoff_metadata
+from app.handoff_service import build_human_handoff_result, enrich_handoff_metadata
 from app.models import AgentResult, IncomingMessage
 from app.openai_agent import generate_agent_reply_async
 from app.quality_judge import attach_judge_report, run_quality_judge
@@ -126,6 +126,54 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             log_exception("persona.configuration_invalid", exc)
             policy_token = bind_policy(None)
         consultation = consult_active_persona(active, incoming.text)
+        persona_required = bool(
+            getattr(settings, "agent_db_persona_enabled", False)
+            and getattr(settings, "database_url", None)
+        )
+        persona_instructions = str(getattr(active, "instructions", "") or "").strip()
+        legacy_persona = False
+        if persona_instructions:
+            from .prompt_compiler import _has_legacy_store_identity
+
+            legacy_persona = _has_legacy_store_identity(persona_instructions)
+        if persona_required and (
+            active is None or not persona_instructions or legacy_persona
+        ):
+            # Fail closed: a customer-facing business answer must never be
+            # generated from the legacy/code fallback when the workspace
+            # persona cannot be loaded.  Queue the conversation instead.
+            result = build_human_handoff_result(
+                reason="active_persona_unavailable",
+                reply_text=(
+                    "Tive uma indisponibilidade para acessar as informações "
+                    "deste atendimento. Vou encaminhar sua conversa para a equipe."
+                ),
+            )
+            result.response_metadata["persona_guard"] = {
+                "required": True,
+                "passed": False,
+                "workspace_id": workspace_id,
+                "reason": (
+                    "legacy_persona_rejected"
+                    if legacy_persona
+                    else consultation.reason or "active_persona_unavailable"
+                ),
+            }
+            result.response_metadata["persona_consultation"] = consultation.model_dump(
+                exclude={"relevant_knowledge"}
+            )
+            log_event(
+                "persona.fail_closed",
+                {
+                    "workspace_id": workspace_id,
+                    "reason": (
+                        "legacy_persona_rejected"
+                        if legacy_persona
+                        else consultation.reason or "active_persona_unavailable"
+                    ),
+                },
+            )
+            return enrich_handoff_metadata(incoming, result)
         turn_customer_context = dict(customer_context)
         if active is not None:
             persona_metadata = getattr(active, "metadata", None) or {}
@@ -135,6 +183,14 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
                 "persona_version_id": getattr(active, "id", None),
             }
         result = await _process_incoming_message(incoming, turn_customer_context)
+        if persona_required:
+            result = _fail_closed_on_ai_composition_failure(incoming, result)
+        result.response_metadata["persona_guard"] = {
+            "required": persona_required,
+            "passed": True,
+            "workspace_id": workspace_id,
+            "persona_version_id": getattr(active, "id", None),
+        }
         result.response_metadata["persona_consultation"] = consultation.model_dump(
             exclude={"relevant_knowledge"}
         )
@@ -149,6 +205,49 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
         if policy_token is not None:
             reset_policy(policy_token)
         end_turn_cache(cache_token)
+
+
+_AI_COMPOSITION_FAILURES = frozenset(
+    {
+        "openai_api_key_missing",
+        "tools_request_failed",
+        "tool_loop_limit",
+        "sales_responder_unavailable",
+        "clarification_responder_failed",
+        "response_composition_empty",
+    }
+)
+
+
+def _fail_closed_on_ai_composition_failure(
+    incoming: IncomingMessage,
+    result: AgentResult,
+) -> AgentResult:
+    """Never send an uncomposed template after an AI composition failure."""
+    if result.handoff_required:
+        return result
+    metadata = result.response_metadata or {}
+    reason = str(metadata.get("fallback_reason") or result.safety_reason or "")
+    failed = reason in _AI_COMPOSITION_FAILURES or reason.startswith("openai_error_")
+    if not failed:
+        return result
+
+    blocked = {
+        "response_source": metadata.get("response_source"),
+        "fallback_reason": reason,
+        "reply_preview": redact_text(result.reply_text, max_chars=160),
+    }
+    handoff = build_human_handoff_result(
+        reason="ai_response_composition_failed",
+        reply_text=(
+            "Tive uma indisponibilidade para formular uma resposta segura agora. "
+            "Vou encaminhar sua conversa para a equipe."
+        ),
+    )
+    handoff.commercial_data = result.commercial_data
+    handoff.response_metadata["blocked_uncomposed_response"] = blocked
+    log_event("agent.response.fail_closed", blocked)
+    return enrich_handoff_metadata(incoming, handoff)
 
 
 async def _process_incoming_message(incoming: IncomingMessage, customer_context: dict) -> AgentResult:

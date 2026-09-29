@@ -111,3 +111,80 @@ async def test_pipeline_checks_persona_even_for_deterministic_reply(monkeypatch)
     assert consultation["relevant_information_found"] is True
     assert consultation["fallback_to_auxiliary"] is False
     assert result.response_metadata["business_configuration"]["persona_version_id"] == 12
+
+
+@pytest.mark.asyncio
+async def test_pipeline_fails_closed_when_workspace_persona_is_missing(monkeypatch):
+    from app import message_pipeline
+
+    monkeypatch.setattr(
+        message_pipeline,
+        "get_settings",
+        lambda: SimpleNamespace(
+            database_url="test-only",
+            agent_db_persona_enabled=True,
+            agent_persona_tenant_id="xnamai",
+            agent_persona_key="xnamai_commercial",
+            chatbo_workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
+        ),
+    )
+    monkeypatch.setattr("app.persona_repository.get_active_persona", lambda *args: None)
+
+    async def agent_must_not_run(*_args, **_kwargs):
+        raise AssertionError("agent must not answer without the workspace persona")
+
+    monkeypatch.setattr(message_pipeline, "_process_incoming_message", agent_must_not_run)
+
+    result = await message_pipeline.process_incoming_message(
+        IncomingMessage(
+            workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
+            text="Tenho uma dúvida que não está mapeada",
+        ),
+        {},
+    )
+
+    assert result.handoff_required is True
+    assert result.safety_reason == "active_persona_unavailable"
+    assert result.response_metadata["persona_guard"]["passed"] is False
+    assert result.response_metadata["persona_consultation"]["active_persona_found"] is False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_blocks_uncomposed_fallback_and_queues_human(monkeypatch):
+    from app import message_pipeline
+
+    monkeypatch.setattr(
+        message_pipeline,
+        "get_settings",
+        lambda: SimpleNamespace(
+            database_url="test-only",
+            agent_db_persona_enabled=True,
+            agent_persona_tenant_id="xnamai",
+            agent_persona_key="xnamai_commercial",
+            chatbo_workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
+        ),
+    )
+    monkeypatch.setattr("app.persona_repository.get_active_persona", lambda *args: _active())
+
+    async def failed_composer(_incoming, _context):
+        return AgentResult(
+            reply_text="Resposta genérica que não pode chegar ao cliente.",
+            safety_reason="tools_request_failed",
+            response_metadata={
+                "response_source": "technical_fallback",
+                "used_openai_responder": False,
+                "fallback_reason": "tools_request_failed",
+            },
+        )
+
+    monkeypatch.setattr(message_pipeline, "_process_incoming_message", failed_composer)
+
+    result = await message_pipeline.process_incoming_message(
+        IncomingMessage(text="Pergunta não mapeada"),
+        {},
+    )
+
+    assert result.handoff_required is True
+    assert result.safety_reason == "ai_response_composition_failed"
+    assert "Resposta genérica" not in result.reply_text
+    assert result.response_metadata["blocked_uncomposed_response"]["fallback_reason"] == "tools_request_failed"

@@ -61,7 +61,8 @@ async def test_pipeline_loads_published_policy_and_resets_after_error(monkeypatc
         database_url="test-only", agent_db_persona_enabled=True, agent_persona_tenant_id="xnamai",
         agent_persona_key="commercial"))
     monkeypatch.setattr("app.persona_repository.get_active_persona", lambda *args: SimpleNamespace(
-        id=8, version=2, metadata={"business_policies": {"catalog_browse_limit": 3}}))
+        id=8, version=2, instructions="Atenda conforme a persona publicada.",
+        metadata={"business_policies": {"catalog_browse_limit": 3}}))
     async def fail(*args):
         assert current_policy().catalog_browse_limit == 3
         raise RuntimeError("test failure")
