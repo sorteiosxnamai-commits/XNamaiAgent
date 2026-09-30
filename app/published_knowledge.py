@@ -24,7 +24,13 @@ def supports_policy_line(line: str) -> bool:
 
     Never treat a policy amount as evidence of a product price or cart total.
     """
-    normalize = lambda text: re.sub(r"\s+", " ", text).strip()
+    def normalize(text):
+        # Presentation markup does not change an exact policy quotation. Never
+        # accept extra words, different amounts or product/cart descriptions.
+        text = re.sub(r"^\s*(?:[-•>]\s+|\d+[.)]\s+)", "", text)
+        text = text.strip().strip("*_\"“”")
+        text = re.sub(r"[*_]", "", text)
+        return re.sub(r"\s+", " ", text).strip()
     quoted = normalize(line)
     if not quoted:
         return False

@@ -2237,6 +2237,21 @@ async def test_agent(request: Request, _: None = Depends(verify_admin_token)):
         }
     )
     customer_context = find_customer_profile_by_phone(incoming.sender_phone)
+    if "history" in payload:
+        # Admin-only, bounded synthetic transcript for multi-turn evaluation.
+        # It is never inserted as delivered messages and cannot inject roles.
+        history = payload["history"]
+        if not isinstance(history, list) or len(history) > 24:
+            raise HTTPException(status_code=422, detail="history must contain at most 24 user/assistant turns")
+        clean = []
+        for turn in history:
+            if (not isinstance(turn, dict) or turn.get("role") not in {"user", "assistant"}
+                    or not isinstance(turn.get("content"), str) or len(turn["content"]) > 4000):
+                raise HTTPException(status_code=422, detail="invalid evaluation history turn")
+            clean.append({"role": turn["role"], "content": turn["content"]})
+        customer_context = dict(customer_context or {})
+        customer_context["_evaluation_history"] = clean
+        customer_context["_model_conversation_turns"] = clean
     agent_result = await process_incoming_message(incoming, customer_context)
     return {
         "ok": True,
@@ -2247,6 +2262,9 @@ async def test_agent(request: Request, _: None = Depends(verify_admin_token)):
         "intent": agent_result.intent,
         "handoff_required": agent_result.handoff_required,
         "safety_reason": agent_result.safety_reason,
+        "evaluation": {key: agent_result.response_metadata.get(key) for key in (
+            "response_source", "informational_only", "used_openai_interpreter", "used_openai_responder",
+            "used_commerce_provider", "consultative_tool_calls", "consultative_searches", "factual_validation", "factual_validation_initial")},
         "customer_context": customer_context,
     }
 

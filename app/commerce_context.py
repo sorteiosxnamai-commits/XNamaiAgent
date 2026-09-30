@@ -151,6 +151,7 @@ MAX_PRESENTED_PRODUCTS = 10
 class CommerceConversationState(BaseModel):
     active_domain: Literal["commerce"] | None = None
     active_topic: str | None = None
+    conversation_goal: str | None = Field(default=None, max_length=400)
     active_product: CommerceProductReference | None = None
     last_presented_products: list[PresentedCommerceProduct] = Field(default_factory=list)
     last_story_product: dict[str, Any] | None = None
@@ -307,6 +308,7 @@ class CommerceConversationState(BaseModel):
         return {
             "active_domain": self.active_domain,
             "active_topic": self.active_topic,
+            "conversation_goal": self.conversation_goal,
             "active_product": (
                 {
                     "name": active.name,
@@ -661,6 +663,8 @@ def evolve_commerce_state(
     if "pending_followup" in metadata:
         followup = metadata["pending_followup"]
         state.pending_followup = followup if isinstance(followup, dict) else None
+    if isinstance(metadata.get("conversation_goal"), str):
+        state.conversation_goal = metadata["conversation_goal"][:400] or None
     if result.handoff_required and state.pending_action in {
         "awaiting_customer_registration_data",
         "awaiting_customer_registration_confirmation",

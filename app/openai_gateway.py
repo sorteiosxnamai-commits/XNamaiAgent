@@ -495,23 +495,28 @@ def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
 
 def _serialize_output_item(item: Any) -> dict[str, Any]:
     if isinstance(item, dict):
-        return item
-    if hasattr(item, "model_dump"):
-        return item.model_dump(mode="json")
-    data: dict[str, Any] = {}
-    for key in (
-        "type",
-        "id",
-        "call_id",
-        "name",
-        "arguments",
-        "status",
-        "role",
-        "content",
-    ):
-        value = getattr(item, key, None)
-        if value is not None:
-            data[key] = value
+        data = dict(item)
+    elif hasattr(item, "model_dump"):
+        data = item.model_dump(mode="json", exclude_none=True)
+    else:
+        data = {}
+        for key in (
+            "type", "id", "call_id", "name", "arguments", "status", "role",
+            "content", "summary", "encrypted_content",
+        ):
+            value = getattr(item, key, None)
+            if value is not None:
+                data[key] = value
+    # Response output models are not an input schema. In particular, some
+    # endpoints reject reasoning/function-call status on replay, even though the
+    # SDK output object includes it (often null). Preserve the continuation data
+    # using an explicit input projection, never response lifecycle metadata.
+    fields = {
+        "reasoning": {"type", "id", "summary", "content", "encrypted_content"},
+        "function_call": {"type", "id", "call_id", "name", "arguments"},
+    }.get(data.get("type"))
+    if fields is not None:
+        return {key: value for key, value in data.items() if key in fields and value is not None}
     return data
 
 
@@ -960,6 +965,11 @@ class ResponsesGateway:
                 "store": _store_flag(store),
                 "parallel_tool_calls": bool(parallel_tool_calls),
             }
+            # Stateless reasoning continuation must replay encrypted reasoning along
+            # with each function call. Explicit include also supports older model
+            # endpoints where encrypted content is not returned by default.
+            if not kwargs["store"] and model_capabilities(model).supports_reasoning_effort:
+                kwargs["include"] = ["reasoning.encrypted_content"]
             if resolved_instructions:
                 kwargs["instructions"] = resolved_instructions
             if temperature is not None and not model_capabilities(model).supports_reasoning_effort:

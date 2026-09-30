@@ -26,8 +26,8 @@ _MONEY_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _ORDER_RE = re.compile(
-    r"\bpedido(?:\s+n[ºo°.]*)?\s*#?\s*"
-    r"((?=[A-Za-z0-9._/-]*\d)[A-Za-z0-9][A-Za-z0-9._/-]{1,})",
+    r"\bpedido(?:[ \t]+n[ºo°.]*)?[ \t]*#?[ \t]*"
+    r"((?=[A-Za-z0-9._/-]*\d)[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?)",
     flags=re.IGNORECASE,
 )
 _STOCK_POSITIVE_RE = re.compile(
@@ -41,6 +41,14 @@ _STOCK_NEGATIVE_RE = re.compile(
 _PROMO_RE = re.compile(
     r"\b(promo[cç][aã]o|desconto|oferta|por tempo limitado)\b",
     flags=re.IGNORECASE,
+)
+_CURRENT_PROMO_RE = re.compile(
+    r"\b(?:temos|oferecemos|aproveite|garanta|ganhe|receba|concedemos|liberamos|"
+    r"consegui|consigo|posso dar|te dou|vou dar|est[aá]|est[aã]o)\b[^.!?\n]{0,90}"
+    r"\b(?:promo[cç][aã]o|desconto|oferta)\b"
+    r"|\b(?:em promo[cç][aã]o|com desconto|por tempo limitado)\b"
+    r"|\b(?:promo[cç][aã]o|desconto|oferta)\b[^.!?\n]{0,60}\b(?:hoje|agora|vigente|ativa|especial|exclusiva)\b",
+    re.IGNORECASE,
 )
 _PAID_RE = re.compile(
     r"\b(pago|pagamento (?:aprovado|confirmado)|pedido pago)\b",
@@ -771,7 +779,8 @@ def validate_factual_response(
                     reason="money_not_present_in_verified_facts",
                 )
 
-    if _PROMO_RE.search(text) and decision.domain == "commerce":
+    promotion_claim = (_CURRENT_PROMO_RE.search(text) if metadata.get("informational_only") else _PROMO_RE.search(text))
+    if promotion_claim and decision.domain == "commerce":
         report.checked_claims += 1
         if pack.has_promotional_price:
             report.supported_claims.append(
@@ -953,6 +962,10 @@ def apply_factual_validation(
         result.response_metadata["grounded_commerce_count"] = len(grounded)
 
     payload = report.model_dump(mode="json")
+    # A later pass validates the fallback text; retain why the original answer
+    # failed instead of reporting only that the replacement is factually empty.
+    if report.fallback_applied:
+        result.response_metadata.setdefault("factual_validation_initial", payload)
     result.response_metadata["factual_validation"] = payload
     result.response_metadata["fact_evidence"] = list(report.evidence_preview)
     return result

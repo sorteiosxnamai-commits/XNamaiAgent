@@ -41,6 +41,7 @@ class _KeepMeaningfulEmptySource(EnvSettingsSource):
 
 
 class Settings(BaseSettings):
+    agent_conversation_first_enabled: bool = Field(default=False, alias="AGENT_CONVERSATION_FIRST_ENABLED")
     agent_consultative_enabled: bool = Field(default=False, alias="AGENT_CONSULTATIVE_ENABLED")
     agent_consultative_traffic_percent: float = Field(default=0, ge=0, le=100, alias="AGENT_CONSULTATIVE_TRAFFIC_PERCENT")
     agent_consultative_emergency_off: bool = Field(default=False, alias="AGENT_CONSULTATIVE_EMERGENCY_OFF")

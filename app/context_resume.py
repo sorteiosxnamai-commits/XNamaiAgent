@@ -51,6 +51,8 @@ def commerce_state_resumable_score(state: dict[str, Any] | CommerceConversationS
         score += 10
     if payload.get("active_product") or payload.get("last_presented_products"):
         score += 5
+    if payload.get("conversation_goal") or payload.get("pending_followup"):
+        score += 1
     return score
 
 
@@ -87,6 +89,13 @@ def merge_commerce_states(
     primary_pending_action = base.get("pending_action")
     primary_customer_id = base.get("mercos_customer_id")
     merged = _merge_commerce_states(base, donor)
+    # A richer old order must not resurrect its topic over the latest dialog.
+    # Recover operational handles while retaining the current goal/question.
+    for key in ("active_topic", "conversation_goal"):
+        if (primary or {}).get(key):
+            merged[key] = primary[key]
+    if "pending_followup" in (primary or {}):
+        merged["pending_followup"] = primary["pending_followup"]
     if primary_registration:
         merged["customer_registration"] = primary_registration
         if merged.get("pending_action") in _REGISTRATION_PENDING_ACTIONS:

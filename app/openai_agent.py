@@ -120,6 +120,7 @@ def _trailing_question(reply_text: str) -> str | None:
     Generic on purpose: works for any topic, not a list of known phrases.
     """
     text = (reply_text or "").strip()
+    text = re.sub(r"[\s\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]+$", "", text)
     if not text.endswith("?"):
         return None
     sentences = re.split(r"(?<=[.!?])\s+", text)
@@ -148,7 +149,8 @@ def _apply_pending_followup(result: AgentResult) -> None:
     # pending_action explicitly — this layer is only for everything else.
     if (
         result.handoff_required
-        or metadata.get("domain") in ("guardrail", "commerce")
+        or metadata.get("domain") == "guardrail"
+        or (metadata.get("domain") == "commerce" and not metadata.get("informational_only"))
         or owns_more_specific_pending
     ):
         metadata["pending_followup"] = None
@@ -591,7 +593,11 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         "sender_key": message.sender_key,
         "hard_cap": history_hard_cap,
     }
-    recovery_turns = load_recent_conversation_turns(**history_lookup)
+    # Only the authenticated manual evaluation endpoint supplies this internal
+    # context value; customer webhook payloads never populate it.
+    evaluation_history = customer_context.get("_evaluation_history")
+    recovery_turns = (evaluation_history if isinstance(evaluation_history, list)
+                      else load_recent_conversation_turns(**history_lookup))
     model_turns = select_model_history_turns(recovery_turns, limit=history_limit)
     recent_turns = model_turns
     context_source = (
@@ -643,10 +649,38 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             "channel": message.channel,
         },
     )
-    # Club e cadastro sao fluxos deterministicos e rodam ANTES de qualquer outro
-    # ramo (retomada de saudacao, recuperacao de pedido, interpretacao por
-    # modelo): um cadastro pendente nao pode ter o turno roubado, e o modelo
-    # nunca decide nem narra um cadastro.
+    # Read-only explanation is decided from the complete turn before keyword
+    # routes can mistake "sim", "como funciona" or feedback for product names.
+    # Reuse this interpretation below: never pay for a second classifier call.
+    early_interpretation = None
+    from .conversation_routing import enabled as conversation_first_enabled, owns_advice
+    if (conversation_first_enabled(settings) and not _is_greeting(message.text)
+            and not message.transcription_failed and not message.image_url):
+        third_party_reply = _third_party_guardrail(message, detect_primary_intent(message.text))
+        if third_party_reply:
+            return _annotate_agent_result(third_party_reply, domain="guardrail", response_source="guardrail",
+                used_openai_interpreter=False, used_openai_responder=False, used_commerce_provider=False)
+        early_interpretation = await interpret_message(message, recent_turns=model_turns, commerce_state=commerce_state)
+        from .order_queries import resolve_order_query
+        order_query_pending = resolve_order_query(message.text, commerce_state)
+        if owns_advice(early_interpretation, commerce_state) and not order_query_pending and not is_order_lookup_request(message.text):
+            from .consultative_agent import consult
+            consultation = await consult(message, customer_context, early_interpretation,
+                settings=settings, state=commerce_state, informational_only=True)
+            if consultation is not None:
+                return _annotate_agent_result(consultation, domain="commerce", goal="discover",
+                    response_source="consultative_openai" if not consultation.safety_reason else "technical_fallback",
+                    used_openai_interpreter=True, used_openai_responder=not bool(consultation.safety_reason),
+                    used_commerce_provider=False)
+        from .conversation_routing import mixed_catalog_reply
+        mixed = await mixed_catalog_reply(message, customer_context, early_interpretation,
+            commerce_state, settings, execute_tool)
+        if mixed is not None:
+            return _annotate_agent_result(mixed, domain="commerce", goal="find",
+                response_source="wholesale_catalog", used_openai_interpreter=True,
+                used_commerce_provider=True)
+    # Club e cadastro mantêm execução determinística. A entrada informativa
+    # acima pode esclarecer dúvidas, mas não executa nem confirma cadastros.
     from .account_flows import handle_account_flows
 
     account_result = await handle_account_flows(message, state=commerce_state, execute=execute_tool)
@@ -718,10 +752,12 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         verdict = resolve_followup_response(message.text, pending_followup)
         question = pending_followup.get("question") or ""
         if verdict == "AFFIRM" and question:
+            early_interpretation = None
             message = message.model_copy(update={
                 "text": f'{message.text} (respondendo "sim" à pergunta: "{question}")',
             })
         elif verdict == "REJECT" and question:
+            early_interpretation = None
             message = message.model_copy(update={
                 "text": f'{message.text} (respondendo "não" à pergunta: "{question}")',
             })
@@ -780,16 +816,38 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     from .order_queries import handle_order_query
     order_query_result = await handle_order_query(message.text, state=commerce_state, execute=execute_tool)
     if order_query_result is not None:
+        if (conversation_first_enabled(settings) and early_interpretation is not None
+                and order_query_result.response_metadata.get("active_topic") == "order_next_steps"
+                and order_query_result.commercial_data and order_query_result.commercial_data.get("success")):
+            from .consultative_agent import consult
+            guidance = await consult(message, customer_context, early_interpretation, settings=settings,
+                state=commerce_state, informational_only=True, evidence=order_query_result.reply_text)
+            if guidance is not None and not guidance.safety_reason:
+                verified_reply = order_query_result.reply_text
+                order_query_result.reply_text = guidance.reply_text
+                order_query_result.response_metadata.update({"response_source": "consultative_openai",
+                    "used_openai_responder": True, "factual_fallback_text": verified_reply})
         return _annotate_agent_result(order_query_result, domain="commerce", goal="after_sales",
             response_source="verified_order_query", used_openai_interpreter=False,
-            used_openai_responder=False, used_commerce_provider=bool(order_query_result.response_metadata.get("used_commerce_provider")))
+            used_openai_responder=bool(order_query_result.response_metadata.get("used_openai_responder")), used_commerce_provider=bool(order_query_result.response_metadata.get("used_commerce_provider")))
     if getattr(get_settings(), "mercos_adaptor_configured", False):
         from .wholesale_catalog import handle_wholesale_catalog
         catalog_result = await handle_wholesale_catalog(message.text, state=commerce_state, execute=execute_tool)
         if catalog_result is not None:
+            from .conversation_routing import has_institutional_questions
+            if has_institutional_questions(early_interpretation):
+                from .consultative_agent import consult
+                guidance = await consult(message, customer_context, early_interpretation,
+                    settings=settings, state=commerce_state, informational_only=True,
+                    catalog_answered=True)
+                if guidance is not None and not guidance.safety_reason:
+                    catalog_result.reply_text = guidance.reply_text + "\n\n" + catalog_result.reply_text
+                    catalog_result.response_metadata["used_openai_responder"] = True
+                    catalog_result.response_metadata["answered_institutional_questions"] = True
             return _annotate_agent_result(catalog_result, domain="commerce", goal="find",
-                response_source="wholesale_catalog", used_openai_interpreter=False,
-                used_openai_responder=False, used_commerce_provider=True)
+                response_source="consultative_openai" if catalog_result.response_metadata.get("answered_institutional_questions") else "wholesale_catalog",
+                used_openai_interpreter=early_interpretation is not None,
+                used_openai_responder=bool(catalog_result.response_metadata.get("used_openai_responder")), used_commerce_provider=True)
     if (
         soft_greeting
         and has_resumable_commerce(commerce_state)
@@ -1142,7 +1200,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     except Exception as exc:  # noqa: BLE001
         print("[brevo.instagram_media.guide.error]", {"error_type": type(exc).__name__})
 
-    interpretation = await interpret_message(
+    interpretation = early_interpretation or await interpret_message(
         message,
         recent_turns=model_turns,
         commerce_state=commerce_state,
@@ -1187,7 +1245,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     # oficiais mesmo quando o interpretador as chamar de store_general.
     from .consultative_agent import eligible, consult
     if eligible(message, interpretation, commerce_state, get_settings()):
-        consultation = await consult(message, customer_context, interpretation, settings=get_settings())
+        consultation = await consult(message, customer_context, interpretation, settings=get_settings(), state=commerce_state)
         if consultation is not None:
             return _annotate_agent_result(
                 consultation, domain="commerce", goal=interpretation.goal,

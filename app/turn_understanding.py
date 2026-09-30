@@ -221,6 +221,8 @@ class RequestedAction(BaseModel):
 
 
 class TurnUnderstanding(BaseModel):
+    conversation_mode: Literal["operational", "advice"] = Field(default_factory=lambda: "operational")
+    questions: list[str] = Field(default_factory=list)
     language: str = Field(default_factory=lambda: "pt-BR")
     primary_intent: Intent
     user_goal: str = Field(default_factory=lambda: "")
@@ -315,7 +317,30 @@ Regras:
 9. hypotheses = palpites não confirmados; missing_data = dados ausentes úteis.
 10. required_tools lista ferramentas necessárias (search_products, get_stock, …) ou [none].
 11. confidence entre 0 e 1. language use pt-BR salvo evidência clara.
-12. requested_action descreve a ação comercial pedida; kind=none se só busca/conversa.
+12. requested_action descreve a ação pedida: kind=search para buscar/listar produtos;
+    kind=none para conversa e explicação sem consulta ao catálogo.
+13. conversation_mode=advice para explicações, orientação geral, dúvidas sobre como
+    comprar, planejamento do mix de uma loja e feedback sobre o atendimento. Pode
+    responder sem catálogo: required_tools=[none], requested_action.kind=none.
+    Mencionar uma categoria não significa pedir uma busca. "Diferença entre fone
+    com fio e Bluetooth" é orientação; "liste todos os fones" é operational/search.
+14. questions registra TODOS os assuntos/perguntas que a resposta deve resolver.
+    Não transforme uma dúvida sobre atacado/varejo/cadastro em busca literal.
+15. Resolva respostas curtas pela última pergunta do assistente. "sim" após oferta
+    de link ou explicação é advice, não autorização para criar carrinho/pedido.
+    "Como finalizo no catálogo?" pede instruções, não checkout_create. Só uma
+    solicitação real de operação deve usar ações transacionais.
+16. Use a última troca e o objetivo do cliente para "e agora?", "como funciona?",
+    "não foi isso". Não invente um produto nem reinicie o atendimento. Uma dúvida
+    informativa continua advice mesmo com pedido/carrinho na memória. Consultas de
+    status/itens/preço/estoque atuais são operational e exigem a ferramenta própria.
+17. Falta de orçamento ou perfil da loja não impede orientação inicial: responda
+    o que já é possível antes de uma pergunta útil. Não exija produto para explicar
+    o processo geral. Feedback/emoji/tom do atendimento são assuntos do atendimento.
+18. Dados fornecidos para cadastro em andamento (nome, CPF, endereço, e-mail),
+    adesão ao Club e confirmações de operação são operational, nunca advice.
+    Uma pergunta explicativa durante cadastro pode ser advice, sem executar nem
+    cancelar o cadastro. Preserve a diferença entre dúvida e envio de dados.
 """
 
 
@@ -390,6 +415,13 @@ def apply_clarification_policy(
     has_recoverable_reference: bool = False,
 ) -> TurnUnderstanding:
     """Deterministic clarification gate — do not over-ask."""
+    action = understanding.requested_action
+    if (understanding.conversation_mode == "advice" and action is not None
+            and action.kind == "none" and action.confirmation == "none"
+            and not action.purchase_items and not action.checkout_data
+            and not (set(understanding.required_tools) - {"none"})):
+        # A reference may point to our explanation, not a missing product.
+        return understanding
     text = (message_text or "").strip()
     hard = understanding.hard_constraints
     entities = understanding.entities

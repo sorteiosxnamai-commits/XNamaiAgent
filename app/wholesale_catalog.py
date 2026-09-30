@@ -44,6 +44,8 @@ def requested_queries(text, state, interpretation=None):
         rest = value[end:found[index + 1][0] if index + 1 < len(found) else len(value)]
         rest = re.split(r"\b(?:e preco|preco de compra|no atacado|no varejo)\b", rest)[0]
         rest = re.sub(r"\s+por favor\b.*$", "", rest)
+        # Availability is a question about the catalog, not a product feature.
+        rest = re.sub(r"\b(?:(?:estao|esta|tem|ha|voces tem|voces possuem)\s+)?disponive(?:is|l)\b.*$", "", rest)
         rest = re.sub(r"(?:\s+e\s*)?$", "", rest.strip(" ,.;?!"))
         query = (category + " " + rest).strip()
         if query not in [q["query"] for q in queries]:
@@ -68,8 +70,8 @@ def requested_queries(text, state, interpretation=None):
     return None
 
 
-async def handle_wholesale_catalog(text, *, state, execute, interpretation=None):
-    queries = requested_queries(text, state, interpretation)
+async def handle_wholesale_catalog(text, *, state, execute, interpretation=None, queries_override=None):
+    queries = queries_override if queries_override is not None else requested_queries(text, state, interpretation)
     if queries is None:
         return None
     if all(q.get("done") for q in queries):

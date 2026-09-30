@@ -92,6 +92,8 @@ def compose_outbound_reply(
     result = present_agent_result(incoming, result)
     if result.response_metadata.get("preserve_complete_list"):
         result.reply_text = normalize_reply_text(result.reply_text)
+    elif result.response_metadata.get("preserve_conversational_answer") and incoming.channel in {"whatsapp", "widget"}:
+        result.reply_text = truncate_reply(normalize_reply_text(result.reply_text), 2700)
     else:
         result.reply_text = truncate_reply(normalize_reply_text(result.reply_text), limit)
     if not profile.allow_audio_reply and result.reply_modality == "audio":
