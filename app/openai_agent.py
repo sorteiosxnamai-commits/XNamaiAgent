@@ -1144,6 +1144,17 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     # Perguntas institucionais com vários assuntos comerciais (mix, preços,
     # atacado/varejo) não são uma busca literal de SKU. Resolva-as com fatos
     # oficiais mesmo quando o interpretador as chamar de store_general.
+    from .consultative_agent import eligible, consult
+    if eligible(message, interpretation, commerce_state, get_settings()):
+        consultation = await consult(message, customer_context, interpretation, settings=get_settings())
+        if consultation is not None:
+            return _annotate_agent_result(
+                consultation, domain="commerce", goal=interpretation.goal,
+                response_source="consultative_openai" if not consultation.safety_reason else "technical_fallback",
+                used_openai_interpreter=used_openai_interpreter,
+                used_openai_responder=not bool(consultation.safety_reason),
+                used_commerce_provider=bool(consultation.response_metadata.get("used_commerce_provider")),
+            )
     if scope_domain in {"commerce", "store_general"}:
         from .store_guidance import build_store_guidance
 

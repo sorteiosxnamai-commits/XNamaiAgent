@@ -41,10 +41,8 @@ def build_site_knowledge_text() -> str:
 - O XNaMai Club oferece condições próprias em compras elegíveis para membros com assinatura ativa.
 - Não atribua pioneirismo, liderança ou superlativos à XNamai sem uma fonte oficial atual.
 - Nunca diga que os preços exibidos no catálogo são "preços de Club". Consulte as condições atuais do Club antes de explicar benefícios ou valores.
-- A mensalidade atualmente publicada do Club é R$ 149,97 por mês. Se uma fonte oficial atual trouxer valor diferente, use a informação mais recente.
-- O pedido mínimo normal é R$ 800,00. Exceção no primeiro pedido só pode ser mencionada quando houver autorização específica do gestor.
-- Pagamentos atuais: Pix, cartão e dinheiro na retirada, com sinal para reservar e separar; boleto não é aceito. Não mencione taxa do cartão em respostas gerais.
-- Formas de entrega: transportadora, Correios, ônibus para o Brás e retirada. Confirme os detalhes do ônibus conforme o caso.
+- Valores do Club, pedido mínimo, formas de pagamento e entrega devem vir exclusivamente das políticas aprovadas da persona publicada ou das ferramentas atuais. Se a fonte estiver ausente, vencida ou contraditória, diga que precisa confirmar com a equipe.
+- Políticas comerciais aprovadas prevalecem sobre exemplos, histórico e condições antigas citadas na persona. Uma política geral não confirma frete, estoque, pagamento ou elegibilidade de um cliente.
 - Ao comparar concorrentes, considere preço unitário, quantidade mínima, caixa fechada e condições de pagamento. Não garanta lucro, venda, economia fixa nem que a Xnamai é sempre mais barata.
 - Para clientes de e-commerce e marketplace, destaque a flexibilidade de testar produtos e repor conforme o giro sem exigir caixa fechada, sem prometer margem ou desempenho.
 - Se o cliente ainda não for membro, apresente o Club uma vez, sem interromper a resposta principal.

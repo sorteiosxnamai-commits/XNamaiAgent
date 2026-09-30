@@ -73,6 +73,10 @@ def publish() -> dict:
     instructions = PERSONA_PATH.read_text(encoding="utf-8")
     assert_persona_instructions_safe(instructions)
     instructions_hash = hash_instructions(instructions)
+    active_before = get_active_persona(
+        DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY, DEFAULT_WORKSPACE_ID
+    )
+    metadata = {**(active_before.metadata if active_before else {}), **persona_metadata()}
 
     target = find_persona_by_hash(
         tenant_id=DEFAULT_TENANT_ID,
@@ -80,8 +84,10 @@ def publish() -> dict:
         instructions_hash=instructions_hash,
         workspace_id=DEFAULT_WORKSPACE_ID,
     )
+    if active_before is not None and active_before.instructions_hash == instructions_hash:
+        target = active_before
     action = "reused_existing"
-    if target is None:
+    if target is None or target.metadata != metadata:
         target = create_persona_version(
             instructions=instructions,
             name=PERSONA_NAME,
@@ -91,13 +97,10 @@ def publish() -> dict:
             source="user",
             created_by="codex_user_request",
             status="draft",
-            metadata=persona_metadata(),
+            metadata=metadata,
         )
         action = "created"
 
-    active_before = get_active_persona(
-        DEFAULT_TENANT_ID, DEFAULT_PERSONA_KEY, DEFAULT_WORKSPACE_ID
-    )
     activated = active_before is None or active_before.id != target.id
     if activated:
         target = activate_persona_version(

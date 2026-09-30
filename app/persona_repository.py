@@ -16,6 +16,25 @@ DEFAULT_PERSONA_KEY = "xnamai_commercial"
 DEFAULT_WORKSPACE_ID = "aa774d20-509f-4d54-865b-7a5de22b6d30"
 
 
+@invalidates_turn_reads
+def index_draft_knowledge(persona_id: int, *, tenant_id: str, workspace_id: str, client):
+    """Serialize index steps and activation on the same draft row."""
+    from .knowledge_indexing import index_step
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT * FROM public.ai_agent_persona_versions
+                WHERE id = %s AND tenant_id = %s AND workspace_id = %s::uuid
+                FOR UPDATE NOWAIT""", (persona_id, tenant_id, workspace_id))
+            row = cur.fetchone()
+            if not row:
+                raise ValueError("persona_not_found")
+            metadata, report = index_step(client, _row_to_persona(row))
+            cur.execute("""UPDATE public.ai_agent_persona_versions SET metadata = %s
+                WHERE id = %s AND tenant_id = %s AND status = 'draft'""",
+                (to_jsonb(metadata), persona_id, tenant_id))
+    return report
+
+
 def hash_instructions(instructions: str) -> str:
     return hashlib.sha256(instructions.encode("utf-8")).hexdigest()
 

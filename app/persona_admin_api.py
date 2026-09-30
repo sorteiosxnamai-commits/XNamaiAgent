@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -29,6 +31,80 @@ router = APIRouter(
     tags=["admin-personas"],
     dependencies=[Depends(verify_admin_token)],
 )
+
+
+@router.get("/{tenant_id}/readiness")
+def admin_readiness(tenant_id: str, workspace_id: UUID, persona_key: str = DEFAULT_PERSONA_KEY):
+    from .knowledge_indexing import readiness
+    return readiness(get_active_persona(tenant_id, persona_key, str(workspace_id)), get_settings())
+
+
+class KnowledgeDocument(BaseModel):
+    model_config = {"extra": "allow"}
+    id: str = Field(min_length=1, max_length=256)
+    content: str = Field(min_length=1, max_length=100000)
+    status: Literal["approved", "draft"]
+    valid_until: datetime | None = None
+
+
+class KnowledgeDraft(BaseModel):
+    knowledge_documents: list[KnowledgeDocument] = Field(min_length=1, max_length=100)
+
+
+@router.post("/{tenant_id}/personas/{persona_id}/knowledge-draft")
+def admin_knowledge_draft(tenant_id: str, persona_id: int, workspace_id: UUID, body: KnowledgeDraft):
+    original = get_persona_version(persona_id, tenant_id=tenant_id)
+    if original is None or original.workspace_id != str(workspace_id):
+        raise HTTPException(404, "persona_not_found")
+    documents = [document.model_dump(mode="json", exclude_none=True) for document in body.knowledge_documents]
+    if len({d["id"] for d in documents}) != len(documents):
+        raise HTTPException(400, "duplicate_document_id")
+    from .published_knowledge import POLICY_TOPICS
+    policy_topics = [d.get("topic") for d in documents if d.get("topic") in POLICY_TOPICS and d["status"] == "approved"]
+    if len(set(policy_topics)) != len(policy_topics):
+        raise HTTPException(400, "ambiguous_policy_topic")
+    metadata = {**original.metadata, "knowledge_documents": documents}
+    metadata.pop("knowledge_index", None)
+    created = create_persona_version(instructions=original.instructions, name=original.name,
+        tenant_id=tenant_id, persona_key=original.persona_key, workspace_id=str(workspace_id),
+        metadata=metadata, status="draft", source="user", created_by="knowledge_admin")
+    return {"persona_id": created.id, "status": "draft"}
+
+
+@router.post("/{tenant_id}/personas/{persona_id}/knowledge-index")
+def admin_index_knowledge(tenant_id: str, persona_id: int, workspace_id: UUID):
+    from .openai_client import get_sync_openai_client
+    from .persona_repository import index_draft_knowledge
+    if not get_settings().openai_api_key:
+        raise HTTPException(503, "openai_not_configured")
+    try:
+        return index_draft_knowledge(persona_id, tenant_id=tenant_id, workspace_id=str(workspace_id),
+            client=get_sync_openai_client().with_options(max_retries=0, timeout=5))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(503, "index_step_failed_retry_after_checking_readiness") from exc
+
+
+class EvaluationCase(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    anonymized: Literal[True]
+    required: list[str] = Field(default_factory=list, max_length=20)
+    forbidden: list[str] = Field(default_factory=list, max_length=20)
+
+
+@router.post("/{tenant_id}/quality-evaluation")
+async def admin_quality_evaluation(tenant_id: str, workspace_id: UUID, body: EvaluationCase,
+                                   persona_key: str = DEFAULT_PERSONA_KEY):
+    from .quality_evaluation import compare_answer
+    active = get_active_persona(tenant_id, persona_key, str(workspace_id))
+    if active is None:
+        raise HTTPException(404, "persona_active_missing")
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(503, "openai_not_configured")
+    return await compare_answer(active, body.question, settings=settings,
+                                required=body.required, forbidden=body.forbidden)
 
 
 class PersonaPublic(BaseModel):

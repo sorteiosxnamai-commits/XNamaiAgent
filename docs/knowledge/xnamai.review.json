@@ -1,0 +1,10 @@
+{
+  "knowledge_documents": [
+    {"id": "minimum-order", "topic": "minimum_order", "status": "draft", "content": "O pedido mínimo normal é de R$ 800,00. Exceções precisam de autorização específica do gestor.", "source": "Regra antiga de app/site_knowledge.py; confirmar valor e validade antes de aprovar."},
+    {"id": "club-plan", "topic": "club_plan", "status": "draft", "content": "A mensalidade do XNaMai Club é de R$ 149,97 por mês.", "source": "Regra antiga de app/site_knowledge.py; confirmar no canal oficial do Club antes de aprovar."},
+    {"id": "payment-methods", "topic": "payment_methods", "status": "draft", "content": "As formas de pagamento são Pix, cartão e dinheiro na retirada, com sinal para reservar e separar. Boleto não é aceito.", "source": "Persona anterior do repositório; confirmar com a equipe antes de aprovar."},
+    {"id": "delivery-options", "topic": "delivery", "status": "draft", "content": "As opções de entrega são transportadora, Correios, ônibus para o Brás e retirada. Os detalhes, valores e prazos precisam ser confirmados para cada pedido.", "source": "Persona anterior do repositório; confirmar com a equipe antes de aprovar."},
+    {"id": "registration", "topic": "registration", "status": "draft", "content": "A XNamai atende CPF e CNPJ. O cadastro com CNPJ pode ser feito no catálogo oficial. O cadastro com CPF é feito pelo atendimento, com nome completo, CPF, endereço, telefone e e-mail para login.", "source": "persona_xnamai.txt; revisar antes de publicar no índice."},
+    {"id": "how-to-buy", "topic": "how_to_buy", "status": "draft", "content": "Para comprar, faça o cadastro. Depois da liberação, escolha produtos e quantidades no catálogo, adicione ao carrinho, finalize o pedido e selecione a entrega. Catálogo: https://xnamai.meuspedidos.com.br/", "source": "persona_xnamai.txt; revisar antes de publicar no índice."}
+  ]
+}

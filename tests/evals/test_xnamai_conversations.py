@@ -78,7 +78,8 @@ async def test_purchase_guidance_answers_how_to_buy_without_searching(catalog):
 
     assert "https://xnamai.meuspedidos.com.br/" in result.reply_text
     assert "cadastro" in result.reply_text.casefold()
-    assert "R$ 800,00" in result.reply_text
+    assert "R$ 800,00" not in result.reply_text
+    assert "Confirme o pedido mínimo" in result.reply_text
     assert "forma de entrega" in result.reply_text
     assert "Club" not in result.reply_text
     assert "pedido de atacado variado" not in result.reply_text

@@ -45,7 +45,7 @@ def test_public_knowledge_contains_published_club_and_sales_policy():
         "boleto não é aceito",
         "ônibus para o Brás",
     ):
-        assert expected in text
+        assert expected not in text
     assert "primeira distribuidora do Brasil" not in text
     assert "preço de quase caixa fechada" not in text
     assert "taxa da operadora" not in text

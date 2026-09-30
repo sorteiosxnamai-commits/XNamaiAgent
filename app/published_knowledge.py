@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 from copy import deepcopy
 import json
+import re
 
 from .persona_knowledge import approved_documents
 
@@ -16,6 +17,19 @@ def bind_publication(metadata):
 
 def reset_publication(token):
     _PUBLICATION.reset(token)
+
+
+def supports_policy_line(line: str) -> bool:
+    """Only an exact standalone policy quotation can support institutional money.
+
+    Never treat a policy amount as evidence of a product price or cart total.
+    """
+    normalize = lambda text: re.sub(r"\s+", " ", text).strip()
+    quoted = normalize(line)
+    if not quoted:
+        return False
+    return any(quoted == normalize(published_policy(topic) or "")
+               for topic in ("minimum_order", "club_plan"))
 
 
 def published_policy(topic: str, *, documents=None) -> str | None:

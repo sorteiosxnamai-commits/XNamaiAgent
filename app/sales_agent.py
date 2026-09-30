@@ -1296,14 +1296,17 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
     print("[sales.turn]", {"outcome": resultado.outcome, "action": resultado.action})
 
     if resultado.outcome == OUTCOME_PURCHASE_GUIDANCE:
+        from .published_knowledge import published_policy
+        minimum = published_policy("minimum_order")
         return AgentResult(
             reply_text=(
                 "Para comprar na XNamai, primeiro faça seu cadastro. Com CNPJ, "
                 f"o cadastro é feito diretamente no catálogo: {STORE_URL} "
                 "Com CPF, o cadastro é feito pelo atendimento.\n\n"
                 "Depois da liberação, escolha os produtos e as quantidades, "
-                "adicione ao carrinho, finalize o pedido e selecione a forma de entrega. "
-                "O pedido mínimo publicado atualmente é de R$ 800,00.\n\n"
+                "adicione ao carrinho, finalize o pedido e selecione a forma de entrega.\n\n"
+                + ((minimum + "\n\n") if minimum else "Confirme o pedido mínimo atual com a equipe.\n\n")
+                +
                 "Você quer se cadastrar com CPF ou CNPJ?"
             ),
             intent="commerce",

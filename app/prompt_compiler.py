@@ -354,6 +354,11 @@ def compile_agent_prompt(
             blocks.append(cleaned)
 
     from .knowledge_search import prompt_passages
+    from .published_knowledge import policy_reference_block
+
+    policy_block = policy_reference_block({"knowledge_documents": knowledge_documents})
+    if policy_block:
+        blocks.append(policy_block)
 
     knowledge_sections = prompt_passages(
         knowledge_documents, getattr(incoming, "text", "") or "",

@@ -149,6 +149,7 @@ async def prepare_knowledge(active, query: str, *, tenant_id: str,
                     continue
                 semantic.append({"source": document["id"], "title": str(document.get("title") or document["id"])[:200],
                                  "version": document["version"], "content": content[:1400],
+                                 "chunk": _text(document["content"]).index(content) // 1200 + 1,
                                  "file_id": hit.file_id, "retrieval": "semantic"})
         evidence.passages = merge_passages(semantic, evidence.passages)
         evidence.status = "hybrid" if semantic else "semantic_no_valid_hits"

@@ -659,7 +659,8 @@ def validate_factual_response(
     order_claims = _ORDER_RE.findall(text)
     if (
         order_claims
-        and "transactional_facts" in decision.risk.required_validations
+        and ("transactional_facts" in decision.risk.required_validations
+             or (result.response_metadata or {}).get("response_source") == "consultative_openai")
     ):
         for order_id in order_claims:
             report.checked_claims += 1
@@ -684,7 +685,7 @@ def validate_factual_response(
             decision.risk.required_validations
         )
     )
-    if validate_money and decision.domain == "commerce":
+    if (validate_money or _MONEY_RE.search(text)) and decision.domain in {"commerce", "store_general"}:
         # Only trust commerce-safe monetary evidence (never persona/memory).
         safe_money = {
             _money_decimal(item.value)
@@ -695,11 +696,19 @@ def validate_factual_response(
         }
         safe_money.discard(None)
         trusted_amounts = safe_money or pack.monetary_values
-        for amount_text in _MONEY_RE.findall(text):
+        for money_match in _MONEY_RE.finditer(text):
+            amount_text = money_match.group(1)
             amount = _money_decimal(amount_text)
             if amount is None:
                 continue
             report.checked_claims += 1
+            from .published_knowledge import supports_policy_line
+            line = text[text.rfind("\n", 0, money_match.start()) + 1:
+                        text.find("\n", money_match.end()) if "\n" in text[money_match.end():] else len(text)]
+            if supports_policy_line(line):
+                report.supported_claims.append(FactClaim(kind="money", claim=str(amount),
+                                                         reason="published_policy_exact_quote"))
+                continue
             matching = [
                 item
                 for item in pack.evidence
@@ -753,6 +762,12 @@ def validate_factual_response(
                 reason="promo_without_promotional_price_evidence",
             )
 
+    if (pack.stock_available is None
+            and (result.response_metadata or {}).get("response_source") == "consultative_openai"
+            and (_STOCK_POSITIVE_RE.search(text) or _STOCK_NEGATIVE_RE.search(text))):
+        report.checked_claims += 1
+        _add_violation(report, kind="stock", claim="availability",
+                       reason="stock_missing_evidence")
     if pack.stock_available is not None and decision.domain == "commerce":
         if _STOCK_POSITIVE_RE.search(text):
             report.checked_claims += 1

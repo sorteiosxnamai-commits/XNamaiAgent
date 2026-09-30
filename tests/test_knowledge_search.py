@@ -43,6 +43,7 @@ async def test_semantic_paraphrase_reaches_prompt_without_lexical_match(monkeypa
     try:
         passages = prompt_passages([DOC], query, **SCOPE)
         assert passages[0]["content"] == DOC["content"]
+        assert passages[0]["chunk"] >= 1
         assert search.await_args.kwargs["rewrite_query"] is True
         assert search.await_args.kwargs["filters"]["filters"][1]["value"] == "workspace-a"
         assert prompt_passages([DOC], query, **{**SCOPE, "workspace_id": "workspace-b"}) == []

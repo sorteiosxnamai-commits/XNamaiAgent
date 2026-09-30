@@ -67,6 +67,45 @@ def test_admin_create_activate_list(client):
     assert active.json()["persona"]["id"] == persona_id
 
 
+def test_knowledge_draft_preserves_metadata_and_requires_matching_workspace(client):
+    workspace = "aa774d20-509f-4d54-865b-7a5de22b6d30"
+    original = repo.create_persona_version(instructions="Persona atual", metadata={
+        "custom_setting": "preserved", "knowledge_index": {"vector_store_id": "vs_old"}})
+    repo.activate_persona_version(original.id)
+    url = f"/api/admin/agents/xnamai/personas/{original.id}/knowledge-draft"
+    body = {"knowledge_documents": [{"id": "cadastro", "content": "Cadastro CPF.", "status": "approved"}]}
+    wrong = client.post(url, params={"workspace_id": "bb774d20-509f-4d54-865b-7a5de22b6d30"}, json=body)
+    assert wrong.status_code == 404
+    response = client.post(url, params={"workspace_id": workspace}, json=body)
+    assert response.status_code == 200
+    draft = repo.get_persona_version(response.json()["persona_id"])
+    assert draft.status == "draft"
+    assert draft.instructions == original.instructions
+    assert draft.metadata["custom_setting"] == "preserved"
+    assert "knowledge_index" not in draft.metadata
+    assert repo.get_active_persona().id == original.id
+
+
+def test_knowledge_draft_rejects_implicit_approval_and_conflicting_policies(client):
+    original = repo.create_persona_version(instructions="Persona")
+    url = f"/api/admin/agents/xnamai/personas/{original.id}/knowledge-draft?workspace_id={original.workspace_id}"
+    assert client.post(url, json={"knowledge_documents": [{"id": "a", "content": "foo"}]}).status_code == 422
+    docs = [{"id": identity, "content": "foo", "topic": "minimum_order", "status": "approved"} for identity in ("a", "b")]
+    assert client.post(url, json={"knowledge_documents": docs}).status_code == 400
+
+
+def test_new_admin_routes_are_protected(monkeypatch):
+    import app.security as security
+    monkeypatch.setattr(security, "get_settings", lambda: SimpleNamespace(admin_api_token="test-secret"))
+    app = FastAPI()
+    app.include_router(router)
+    unauthenticated = TestClient(app)
+    paths = ["readiness", "quality-evaluation", "personas/1/knowledge-index", "personas/1/knowledge-draft"]
+    for path in paths:
+        method = unauthenticated.get if path == "readiness" else unauthenticated.post
+        assert method(f"/api/admin/agents/xnamai/{path}").status_code == 401
+
+
 def test_admin_archive_and_rollback(client):
     v1 = repo.create_persona_version(instructions="v1\n", name="V1")
     v2 = repo.create_persona_version(instructions="v2\n", name="V2")

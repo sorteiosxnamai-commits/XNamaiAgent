@@ -18,6 +18,20 @@ def _decision(result: AgentResult):
     )
 
 
+def test_institutional_policy_quote_does_not_authorize_same_amount_as_product_price():
+    from app.published_knowledge import bind_publication, reset_publication
+    token = bind_publication({"knowledge_documents": [{"id": "minimum", "topic": "minimum_order",
+            "content": "O pedido mínimo é R$ 950,00.", "status": "approved"}]})
+    try:
+        policy = AgentResult(reply_text="O pedido mínimo é R$ 950,00.", intent="commerce",
+                             response_metadata={"domain": "commerce", "response_source": "openai"})
+        assert validate_factual_response(policy, decision=_decision(policy), mode="shadow").valid
+        product = policy.model_copy(update={"reply_text": "O fone custa R$ 950,00."})
+        assert not validate_factual_response(product, decision=_decision(product), mode="shadow").valid
+    finally:
+        reset_publication(token)
+
+
 def test_official_institutional_links_are_supported_without_catalog_tools():
     from app.site_knowledge import SITE_URL, STORE_URL
     result = AgentResult(reply_text=f"Site: {SITE_URL} Catálogo: {STORE_URL}", intent="general")

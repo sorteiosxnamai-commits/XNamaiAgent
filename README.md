@@ -1,5 +1,9 @@
 # XNamaiAgent — atendimento comercial da Xnamai
 
+Ativação, indexação no servidor, avaliação e rollback das melhorias de qualidade:
+[guia de implantação](docs/agent-quality-rollout.md). O destino Vercel deve ser
+confirmado como XNAMAI agente antes de publicar; o vínculo local legado não basta.
+
 Agente Python/FastAPI com catálogo Mercos, continuidade de produtos e carrinho local. Recebe mensagens via YCloud, Brevo e Meta Instagram, registra auditoria e usa OpenAI quando necessário.
 
 O fluxo Mercos prepara a revisão do pedido; `create_order` continua desabilitado. Preço e estoque dependem da fonte comercial disponível.
