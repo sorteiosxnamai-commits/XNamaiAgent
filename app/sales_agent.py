@@ -1762,12 +1762,12 @@ async def _sales_response_with_openai(
 
         envelope = None
         if memory_sidechannel:
-            from .memory_models import AgentTurnEnvelope
+            from .memory_models import StructuredAgentTurnEnvelope
             from .openai_gateway import parse_structured_output
 
             parse_result = await parse_structured_output(
                 model=resolve_openai_model("main", settings=settings),
-                text_format=AgentTurnEnvelope,
+                text_format=StructuredAgentTurnEnvelope,
                 messages=responder_messages,
                 temperature=0.3,
                 call_type="response_composition_envelope",

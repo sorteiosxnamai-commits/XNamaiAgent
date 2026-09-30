@@ -51,6 +51,9 @@ versões ativas ou necessárias para rollback.
 - Confirme o modelo efetivo (`OPENAI_MAIN_MODEL` tem precedência sobre
   `OPENAI_MODEL`) e a migração `sql/010_ai_memory_proposals.sql` antes de habilitar
   memória. Variáveis existentes na Vercel prevalecem sobre os novos defaults.
+  Configurações ativas em `workspace_agents.configuration.runtime.values`
+  prevalecem também sobre as variáveis de ambiente; confirme o modelo efetivo
+  no endpoint de readiness e altere o workspace quando houver override.
 - Habilite `AGENT_KNOWLEDGE_SEARCH_ENABLED=true` somente após publicar o índice.
 - Comece com `AGENT_CONSULTATIVE_ENABLED=true`,
   `AGENT_CONSULTATIVE_TRAFFIC_PERCENT=5` e
@@ -76,6 +79,12 @@ Compara os modelos efetivos dos papéis `fast` e `main`, com até duas geraçõe
 esperados não são enviados ao modelo. Mede **composição de respostas institucionais**,
 não a jornada transacional completa. Os papéis podem resolver para o mesmo modelo;
 confira os nomes retornados antes de interpretar uma comparação.
+
+Para verificar a integração estruturada, use `mode="structured_contracts"` no
+mesmo endpoint. São duas chamadas sintéticas com os contratos reais de memória
+e revisão, sem executar propostas, ferramentas ou enviar mensagens a clientes.
+Este teste complementa a comparação textual: uma geração de texto bem-sucedida
+não demonstra que os schemas estruturados são aceitos pela API.
 
 Com `AGENT_ADMIN_URL` e `ADMIN_API_TOKEN` no ambiente do processo:
 

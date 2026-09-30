@@ -95,6 +95,27 @@ class CritiqueVerdict(BaseModel):
     better_reply_hint: str = ""
 
 
+class StructuredApiArguments(BaseModel):
+    query: str | None = None
+    product_id: str | None = None
+    order_id: str | None = None
+    session_id: str | None = None
+    cart_session_id: str | None = None
+    cpf: str | None = None
+    email: str | None = None
+    limit: int | None = None
+
+
+class StructuredRecommendedApiCall(BaseModel):
+    name: str
+    arguments: StructuredApiArguments
+    reason: str = ""
+
+
+class StructuredCritiqueVerdict(CritiqueVerdict):
+    recommended_apis: list[StructuredRecommendedApiCall] = Field(default_factory=list)
+
+
 class CritiqueLoopReport(BaseModel):
     mode: Literal["off", "shadow", "enforce"] = "off"
     attempts: int = 0
@@ -432,7 +453,7 @@ async def run_critique_judge(
 
         parse_result = await parse_structured_output(
             model=resolve_openai_model("main", settings=settings),
-            text_format=CritiqueVerdict,
+            text_format=StructuredCritiqueVerdict,
             messages=[
                 {
                     "role": "system",
@@ -449,7 +470,7 @@ async def run_critique_judge(
         parsed = parse_result.parsed
         if not isinstance(parsed, CritiqueVerdict):
             raise ValueError("critique_schema_missing")
-        return parsed
+        return CritiqueVerdict.model_validate(parsed.model_dump())
     except (
         APIError,
         OpenAIGatewayError,

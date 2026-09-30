@@ -198,6 +198,17 @@ def extract_order_reference(text: str | None) -> str | None:
     return None
 
 
+def is_existing_cart_report(text: str | None) -> bool:
+    """A report of an existing cart is not permission to create another one."""
+    folded = _fold_text(text)
+    return bool(
+        "carrinho" in folded
+        and re.search(r"\b(?:fiz|montei|criei|coloquei|adicionei)\b", folded)
+        and not re.search(r"\b(?:nao|ainda nao)\b", folded)
+        and not extract_order_reference(text)
+    )
+
+
 def is_order_lookup_request(text: str | None) -> bool:
     folded = _fold_text(text)
     # Carrinho/rascunho ainda nao e um pedido criado no provedor. Frases como
@@ -238,6 +249,9 @@ def is_order_lookup_request(text: str | None) -> bool:
         "andamento",
         "onde esta",
         "fiz um pedido",
+        "fiz o pedido",
+        "finalizei o pedido",
+        "finalizei meu pedido",
         "meu pedido",
     )
     return any(signal in folded for signal in lookup_signals)

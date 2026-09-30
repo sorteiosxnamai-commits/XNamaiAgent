@@ -89,6 +89,7 @@ def admin_index_knowledge(tenant_id: str, persona_id: int, workspace_id: UUID):
 class EvaluationCase(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     anonymized: Literal[True]
+    mode: Literal["answers", "structured_contracts"] = "answers"
     candidate_model: Literal["gpt-5.4", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"] | None = None
     required: list[str] = Field(default_factory=list, max_length=20)
     forbidden: list[str] = Field(default_factory=list, max_length=20)
@@ -106,6 +107,9 @@ async def admin_quality_evaluation(tenant_id: str, workspace_id: UUID, body: Eva
         raise HTTPException(503, "openai_not_configured")
     if body.candidate_model:
         settings = settings.model_copy(update={"openai_main_model": body.candidate_model})
+    if body.mode == "structured_contracts":
+        from .quality_evaluation import check_structured_contracts
+        return await check_structured_contracts(settings=settings)
     return await compare_answer(active, body.question, settings=settings,
                                 required=body.required, forbidden=body.forbidden)
 

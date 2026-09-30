@@ -53,6 +53,21 @@ async def test_order_status_without_reference_asks_for_order_number(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_existing_external_cart_is_not_restarted_as_new_purchase(monkeypatch):
+    replay = Replay(monkeypatch)
+    await replay.say("como faço para comprar?")
+    for text in ("fiz um pedido no carrinho", "fiz um pedido no carrinho"):
+        _, row = await replay.say(text)
+        assert "já montou o carrinho" in row["reply"]
+        assert "finalizar" in row["reply"]
+        assert row["tools"] == []
+        assert "qual produto" not in row["reply"]
+    _, row = await replay.say("ja fiz o pedido")
+    assert "número do pedido" in row["reply"]
+    assert "preparar o carrinho" not in row["reply"]
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_short_reference_names_the_displayed_choices(monkeypatch):
     replay = Replay(monkeypatch)
     await replay.say("tem relógio?")

@@ -142,6 +142,16 @@ class AgentTurnEnvelope(BaseModel):
     conversation_summary_delta: ConversationSummaryDelta | None = None
 
 
+class StructuredMemoryProposal(MemoryProposal):
+    """Wire contract: no arbitrary objects or untyped arrays in strict output."""
+
+    value: str | int | float | bool | list[str | int | float | bool] | None = None
+
+
+class StructuredAgentTurnEnvelope(AgentTurnEnvelope):
+    memory_proposals: list[StructuredMemoryProposal] = Field(default_factory=list, max_length=5)
+
+
 class MemoryPolicyDecision(BaseModel):
     accepted: bool
     auto_apply: bool = False

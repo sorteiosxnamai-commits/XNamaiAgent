@@ -661,6 +661,22 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_commerce_provider=bool(account_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=account_result.safety_reason,
         )
+    from .order_service import is_existing_cart_report
+
+    if is_existing_cart_report(message.text):
+        return _annotate_agent_result(
+            AgentResult(
+                reply_text=(
+                    "Entendi, você já montou o carrinho. Você chegou a finalizar "
+                    "e recebeu um número de pedido, ou os produtos ainda estão no carrinho?"
+                ),
+                intent="commerce",
+                response_metadata={"domain": "commerce", "active_topic": "order_status"},
+            ),
+            domain="commerce", response_source="existing_cart_clarification",
+            used_openai_interpreter=False, used_openai_responder=False,
+            used_commerce_provider=False,
+        )
     # Perguntas institucionais sobre COMO comprar nao sao consultas de SKU.
     # Resolva antes do interpretador para que "XNamai" nunca vire nome de
     # produto nem produza recommendation_no_match.

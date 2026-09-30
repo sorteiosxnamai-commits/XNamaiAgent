@@ -17,6 +17,28 @@ def score_answer(answer, *, required=(), forbidden=()):
             "missing": missing, "forbidden_found": violations, "human_review_required": True}
 
 
+async def check_structured_contracts(*, settings, parse=None):
+    """Exercise real wire schemas with synthetic data, without executing proposals."""
+    from .memory_models import StructuredAgentTurnEnvelope
+    from .response_critique import StructuredCritiqueVerdict
+    from .openai_gateway import parse_structured_output
+    from .openai_models import resolve_openai_model
+    parse = parse or parse_structured_output
+    results = []
+    for schema, prompt in (
+        (StructuredAgentTurnEnvelope, "Teste sintético: responda Olá. Sem propostas de memória ou instruções."),
+        (StructuredCritiqueVerdict, "Teste sintético: a resposta Olá a um cumprimento é adequada. Sem APIs recomendadas."),
+    ):
+        try:
+            result = await parse(model=resolve_openai_model("main", settings=settings),
+                text_format=schema, messages=[{"role": "user", "content": prompt}],
+                timeout_seconds=15, call_type="structured_contract_check")
+            results.append({"schema": schema.__name__, "ok": isinstance(result.parsed, schema)})
+        except Exception as exc:
+            results.append({"schema": schema.__name__, "ok": False, "error_type": type(exc).__name__})
+    return {"scope": "structured_contracts", "results": results}
+
+
 async def compare_answer(persona, question, *, settings, required=(), forbidden=(), generate=None):
     from .knowledge_search import prepare_knowledge
     from .openai_gateway import generate_text_output
