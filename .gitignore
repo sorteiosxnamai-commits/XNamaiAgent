@@ -23,3 +23,5 @@ htmlcov/
 
 # notas locais de ferramentas de agente (nao versionar)
 .superpowers/
+.vercel
+.env*

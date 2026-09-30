@@ -106,6 +106,27 @@ def test_new_admin_routes_are_protected(monkeypatch):
         assert method(f"/api/admin/agents/xnamai/{path}").status_code == 401
 
 
+def test_evaluation_candidate_does_not_change_live_settings(client, monkeypatch):
+    from app.config import Settings
+    import app.quality_evaluation as evaluation
+    original = repo.create_persona_version(instructions="Persona")
+    repo.activate_persona_version(original.id)
+    configured = Settings(OPENAI_API_KEY="test-key", OPENAI_MAIN_MODEL="gpt-4.1-mini")
+    monkeypatch.setattr(admin, "get_settings", lambda: configured)
+    seen = []
+
+    async def compare(*args, settings, **kwargs):
+        seen.append(settings.openai_main_model)
+        return {"ok": True}
+
+    monkeypatch.setattr(evaluation, "compare_answer", compare)
+    response = client.post(f"/api/admin/agents/xnamai/quality-evaluation?workspace_id={original.workspace_id}",
+        json={"question": "Posso comprar com CPF?", "anonymized": True, "candidate_model": "gpt-5.4"})
+    assert response.status_code == 200
+    assert seen == ["gpt-5.4"]
+    assert configured.openai_main_model == "gpt-4.1-mini"
+
+
 def test_admin_archive_and_rollback(client):
     v1 = repo.create_persona_version(instructions="v1\n", name="V1")
     v2 = repo.create_persona_version(instructions="v2\n", name="V2")
