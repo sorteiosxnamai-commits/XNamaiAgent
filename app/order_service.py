@@ -857,6 +857,7 @@ def _order_facts_result(
         commercial_data=facts,
         response_metadata={
             "domain": "commerce",
+            "active_topic": "order_status",
             "clear_pending_action": True,
             "factual_fallback_text": reply_text,
             "order_state": {

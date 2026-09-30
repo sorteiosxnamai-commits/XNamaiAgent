@@ -13,7 +13,8 @@ def order(status=2):
 
 
 @pytest.mark.asyncio
-async def test_customer_next_step_after_order_lookup_never_searches_catalog(monkeypatch):
+@pytest.mark.parametrize("lookup_messages", [("finalizei o pedido", "#95805"), ("consulte o pedido 95805",)])
+async def test_customer_next_step_after_order_lookup_never_searches_catalog(monkeypatch, lookup_messages):
     from app import openai_agent, sales_agent
     from tests.test_chatbo_pipeline_replay import Replay
     replay = Replay(monkeypatch)
@@ -23,8 +24,8 @@ async def test_customer_next_step_after_order_lookup_never_searches_catalog(monk
         return order()
     monkeypatch.setattr(openai_agent, "execute_tool", execute)
     monkeypatch.setattr(sales_agent, "execute_tool", execute)
-    await replay.say("finalizei o pedido")
-    await replay.say("#95805")
+    for message in lookup_messages:
+        await replay.say(message)
     result, row = await replay.say("Okay e o que faço agora?")
     assert row["active_topic"] == "order_next_steps"
     assert "95805" in result.reply_text and "pagamento" in result.reply_text and "entrega" in result.reply_text
