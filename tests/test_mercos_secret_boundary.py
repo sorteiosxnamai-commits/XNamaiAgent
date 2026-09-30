@@ -111,6 +111,9 @@ def test_settings_declare_only_allowed_adaptor_and_gate_variables():
         "mercos_adaptor_url",
         "mercos_adaptor_api_key",
         "mercos_adaptor_timeout_seconds",
+        # Credencial interna do agendador deste agente, sem acesso direto
+        # a Mercos. ApplicationToken e CompanyToken continuam proibidos.
+        "mercos_order_sync_secret",
         # Portoes de mutacao. Entram nesta lista por serem BOOLEANOS de
         # operacao, nunca credencial: dizem se este ambiente pode criar, e o
         # default e nao. Credencial Mercos segue proibida aqui — e a assercao
@@ -119,7 +122,7 @@ def test_settings_declare_only_allowed_adaptor_and_gate_variables():
         "mercos_customer_mutations_enabled",
     }, f"campo Mercos inesperado: {sorted(mercos_fields)}"
 
-    # O que realmente importa nesta fronteira: nenhum campo novo carrega segredo.
+    # Os portoes de mutacao continuam booleanos e desabilitados por padrao.
     for nome in ("mercos_order_mutations_enabled", "mercos_customer_mutations_enabled"):
         assert Settings.model_fields[nome].annotation is bool
         assert Settings.model_fields[nome].default is False
@@ -136,6 +139,7 @@ def test_env_example_declares_only_allowed_adaptor_and_gate_variables():
         "MERCOS_ADAPTOR_URL",
         "MERCOS_ADAPTOR_API_KEY",
         "MERCOS_ADAPTOR_TIMEOUT_SECONDS",
+        "MERCOS_ORDER_SYNC_SECRET",
         "MERCOS_CUSTOMER_MUTATIONS_ENABLED",
     }, f".env.example declara env Mercos inesperada: {sorted(declared)}"
 
@@ -145,6 +149,7 @@ def test_api_key_is_masked_by_the_secret_validator():
     source = (REPO_ROOT / "app" / "config.py").read_text(encoding="utf-8")
     validator = source[source.index("@field_validator(") :]
     assert '"mercos_adaptor_api_key"' in validator.split(")")[0]
+    assert '"mercos_order_sync_secret"' in validator.split(")")[0]
 
 
 def test_sanitizer_removes_every_known_secret_header():
