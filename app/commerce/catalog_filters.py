@@ -26,6 +26,15 @@ CATEGORIES = {
 def constraints(query):
     value = fold(query)
     patterns = []
+    categories = [(match.start(), category) for category, pattern in CATEGORIES.items()
+                  if (match := re.search(pattern, value))]
+    primary = min(categories)[1] if categories else None
+    if primary in {"fone de ouvido", "mouse", "caixa de som"}:
+        # Mentions on accessories/decorations do not make them the device itself.
+        # Keep bundles supplied WITH a case/cable: the accessory must precede
+        # the device name. "cabo para fone" remains a valid cable query.
+        accessory = r"\b(?:suportes?|luminarias?|bonecos?|estojos?|cases?|capas?|capinhas?|adaptador(?:es)?|cabos?|almofadas?)\b"
+        patterns.append(r"^(?!.*" + accessory + r".*" + CATEGORIES[primary] + r")")
     for category, pattern in CATEGORIES.items():
         if re.search(pattern, value):
             patterns.append(pattern)

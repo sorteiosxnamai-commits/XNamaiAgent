@@ -169,6 +169,18 @@ def test_mouse_is_not_a_mousepad_or_toy_rat():
     assert matches("mouse", {"name": "Mouse gamer wireless"})
 
 
+@pytest.mark.parametrize("name,expected", [
+    ("AKL-L012 - Luminária De Silicone LED Pato Com Fone", False),
+    ("ASU-001 - Suporte Braço Robótico para Controle e Headset Gamer", False),
+    ("Cabo adaptador para fone de ouvido", False),
+    ("Fone Headphone Bluetooth com Estojo", True),
+    ("Fone Headset Gamer com Cabo e Almofadas", True),
+])
+def test_category_excludes_accessories_but_keeps_device_with_accessories(name, expected):
+    assert matches("fone de ouvido", {"name": name}) is expected
+    assert matches("cabo para fone", {"name": "Cabo adaptador para fone de ouvido"})
+
+
 def test_wholesale_repository_uses_real_tenant_guard_and_keeps_database_errors(monkeypatch):
     from contextlib import contextmanager
     from app import db
