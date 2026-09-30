@@ -68,6 +68,26 @@ async def test_existing_external_cart_is_not_restarted_as_new_purchase(monkeypat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("opening", ["fiz um pedido no carrinho", "já fiz meu pedido"])
+async def test_order_number_followup_uses_order_lookup_not_catalog(monkeypatch, opening):
+    from app import openai_agent
+    from app.models import AgentResult
+    replay = Replay(monkeypatch)
+    looked_up = []
+
+    async def lookup(*, state, execute, order_id):
+        looked_up.append(order_id)
+        return AgentResult(reply_text="Pedido localizado para consulta.", intent="commerce")
+
+    monkeypatch.setattr(openai_agent, "get_order_facts", lookup)
+    await replay.say(opening)
+    _, row = await replay.say("95933")
+    assert looked_up == ["95933"]
+    assert "search_products" not in row["tools"]
+    assert "produto" not in row["reply"].casefold()
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_short_reference_names_the_displayed_choices(monkeypatch):
     replay = Replay(monkeypatch)
     await replay.say("tem relógio?")

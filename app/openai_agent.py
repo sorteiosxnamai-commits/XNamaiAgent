@@ -756,6 +756,13 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                 used_commerce_provider=False,
             )
     order_reference = extract_order_reference(message.text)
+    contextual_order_reference = False
+    if not order_reference and commerce_state.active_topic == "order_status":
+        # A bare number answers our order-number question, not a SKU search.
+        candidate = (message.text or "").strip().lstrip("#").strip()
+        if candidate.isascii() and candidate.isdigit() and 3 <= len(candidate) <= 10:
+            order_reference = candidate
+            contextual_order_reference = True
     soft_greeting = _is_greeting(message.text) or is_soft_greeting(message.text)
     context_handles = extract_handles_from_conversation(
         state=commerce_state,
@@ -832,7 +839,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_commerce_provider=False,
         )
     short_order_followup = (
-        commerce_state.active_topic == "order_status"
+        contextual_order_reference or commerce_state.active_topic == "order_status"
         and (message.text or "").casefold().strip(" ?!.") in {"qual status", "e o status"}
     )
     wants_order_context = (
