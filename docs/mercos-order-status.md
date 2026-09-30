@@ -19,6 +19,9 @@ Mercos trouxe todos os itens válidos. Itens excluídos não entram na contagem.
 `contents=NULL` é dado ainda não confirmado, nunca pedido vazio. Os preços
 são os registrados no pedido, sem substituir pelos preços atuais do catálogo.
 Perguntas sobre itens e suas continuações precedem a seleção de produtos.
+Perguntas como "Okay e o que faço agora?" usam o pedido ativo e consultam seu
+status antes de orientar sobre os próximos passos. Não geram uma busca por
+"okay" no catálogo, e faturamento não é tratado como confirmação de pagamento.
 Respostas com contagem de itens sem evidência são bloqueadas pelo validador.
 Pedidos longos continuam com "continue", preservando a posição e sem cortar linhas.
 As migrações retomam também o histórico antigo para preencher itens dos pedidos

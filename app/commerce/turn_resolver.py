@@ -352,6 +352,16 @@ def _contem(texto: str, termos) -> bool:
     return any(termo in texto for termo in termos)
 
 
+def is_next_step_question(text: str) -> bool:
+    """A neutral follow-up needs the active task, never a product named 'okay'."""
+    value = normalize_text(text)
+    value = re.sub(r"^(?:(?:ok|okay|certo|entendi|beleza|bom|entao|e)\s+)+", "", value)
+    return bool(re.fullmatch(
+        r"(?:agora|depois|o que (?:eu )?(?:faco|devo fazer|preciso fazer|tenho que fazer)(?: (?:agora|depois|em seguida))?"
+        r"|qual (?:e )?o proximo passo|quais (?:sao )?os proximos passos"
+        r"|como (?:eu )?(?:devo |posso )?(?:prosseguir|continuar))", value))
+
+
 def product_query_for(text: str) -> str | None:
     """Os termos de PRODUTO da mensagem, sem o verbo do pedido.
 
@@ -359,6 +369,8 @@ def product_query_for(text: str) -> str | None:
     consulta e o que fazia a busca lexical nao casar nada: nenhum produto se
     chama "quero carregador".
     """
+    if is_next_step_question(text):
+        return None
     normalizado = normalize_typos(normalize_text(text))
     for verbo in _CONVERSATIONAL:
         normalizado = re.sub(rf"\b{re.escape(verbo)}\b", " ", normalizado)

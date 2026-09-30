@@ -772,6 +772,11 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     commerce_state = hydrate_state_from_handles(commerce_state, context_handles)
     customer_context["_commerce_state"] = commerce_state.model_dump(mode="json")
     # Keep memory loaded on soft greetings without dumping order/payment unsolicited.
+    from .published_knowledge import answer_minimum_order_question
+    policy_result = answer_minimum_order_question(message.text)
+    if policy_result is not None:
+        return _annotate_agent_result(policy_result, domain="commerce", response_source="published_policy",
+            used_openai_interpreter=False, used_openai_responder=False, used_commerce_provider=False)
     from .order_queries import handle_order_query
     order_query_result = await handle_order_query(message.text, state=commerce_state, execute=execute_tool)
     if order_query_result is not None:

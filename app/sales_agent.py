@@ -3290,6 +3290,10 @@ async def _handle_sales_message_inner(
         )
     state = commerce_state or CommerceConversationState()
 
+    from .published_knowledge import answer_minimum_order_question
+    policy_result = answer_minimum_order_question(message.text)
+    if policy_result is not None:
+        return policy_result
     from .order_queries import handle_order_query
     order_query_result = await handle_order_query(message.text, state=state, execute=execute_tool)
     if order_query_result is not None:

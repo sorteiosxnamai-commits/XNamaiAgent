@@ -5,6 +5,7 @@ import re
 
 from .models import AgentResult
 from .order_service import _fold_text, extract_order_reference, get_order_facts
+from .commerce.turn_resolver import is_next_step_question
 
 
 def resolve_order_query(text, state):
@@ -22,6 +23,7 @@ def resolve_order_query(text, state):
     in_order = bool(state.order_id or state.order_lookup_id) and (
         "order" in topic or "pedido" in topic
     )
+    next_steps = in_order and is_next_step_question(text)
     if "pedido" not in value:
         from .commerce.catalog_filters import CATEGORIES
         if any(re.search(pattern, value) for pattern in CATEGORIES.values()):
@@ -31,7 +33,7 @@ def resolve_order_query(text, state):
     ) or re.fullmatch(r"#?\d{3,10}", value.strip()))
     if in_order and topic == "order_contents" and state.order_items_offset and value.strip(" .!?") == "sim":
         continuation = True
-    if not (explicit or continuation):
+    if not (explicit or continuation or next_steps):
         return None
     reference = extract_order_reference(text)
     if not reference and continuation:
@@ -40,7 +42,7 @@ def resolve_order_query(text, state):
             reference = numbers[0]
     next_page = bool(in_order and re.fullmatch(r"(?:sim|mais|continue|continua|proximos)(?:\s+(?:itens|do pedido))?[.!? ]*", value))
     return {"reference": reference, "contents": contents or continuation and not reference,
-            "next_page": next_page}
+            "next_page": next_page, "next_steps": next_steps}
 
 
 def money(value):
@@ -56,9 +58,27 @@ async def handle_order_query(text, *, state, execute):
         return AgentResult(reply_text="Me informe o número do pedido para eu consultar. 😊", intent="commerce",
             response_metadata={"domain": "commerce", "active_topic": "order_status"})
     result = await get_order_facts(state=state, execute=execute, order_id=reference)
-    result.response_metadata["active_topic"] = "order_contents" if query["contents"] else "order_status"
+    result.response_metadata["active_topic"] = "order_next_steps" if query["next_steps"] else "order_contents" if query["contents"] else "order_status"
     result.response_metadata["response_source"] = "verified_order_query"
     result.response_metadata["clear_active_product"] = True
+    if query["next_steps"] and result.commercial_data.get("success"):
+        facts = result.commercial_data
+        # Other providers retain their existing verified payment/tracking reply.
+        if facts.get("source") == "mercos_order_status_index":
+            label = facts.get("order_number") or facts["order_id"]
+            if facts.get("status_group") == "cancelled":
+                guidance = "Confirme com a equipe da XNamai o motivo do cancelamento e como prosseguir com a compra."
+            elif str(facts.get("status") or "").casefold().startswith("orçamento"):
+                guidance = "Confirme com a equipe da XNamai a aprovação desse orçamento e as condições para gerar o pedido."
+            else:
+                guidance = (
+                    "Para seguir, alinhe com a equipe da XNamai as condições de pagamento e a forma de entrega desse pedido. "
+                    "Se isso já foi combinado, peça a confirmação do andamento. "
+                    "Esta consulta não confirma pagamento ou envio."
+                )
+            result.reply_text = f'📋 O pedido {label} está com status "{facts["status"]}".\n\n{guidance}'
+            result.response_metadata["factual_fallback_text"] = result.reply_text
+        return result
     if not query["contents"] or not result.commercial_data.get("success"):
         return result
     facts = result.commercial_data

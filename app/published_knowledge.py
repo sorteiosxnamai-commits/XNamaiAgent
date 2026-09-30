@@ -41,6 +41,29 @@ def published_policy(topic: str, *, documents=None) -> str | None:
     return matches[0]["content"]
 
 
+def answer_minimum_order_question(text: str):
+    """Quote the approved policy on direct questions without model paraphrasing.
+
+    Product searches and multi-topic questions keep their normal interpretation.
+    The amount stays in the versioned publication, never in executable code.
+    """
+    from .commerce.generic_catalog import normalize_text
+    from .models import AgentResult
+    words = set(normalize_text(text).split())
+    allowed = {"qual", "quanto", "e", "eh", "o", "a", "um", "uma", "tem", "existe",
+               "voces", "voce", "me", "diga", "informe", "por", "favor", "valor", "do",
+               "da", "de", "para", "pra", "compra", "comprar", "pedido", "minimo", "minima",
+               "pedidos", "compras", "na", "no", "xnamai", "atacado", "atual", "hoje", "preciso", "fazer"}
+    if not (words & {"minimo", "minima"} and words & {"pedido", "pedidos", "compra", "compras", "comprar"}) or not words <= allowed:
+        return None
+    policy = published_policy("minimum_order")
+    if not policy:
+        return None
+    return AgentResult(reply_text=policy, intent="commerce", response_metadata={
+        "domain": "commerce", "active_topic": "purchase_guidance", "response_source": "published_policy",
+        "used_commerce_provider": False, "factual_fallback_text": policy})
+
+
 def policy_reference_block(metadata) -> str:
     documents = (metadata or {}).get("knowledge_documents") or []
     if not isinstance(documents, list):
