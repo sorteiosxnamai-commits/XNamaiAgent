@@ -344,7 +344,7 @@ class MercosCommerceProvider:
 
     async def run_order_sync(self):
         from .order_status import OrderStatusIndex
-        return await OrderStatusIndex(tenant_id=self._tenant_id).sync(self._client, max_pages=3)
+        return await OrderStatusIndex(tenant_id=self._tenant_id).background_sync(self._client)
 
     async def _do_get_order_complete(self, arguments):
         from .order_status import OrderStatusIndex

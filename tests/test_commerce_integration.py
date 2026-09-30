@@ -234,7 +234,8 @@ async def test_broad_recommendation_with_budget_starts_retrieval(monkeypatch):
 
     async def fake_execute(name, arguments):
         calls.append((name, arguments))
-        return {"products": [{"id": "2", "name": "fone esportivo preto", "current_price": 4500}]}
+        product = {"id": "2", "name": "fone esportivo preto", "current_price": 4500}
+        return product if name == "get_product" else {"products": [product]}
 
     monkeypatch.setattr(sales_agent, "execute_tool", fake_execute)
     install_fake_openai_client(monkeypatch, FakeClient)
@@ -270,6 +271,9 @@ async def test_product_search_uses_progressive_strategies(monkeypatch):
 
     async def fake_execute(name, arguments):
         calls.append(arguments)
+        if name == "get_product":
+            assert arguments["product_id"] == "3"
+            return {"id": "3", "name": "MarcaA ChargeMax"}
         # Match any exact/token probe for ChargeMax/MarcaA.
         tokens = [str(t).casefold() for t in (arguments.get("tokens") or [])]
         name_arg = str(arguments.get("name") or "").casefold()

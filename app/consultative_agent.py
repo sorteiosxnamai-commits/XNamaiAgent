@@ -69,6 +69,7 @@ async def consult(message, context, interpretation, *, settings, execute=None, g
     from .openai_models import resolve_openai_model
     from .persona_repository import get_active_persona
     from .product_retrieval import hard_filter_products
+    from .commerce.product_facts import normalize_product_detail, without_unconfirmed_facts
     from .prompt_compiler import resolve_system_instructions
     from .runtime_context import get_current_turn
 
@@ -126,17 +127,17 @@ async def consult(message, context, interpretation, *, settings, execute=None, g
             if "error" in found:
                 return {"error": "catalog_unavailable"}
             candidates = found.get("products") or []
-            candidates = hard_filter_products([p for p in candidates if isinstance(p, dict)],
+            candidates = hard_filter_products([without_unconfirmed_facts(p) for p in candidates if isinstance(p, dict)],
                                               interpretation, mode="recommendation")
             confirmed = []
             for candidate in candidates[:3]:
                 product_id = str(candidate.get("id") or "")
                 if not product_id:
                     continue
-                current = await execute("get_product", {"product_id": product_id})
-                if "error" in current or str(current.get("id") or "") != product_id:
+                detail = await execute("get_product", {"product_id": product_id})
+                current = normalize_product_detail(detail, product_id)
+                if current is None:
                     continue
-                current = {**current, "_revalidated": True, "_factual_source": "commerce_live"}
                 valid = hard_filter_products([current], interpretation, mode="recommendation")
                 if valid:
                     confirmed.append(current)

@@ -139,7 +139,7 @@ def infer_source_for_payload_key(
         return FactSource.COMMERCE_LIVE
     if factual in {"catalog_cache", "catalog_index"}:
         return FactSource.CATALOG_SNAPSHOT
-    if from_local_db or any(
+    if from_local_db or factual == "local_database" or any(
         token in lowered
         for token in ("balance", "coupon")
     ):

@@ -102,6 +102,7 @@ class FactPack(BaseModel):
     order_ids: set[str] = Field(default_factory=set)
     monetary_values: set[Decimal] = Field(default_factory=set)
     stock_available: bool | None = None
+    stock_unconfirmed: bool = False
     has_promotional_price: bool = False
     payment_confirmed: bool | None = None
     product_ids: set[str] = Field(default_factory=set)
@@ -249,6 +250,10 @@ def _collect_facts(
     tenant_id: str | None = None,
 ) -> None:
     if isinstance(value, dict):
+        from .commerce.product_facts import unconfirmed_facts, without_unconfirmed_facts
+        if "stock" in unconfirmed_facts(value):
+            pack.stock_unconfirmed = True
+        value = without_unconfirmed_facts(value)
         local_entity_id = entity_id
         for id_key in ("id", "product_id", "order_id", "variant_id"):
             if value.get(id_key) is not None:
@@ -262,7 +267,7 @@ def _collect_facts(
             str(value.get("tenant_id") or tenant_id or "").strip() or tenant_id
         )
         for child_key, child_value in value.items():
-            if str(child_key).startswith("_"):
+            if str(child_key).startswith("_") or child_key in {"freshness", "price_confirmed", "stock_confirmed"}:
                 continue
             _collect_facts(
                 child_value,
@@ -436,6 +441,8 @@ def build_fact_pack(
         "verified_facts": metadata.get("verified_facts", {}),
         "outbound_image_url": metadata.get("outbound_image_url"),
     }
+    from .commerce.product_facts import without_unconfirmed_facts
+    source_payload = without_unconfirmed_facts(source_payload)
     pack = FactPack(source_payload=source_payload)
     _collect_facts(source_payload, pack=pack, used_commerce_provider=used_commerce_provider)
 
@@ -763,7 +770,7 @@ def validate_factual_response(
             )
 
     if (pack.stock_available is None
-            and (result.response_metadata or {}).get("response_source") == "consultative_openai"
+            and (pack.stock_unconfirmed or (result.response_metadata or {}).get("response_source") == "consultative_openai")
             and (_STOCK_POSITIVE_RE.search(text) or _STOCK_NEGATIVE_RE.search(text))):
         report.checked_claims += 1
         _add_violation(report, kind="stock", claim="availability",

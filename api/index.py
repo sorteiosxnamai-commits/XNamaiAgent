@@ -1180,7 +1180,14 @@ async def commerce_order_sync_admin():
     runner = getattr(get_commerce_provider(), "run_order_sync", None)
     if not callable(runner):
         return {"ok": False, "error": "sync_not_supported_by_provider"}
-    return await runner()
+    result = await runner()
+    log_event("commerce.sync.orders", result)
+    return result
+
+
+@app.post("/api/cron/commerce/sync/orders", dependencies=[Depends(verify_remarketing_cron)])
+async def commerce_order_sync_cron():
+    return await commerce_order_sync_admin()
 
 
 @app.get("/api/admin/commerce/orders/{reference}", dependencies=[Depends(verify_admin_token)])

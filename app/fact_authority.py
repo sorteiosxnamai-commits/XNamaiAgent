@@ -232,6 +232,12 @@ def claim_from_product_field(
         )
         confidence = 0.75 if revalidated else 0.55
 
+    from .commerce.product_facts import unconfirmed_facts
+    fact_kind = "price" if kind in {"price", "promotional_price"} else "stock" if kind in {"stock", "availability"} else None
+    if fact_kind in unconfirmed_facts(product):
+        status = RevalidationStatus.STALE
+    if factual == "local_database":
+        source = FactSource.LOCAL_DATABASE
     freshness = product.get("_freshness_at") or product.get("freshness_at")
     if isinstance(freshness, str):
         try:

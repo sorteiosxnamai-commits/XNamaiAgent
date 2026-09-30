@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
@@ -40,31 +41,61 @@ def test_absence_in_recent_window_does_not_claim_order_does_not_exist():
     assert result.get("status_code") != 404
 
 
+@pytest.mark.asyncio
+async def test_legacy_zero_number_does_not_block_historical_pagination():
+    db = TransactionFixture()
+    client = NS(list_resource=AsyncMock(return_value=AdaptorPage(
+        "orders", 2, [row(numero=0), row(id=2000002, numero=95694)], "next", "next")))
+    result = await OrderStatusIndex(tenant_id="one", connect=db.connect).sync(client, max_pages=1, historical=True)
+    assert result["ok"] and result["records"] == 2 and db.history_cursor == "next"
+    assert db.rows[0][2] == "0" and db.rows[0][1] == "1000001"
+
+
 class TransactionFixture:
     """Observe commits/rollbacks and SQL data, without an external database."""
     def __init__(self):
         self.cursor = "start"
         self.rows = []
         self.completed = False
+        self.history_cursor = None
+        self.history_completed_at = None
+        self.verified = {}
 
     @contextmanager
     def connect(self):
-        before = deepcopy((self.cursor, self.rows, self.completed))
+        before = deepcopy(self.__dict__)
         try:
             yield self
         except Exception:
-            self.cursor, self.rows, self.completed = before
+            self.__dict__.update(before)
             raise
 
     def execute(self, sql, args=()):
         if "SELECT cursor_value" in sql:
-            return NS(fetchone=lambda: {"cursor_value": self.cursor})
+            return NS(fetchone=lambda: {"cursor_value": self.cursor, "history_cursor": self.history_cursor,
+                                       "history_completed_at": self.history_completed_at})
+        if "SELECT o.mercos_id" in sql:
+            return NS(fetchall=lambda: [dict(zip(
+                ("tenant_id", "mercos_id", "order_number", "status_code", "billing_code", "excluded"), item),
+                verified_at=self.verified.get(item[1]),
+                completed_at=datetime.now(timezone.utc) if self.completed else None)
+                for item in self.rows if item[0] == args[0] and args[1] in (item[1], item[2])][:2])
         if "INSERT INTO public.ai_mercos_order_status" in sql:
+            existing = next((item for item in self.rows if item[:2] == args[:2]), None)
+            if existing and "DO NOTHING" in sql:
+                return NS()
+            if existing:
+                self.rows.remove(existing)
             self.rows.append(args)
+            self.verified[args[1]] = datetime.now(timezone.utc)
         if "SET cursor_value" in sql:
             self.cursor, self.completed = args[0], False
-        if "SET completed_at=now()" in sql:
+        if "SET completed_at=clock_timestamp()" in sql:
             self.completed = True
+        if "SET history_cursor" in sql:
+            self.history_cursor, self.history_completed_at = args[0], None
+        if "SET history_completed_at=clock_timestamp()" in sql:
+            self.history_completed_at = datetime.now(timezone.utc)
         return NS()
 
 
@@ -129,7 +160,7 @@ async def test_provider_dispatch_reaches_real_status_mapping(monkeypatch):
         class Connection:
             def execute(self, sql, args):
                 assert args == ("one", "95933", "95933")
-                return NS(fetchall=lambda: [normalize_status(row())])
+                return NS(fetchall=lambda: [{**normalize_status(row()), "verified_at": datetime.now(timezone.utc)}])
         yield Connection()
 
     index.connect = connect
@@ -153,3 +184,78 @@ async def test_provider_dispatch_reaches_real_status_mapping(monkeypatch):
     assert "Pedido gerado" in reply["reply"]
     assert "não faturado" in reply["reply"]
     assert "produto" not in reply["reply"].casefold()
+
+
+@pytest.mark.asyncio
+async def test_matching_order_is_usable_before_unrelated_pages_finish():
+    db = TransactionFixture()
+    client = NS(list_resource=AsyncMock(side_effect=[
+        AdaptorPage("orders", 1, [row()], "next", "next"),
+        AdaptorPage("orders", 1, [row(id=2000002, numero=95934)], "later", "later"),
+    ]))
+    result = await OrderStatusIndex(tenant_id="one", connect=db.connect).lookup("95933", client)
+    assert result["ok"] and result["order_number"] == "95933"
+    assert not db.completed and client.list_resource.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_expired_order_is_not_returned_after_sync_failure():
+    db = TransactionFixture()
+    db.rows.append(("one", "1000001", "95933", "2", "0", False))
+    db.verified["1000001"] = datetime.now(timezone.utc) - timedelta(hours=1)
+    client = NS(list_resource=AsyncMock(side_effect=TimeoutError))
+    result = await OrderStatusIndex(tenant_id="one", connect=db.connect).lookup("95933", client)
+    assert result["error"] == "order_index_not_ready"
+    assert result["code"] == "order_sync_timeout"
+
+
+@pytest.mark.asyncio
+async def test_history_resumes_without_replacing_current_status_or_cursor():
+    db = TransactionFixture()
+    index = OrderStatusIndex(tenant_id="one", connect=db.connect)
+    client = NS(list_resource=AsyncMock(side_effect=[
+        AdaptorPage("orders", 1, [row(status=0)], "live", None),
+        AdaptorPage("orders", 2, [row(status=1), row(id=2000002, numero=100)], "old", "old"),
+        AdaptorPage("orders", 0, [], "end", None),
+    ]))
+    await index.sync(client, max_pages=1)
+    partial = await index.sync(client, max_pages=1, historical=True)
+    assert partial["complete"] is False
+    assert db.cursor == "live" and db.completed
+    assert db.history_cursor == "old"
+    assert db.rows[0][3] == "0"  # historical budget never resurrects cancelled order
+    assert (await index.lookup("100", client))["ok"]
+    assert (await index.sync(client, historical=True))["complete"]
+    assert (await index.sync(client, historical=True))["pages"] == 0
+    assert [call.kwargs["changed_after"] for call in client.list_resource.await_args_list] == ["start", None, "old"]
+
+
+@pytest.mark.asyncio
+async def test_background_prioritizes_pending_incremental_then_loads_history():
+    db = TransactionFixture()
+    index = OrderStatusIndex(tenant_id="one", connect=db.connect)
+    client = NS(list_resource=AsyncMock(side_effect=[
+        AdaptorPage("orders", 1, [row()], "a", "a"),
+        AdaptorPage("orders", 1, [row()], "b", "b"),
+        AdaptorPage("orders", 0, [], "c", None),
+        AdaptorPage("orders", 1, [row(id=2000002, numero=100)], "h", "h"),
+    ]))
+    first = await index.background_sync(client)
+    assert first["ok"] and first["history"] is None
+    second = await index.background_sync(client)
+    assert second["ok"] and second["incremental"]["complete"]
+    assert not second["history"]["complete"] and db.history_cursor == "h"
+
+
+@pytest.mark.asyncio
+async def test_history_failure_keeps_successfully_refreshed_orders_available():
+    db = TransactionFixture()
+    index = OrderStatusIndex(tenant_id="one", connect=db.connect)
+    client = NS(list_resource=AsyncMock(side_effect=[
+        AdaptorPage("orders", 1, [row()], "live", None), TimeoutError,
+    ]))
+    result = await index.background_sync(client)
+    assert not result["ok"] and result["incremental"]["complete"]
+    assert result["history"]["error"] == "order_sync_timeout"
+    assert db.completed and db.cursor == "live" and db.history_cursor is None
+    assert (await index.lookup("95933", client))["ok"]

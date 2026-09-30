@@ -1968,6 +1968,7 @@ async def revalidate_products(
     interpretation: SalesInterpretation,
     execute_tool: ToolExecutor,
 ) -> tuple[list[dict[str, Any]], bool]:
+    from .commerce.product_facts import normalize_product_detail
     refreshed: list[dict[str, Any]] = []
     failed = False
     partial = False
@@ -1979,17 +1980,13 @@ async def revalidate_products(
             continue
         attempted += 1
         result = await execute_tool("get_product", {"product_id": str(product_id)})
-        if "error" in result:
+        current = normalize_product_detail(result, str(product_id))
+        if current is None:
             failed = True
             partial = True
             continue
-        # Revalidation is factual authority: overlay live provider fields but never
-        # invent price/stock when the live payload omits them.
-        current = {**product, **result}
-        # Drop retrieval-only metadata from customer-facing payload later.
+        # Only detail facts survive; search prices must not fill missing fields.
         current["commercial_availability"] = commercial_availability_facts(current)
-        current["_revalidated"] = True
-        current["_factual_source"] = "commerce_live"
         print("[sales.availability.fact]", {
             "has_stock": current["commercial_availability"]["has_stock"],
             "has_lead_time": current["commercial_availability"]["has_lead_time"],

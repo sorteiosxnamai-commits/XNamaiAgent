@@ -210,7 +210,8 @@ async def test_valid_commerce_interpretation_reaches_openai_sales_responder(monk
 
     async def fake_execute(name, arguments):
         tool_calls.append((name, arguments))
-        return {"products": [{"id": "1", "name": "MarcaA ChargeMax", "brand": "MarcaA", "model": "ChargeMax", "current_price": 4999}]}
+        product = {"id": "1", "name": "MarcaA ChargeMax", "brand": "MarcaA", "model": "ChargeMax", "current_price": 4999}
+        return product if name == "get_product" else {"products": [product]}
 
     class FakeCompletions:
         async def create(self, **kwargs):
