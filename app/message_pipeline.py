@@ -97,8 +97,12 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
     from .business_policy import bind_policy, reset_policy
     from .persona_consultation import consult_active_persona
     from .turn_cache import begin_turn_cache, end_turn_cache
+    from .knowledge_search import bind_evidence, prepare_knowledge, reset_evidence
+    from .published_knowledge import bind_publication, reset_publication
 
     cache_token = begin_turn_cache()
+    evidence_token = bind_evidence(None)
+    publication_token = bind_publication(None)
     policy_token = None
     active = None
     workspace_id = None
@@ -126,6 +130,7 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             log_exception("persona.configuration_invalid", exc)
             policy_token = bind_policy(None)
         consultation = consult_active_persona(active, incoming.text)
+        bind_publication(getattr(active, "metadata", None))
         persona_required = bool(
             getattr(settings, "agent_db_persona_enabled", False)
             and getattr(settings, "database_url", None)
@@ -182,9 +187,24 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
                 "brand": persona_metadata.get("brand"),
                 "persona_version_id": getattr(active, "id", None),
             }
+        evidence = await prepare_knowledge(
+            active, incoming.text or "", tenant_id=getattr(settings, "agent_persona_tenant_id", "xnamai"),
+            workspace_id=workspace_id, persona_key=getattr(settings, "agent_persona_key", "xnamai_commercial"),
+            settings=settings, incoming=incoming, recent_turns=customer_context.get("_model_conversation_turns")
+            or customer_context.get("_conversation_turns"),
+        )
+        bind_evidence(evidence)
+        if evidence.passages:
+            consultation.relevant_information_found = True
+            consultation.fallback_to_auxiliary = False
+            consultation.reason = None
+            consultation.source_ids = list(dict.fromkeys(
+                consultation.source_ids + evidence.report()["sources"]
+            ))
         result = await _process_incoming_message(incoming, turn_customer_context)
         if persona_required:
             result = _fail_closed_on_ai_composition_failure(incoming, result)
+        result.response_metadata["knowledge_retrieval"] = evidence.report()
         result.response_metadata["persona_guard"] = {
             "required": persona_required,
             "passed": True,
@@ -202,6 +222,8 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             }
         return result
     finally:
+        reset_publication(publication_token)
+        reset_evidence(evidence_token)
         if policy_token is not None:
             reset_policy(policy_token)
         end_turn_cache(cache_token)
@@ -617,6 +639,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
             try:
                 from app.memory_models import AgentTurnEnvelope
                 from app.memory_service import process_agent_memory_proposals
+                from app.conversation_summary_scope import summary_conversation_key
 
                 envelope = AgentTurnEnvelope.model_validate(envelope_payload)
                 memory_result = process_agent_memory_proposals(
@@ -624,11 +647,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
                     tenant_id=str(
                         getattr(settings, "agent_persona_tenant_id", "xnamai")
                     ),
-                    conversation_key=(
-                        incoming.conversation_id
-                        or incoming.sender_key
-                        or incoming.sender_phone
-                    ),
+                    conversation_key=summary_conversation_key(incoming, settings),
                     sender_key=incoming.sender_key,
                     inbound=incoming,
                     inbound_id=inbound_id,

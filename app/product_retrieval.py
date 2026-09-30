@@ -11,6 +11,7 @@ from typing import Any, Literal
 from openai import APIError, AsyncOpenAI
 from pydantic import BaseModel
 
+from .openai_models import resolve_openai_model
 from .config import get_settings
 from .models import SalesInterpretation
 from .openai_runtime import execute_openai_call
@@ -1754,7 +1755,7 @@ async def match_specific_products(
         from .openai_gateway import parse_structured_output
 
         parse_result = await parse_structured_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             text_format=ProductMatchSelection,
             messages=[
                 {
@@ -2089,7 +2090,7 @@ async def rerank_products(
         from .openai_gateway import parse_structured_output
 
         parse_result = await parse_structured_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             text_format=ProductRerankSelection,
             messages=[
                 {

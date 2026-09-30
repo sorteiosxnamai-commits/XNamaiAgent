@@ -13,13 +13,13 @@ from .config import get_settings
 ModelRole = Literal["main", "fast"]
 
 
-def resolve_openai_model(role: ModelRole = "main") -> str:
+def resolve_openai_model(role: ModelRole = "main", *, settings=None) -> str:
     """Return the configured model for a functional role.
 
     - ``main``: comprehension + grounded final reply (OPENAI_MAIN_MODEL / OPENAI_MODEL)
     - ``fast``: simple structured tasks (OPENAI_FAST_MODEL → main → OPENAI_MODEL)
     """
-    settings = get_settings()
+    settings = settings if settings is not None else get_settings()
     base = (getattr(settings, "openai_model", None) or "").strip()
     main = (getattr(settings, "openai_main_model", None) or "").strip() or base
     fast = (getattr(settings, "openai_fast_model", None) or "").strip() or main

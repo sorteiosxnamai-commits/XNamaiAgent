@@ -63,6 +63,7 @@ from .commerce_context import (
     resolve_purchase_item_reference,
 )
 from .channel_profiles import channel_system_hint
+from .openai_models import resolve_openai_model
 from .config import get_settings
 from .working_memory import WORKING_MEMORY_USAGE_POLICY, build_working_memory
 from .guardrails import (
@@ -691,14 +692,9 @@ async def interpret_message(
     from .rollout import is_turn_understanding_enabled
 
     use_turn_understanding = is_turn_understanding_enabled(settings)
-    if use_turn_understanding:
-        interpreter_model = (
-            (getattr(settings, "openai_fast_model", None) or "").strip()
-            or (getattr(settings, "openai_main_model", None) or "").strip()
-            or settings.openai_model
-        )
-    else:
-        interpreter_model = settings.openai_model
+    # Understanding determines every downstream action; reserve fast models for
+    # simple extraction, never for routing the customer conversation.
+    interpreter_model = resolve_openai_model("main", settings=settings)
 
     normalized_history = _normalize_interpreter_history(recent_turns)
     state_obj = commerce_state or CommerceConversationState()
@@ -1630,7 +1626,7 @@ async def generate_clarification_reply(
             {"role": "user", "content": json.dumps(request_context, ensure_ascii=False)},
         ]
         text_result = await generate_text_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             messages=clarification_messages,
             temperature=0.3,
             call_type="clarification",
@@ -1767,7 +1763,7 @@ async def _sales_response_with_openai(
             from .openai_gateway import parse_structured_output
 
             parse_result = await parse_structured_output(
-                model=settings.openai_model,
+                model=resolve_openai_model("main", settings=settings),
                 text_format=AgentTurnEnvelope,
                 messages=responder_messages,
                 temperature=0.3,
@@ -1777,7 +1773,7 @@ async def _sales_response_with_openai(
             content = getattr(envelope, "reply", None) if envelope is not None else None
         else:
             text_result = await generate_text_output(
-                model=settings.openai_model,
+                model=resolve_openai_model("main", settings=settings),
                 messages=responder_messages,
                 temperature=0.3,
                 call_type="response_composition",

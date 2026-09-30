@@ -18,7 +18,7 @@ Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-re
 
 - Python + FastAPI
 - Vercel Python Runtime
-- OpenAI Python SDK (`openai==2.7.2`) — Chat Completions (produção) + gateway Responses
+- OpenAI Python SDK (`openai==2.7.2`) — Responses como padrão; Chat Completions para contingência
 - PostgreSQL/Supabase via `psycopg`
 - Webhooks YCloud, Brevo e Meta Instagram
 - Inbox/outbox persistentes e worker de recuperação
@@ -26,7 +26,8 @@ Veja [operação das filas, políticas e conhecimento da persona](docs/xnamai-re
 ## OpenAI API mode (migração)
 
 ```txt
-OPENAI_API_MODE=chat_completions   # default seguro / rollback
+OPENAI_API_MODE=responses         # padrão atual do código
+# OPENAI_API_MODE=chat_completions # rollback; exige permitir Chat como primário
 # OPENAI_API_MODE=canary           # % sticky Responses + fallback Chat (texto/structured)
 # OPENAI_API_MODE=responses        # 100% Responses (+ fallback Chat se habilitado)
 # OPENAI_API_MODE=shadow           # Chat em produção + sample Responses
@@ -83,7 +84,9 @@ sql/010_ai_memory_proposals.sql
 AGENT_MEMORY_PROPOSALS_ENABLED=true           # envelope estruturado + persistência
 AGENT_CONTACT_MEMORY_IN_PROMPT_ENABLED=true   # injeta memórias ativas no prompt
 AGENT_MEMORY_AUTO_APPLY_ENABLED=false         # manter off até allowlist
-AGENT_CONVERSATION_SUMMARY_ENABLED=false      # critérios/async; não a cada turno
+AGENT_CONVERSATION_SUMMARY_ENABLED=true       # delta validado; não resume tudo a cada turno
+AGENT_CONVERSATION_SUMMARY_IN_PROMPT_ENABLED=true
+AGENT_CONVERSATION_SUMMARY_MODE=enforce
 AGENT_INSTRUCTION_EXTENSION_PROPOSALS_ENABLED=false
 AGENT_LEARNING_AUTO_PROMOTE=false             # Etapa 9: insights pending only
 AGENT_LEARNING_AUTO_ACTIVATE=false            # nunca ativar extension sem admin
@@ -98,6 +101,68 @@ Auto-apply exige **ambos**:
 (lista de `sender_key` ou `*`). Thresholds: confidence ≥ 0.85, importance ≥ 0.70,
 kinds allowlisted, evidência explícita. Extensões tenant e attendance learning
 nunca auto-ativam (approve só via admin).
+
+### Qualidade de compreensão e busca semântica
+
+O padrão de `OPENAI_MODEL` agora é `gpt-5.4`. `OPENAI_MAIN_MODEL` vazio herda
+esse valor. Compreensão comercial, resposta, seleção de produtos e revisão usam
+o modelo principal; o interpretador não usa mais `OPENAI_FAST_MODEL`.
+O gateway omite `temperature` para modelos de raciocínio. A janela padrão é de
+24 mensagens e o resumo validado é usado como contexto, sem autoridade sobre
+preço, estoque ou pagamento. A persistência do resumo requer a migração
+`sql/010_ai_memory_proposals.sql` já existente.
+Os novos resumos usam chaves isoladas por workspace e canal. Resumos antigos sem
+esse escopo não são reutilizados; o histórico recente permanece disponível.
+
+**Configurações antigas da Vercel ou do workspace prevalecem sobre os novos
+padrões.** Conferir `OPENAI_MODEL`, `OPENAI_MAIN_MODEL`, `AGENT_HISTORY_LIMIT`,
+`AGENT_MAX_RECENT_TURNS` e os três controles de resumo acima. Não é necessário
+copiar a chave da Vercel para uma máquina local. A compatibilidade do SDK foi
+testada com respostas simuladas; disponibilidade do modelo, custo e latência
+precisam de homologação no projeto OpenAI usado pela implantação.
+
+A recuperação usa a [Retrieval API da OpenAI](https://developers.openai.com/api/docs/guides/retrieval),
+sobre os mesmos Vector Stores usados pelo File Search. A busca ocorre antes da
+composição da resposta e funciona também com o caminho de contingência Chat.
+Não adiciona um ciclo de ferramentas que possa repetir ações comerciais.
+
+Para preparar a base em um ambiente seguro que já tenha a chave configurada:
+
+1. Exportar os documentos aprovados da persona para um JSON com `tenant_id`,
+   `workspace_id`, `persona_key` e `knowledge_documents`. Cada documento contém
+   `id`, `title`, `content`, `status` e, opcionalmente, `valid_until` com timezone.
+   Usar os mesmos documentos e IDs publicados na persona. Não incluir conversas
+   de clientes nesse arquivo.
+2. Executar `python -m scripts.index_knowledge conhecimento.json`. O comando
+   cria o índice remoto e imprime um objeto `knowledge_index`. Para atualizar
+   sem duplicar arquivos inalterados, usar `--vector-store-id vs_...`.
+3. Incorporar `knowledge_index` aos metadados de uma nova versão da persona,
+   preservando `knowledge_documents` e os outros metadados. Publicar pelo fluxo
+   administrativo existente. O script não ativa nem altera a persona.
+4. Definir `AGENT_KNOWLEDGE_SEARCH_ENABLED=true` na implantação. Timeout padrão:
+   cinco segundos, sem retries; score mínimo: `0.35`, ajustável conforme avaliação.
+
+Só entram na resposta trechos de arquivos presentes no manifesto publicado,
+com workspace/persona corretos, conteúdo aprovado, versão atual e validade em dia.
+Texto devolvido pelo índice precisa existir no documento publicado. Resultados
+sem essas garantias são descartados. Em falha ou índice ausente, a busca local
+permanece disponível. O orçamento padrão é de seis trechos de até 1.400 caracteres;
+`business_policies.knowledge_max_chunks` permite ajustar entre 1 e 12 por persona.
+`response_metadata.knowledge_retrieval` registra status,
+fontes e quantidade de trechos sem registrar a pergunta ou o conteúdo.
+
+Arquivos antigos são preservados para permitir rollback. Mesmo que ainda existam
+no índice, versões revogadas não são usadas. A limpeza posterior deve considerar
+as versões de persona que ainda precisam de rollback e o custo de armazenamento.
+
+Antes de ampliar o tráfego, comparar conversas reais anonimizadas com o modelo
+anterior: acerto de intenção, uso de fonte correta, ausência de afirmações sem
+evidência, continuidade, encaminhamentos desnecessários, custo e latência.
+Os testes offline não substituem essa avaliação real.
+
+Rollback: restaurar os modelos anteriores e definir
+`AGENT_KNOWLEDGE_SEARCH_ENABLED=false`. Para desativar resumos, definir os dois
+booleans de resumo como `false` e `AGENT_CONVERSATION_SUMMARY_MODE=off`.
 
 ## Arquivos principais
 

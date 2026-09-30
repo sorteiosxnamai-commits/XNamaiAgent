@@ -193,7 +193,10 @@ def build_store_guidance(
     )
 
     if topics.intersection({"price", "wholesale", "retail", "registration"}):
-        blocks.append("O pedido mínimo normal é de R$ 800,00.")
+        from .published_knowledge import published_policy
+        minimum = published_policy("minimum_order")
+        if minimum:
+            blocks.append(minimum)
 
     if topics.intersection({"wholesale", "retail", "registration"}):
         blocks.append(

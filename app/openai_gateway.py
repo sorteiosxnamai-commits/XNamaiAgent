@@ -567,7 +567,7 @@ class ChatCompletionsGateway:
             "messages": chat_messages,
             "response_format": text_format,
         }
-        if temperature is not None:
+        if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
             kwargs["temperature"] = temperature
         started = time.perf_counter()
         try:
@@ -619,7 +619,7 @@ class ChatCompletionsGateway:
             input_items=input_items,
         )
         kwargs: dict[str, Any] = {"model": model, "messages": chat_messages}
-        if temperature is not None:
+        if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
             kwargs["temperature"] = temperature
         started = time.perf_counter()
         try:
@@ -689,7 +689,7 @@ class ChatCompletionsGateway:
                 "tools": chat_tools,
                 "tool_choice": "auto",
             }
-            if temperature is not None:
+            if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
                 kwargs["temperature"] = temperature
             if not parallel_tool_calls:
                 kwargs["parallel_tool_calls"] = False
@@ -811,7 +811,7 @@ class ResponsesGateway:
             kwargs["instructions"] = resolved_instructions
         if resolved_input is not None:
             kwargs["input"] = resolved_input
-        if temperature is not None:
+        if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
             kwargs["temperature"] = temperature
         _apply_responses_controls(kwargs, model=model)
         started = time.perf_counter()
@@ -872,7 +872,7 @@ class ResponsesGateway:
             kwargs["instructions"] = resolved_instructions
         if resolved_input is not None:
             kwargs["input"] = resolved_input
-        if temperature is not None:
+        if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
             kwargs["temperature"] = temperature
         _apply_responses_controls(kwargs, model=model)
         started = time.perf_counter()
@@ -962,7 +962,7 @@ class ResponsesGateway:
             }
             if resolved_instructions:
                 kwargs["instructions"] = resolved_instructions
-            if temperature is not None:
+            if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
                 kwargs["temperature"] = temperature
             _apply_responses_controls(kwargs, model=model)
             try:
@@ -1776,7 +1776,7 @@ def generate_text_sync(
     })
     client = get_sync_openai_client()
     kwargs: dict[str, Any] = {"model": model, "messages": messages}
-    if temperature is not None:
+    if temperature is not None and not model_capabilities(model).supports_reasoning_effort:
         kwargs["temperature"] = temperature
     started = time.perf_counter()
     try:

@@ -8,6 +8,7 @@ from .agent_replies import (
     build_preferred_name_reply,
     _third_party_reply,
 )
+from .openai_models import resolve_openai_model
 from .config import get_settings
 from .commerce_context import CommerceConversationState, apply_commerce_domain_context
 from .db import load_recent_conversation_turns
@@ -319,10 +320,13 @@ def generate_openai_reply(
 
     from .prompt_compiler import legacy_contract_extra_blocks, resolve_system_instructions
 
+    from .history_window import conversation_messages
+    history = conversation_messages(customer_context, limit=int(getattr(settings, "agent_history_limit", 12)))
     user_input = build_agent_input(message, customer_context, facts)
     system_instructions = resolve_system_instructions(
         fallback_instructions=SYSTEM_INSTRUCTIONS,
         incoming=message,
+        recent_turns=history,
         extra_system_blocks=legacy_contract_extra_blocks(
             SYSTEM_INSTRUCTIONS,
             tag="legacy_agent_contract",
@@ -331,6 +335,7 @@ def generate_openai_reply(
     )
     legacy_messages = [
         {"role": "system", "content": system_instructions},
+        *history,
         {"role": "user", "content": user_input},
     ]
     try:
@@ -338,7 +343,7 @@ def generate_openai_reply(
         from .openai_gateway import generate_text_sync
 
         text_result = generate_text_sync(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             messages=legacy_messages,
             temperature=0.3,
             call_type="legacy",
@@ -451,10 +456,13 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
         return generate_openai_reply(message, customer_context, facts)
 
     from .prompt_compiler import legacy_contract_extra_blocks, resolve_system_instructions
+    from .history_window import conversation_messages
+    history = conversation_messages(customer_context, limit=int(getattr(settings, "agent_history_limit", 12)))
 
     system_instructions = resolve_system_instructions(
         fallback_instructions=SYSTEM_INSTRUCTIONS,
         incoming=message,
+        recent_turns=history,
         extra_system_blocks=legacy_contract_extra_blocks(
             SYSTEM_INSTRUCTIONS,
             tag="legacy_agent_contract",
@@ -463,6 +471,7 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
     )
     messages: list[dict] = [
         {"role": "system", "content": system_instructions},
+        *history,
         {"role": "user", "content": build_agent_input(message, customer_context, facts)},
     ]
     # Gating por PROVIDER, nunca por env de fornecedor: sem provider capaz de
@@ -479,7 +488,7 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
 
         if not tools:
             text_result = await generate_text_output(
-                model=settings.openai_model,
+                model=resolve_openai_model("main", settings=settings),
                 messages=messages,
                 temperature=0.3,
                 call_type="response_composition",
@@ -498,7 +507,7 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
             return result
 
         loop_result = await run_tool_loop_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             tools=tools,
             execute_tool=_execute_allowed,
             messages=messages,

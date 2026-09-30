@@ -21,7 +21,7 @@ def test_empty_bool_env_falls_back_to_default(monkeypatch):
 
 
 def test_empty_int_env_falls_back_to_default(monkeypatch):
-    assert _settings(monkeypatch, AGENT_MAX_RECENT_TURNS="").agent_max_recent_turns == 8
+    assert _settings(monkeypatch, AGENT_MAX_RECENT_TURNS="").agent_max_recent_turns == 24
 
 
 def test_empty_float_env_falls_back_to_default(monkeypatch):
@@ -47,7 +47,7 @@ def test_all_empty_typed_envs_together_do_not_break_boot(monkeypatch):
     assert settings.dry_run is True
     assert settings.openai_api_mode == "responses"
     assert settings.openai_timeout_seconds == 45.0
-    assert settings.agent_max_recent_turns == 8
+    assert settings.agent_max_recent_turns == 24
     assert settings.agent_rollout_profile == "full"
     assert settings.instagram_story_canary_percent == 5.0
 

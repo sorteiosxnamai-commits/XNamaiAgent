@@ -186,6 +186,21 @@ def test_model_capabilities_reasoning_models():
     assert caps_std.supports_text_verbosity is True
 
 
+@pytest.mark.asyncio
+async def test_reasoning_model_omits_temperature_in_responses_and_chat(responses_settings):
+    responses = _FakeResponses()
+    gateway = ResponsesGateway(client=SimpleNamespace(responses=responses))
+    await gateway.generate_text(model="gpt-5.4", messages=[{"role": "user", "content": "Oi"}], temperature=0.3)
+    await gateway.parse_structured(model="gpt-5.4", messages=[{"role": "user", "content": "Oi"}], text_format=_Label, temperature=0)
+    for request in responses.create_kwargs_list + responses.parse_kwargs_list:
+        assert "temperature" not in request
+        assert request["reasoning"] == {"effort": "medium"}
+    chat = _FakeChat()
+    gateway = ChatCompletionsGateway(client=SimpleNamespace(chat=SimpleNamespace(completions=chat)))
+    await gateway.generate_text(model="gpt-5.4", messages=[{"role": "user", "content": "Oi"}], temperature=0.3)
+    assert "temperature" not in chat.create_kwargs
+
+
 def test_extract_usage_metrics_includes_cache_and_reasoning():
     response = SimpleNamespace(
         status="completed",

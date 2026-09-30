@@ -17,12 +17,17 @@ def test_summary_injected_when_flag_enabled(monkeypatch):
             agent_persona_tenant_id="xnamai",
             agent_max_active_contact_memories=20,
             agent_max_contact_memory_chars=3000,
+            chatbo_workspace_id="workspace-a",
         ),
     )
 
     def fake_get(*, tenant_id, conversation_key):
         assert tenant_id == "xnamai"
-        assert conversation_key == "conv-1"
+        from app.conversation_summary_scope import summary_conversation_key
+        assert conversation_key == summary_conversation_key(
+            IncomingMessage(channel="whatsapp", conversation_id="conv-1", workspace_id="workspace-a"),
+            SimpleNamespace(),
+        )
         return {
             "current_goal": "buscar MarcaA",
             "summary": "goal=buscar MarcaA",
@@ -81,3 +86,13 @@ def test_summary_not_injected_when_flag_off(monkeypatch):
     )
     assert out == "fallback contract"
     assert format_conversation_summary_block(None).startswith("<conversation_summary>")
+
+
+def test_summary_keys_isolate_workspace_channel_and_missing_scope():
+    from app.conversation_summary_scope import summary_conversation_key
+    settings = SimpleNamespace()
+    message = IncomingMessage(workspace_id="workspace-a", channel="whatsapp", conversation_id="1")
+    first = summary_conversation_key(message, settings)
+    assert first != summary_conversation_key(message.model_copy(update={"workspace_id": "workspace-b"}), settings)
+    assert first != summary_conversation_key(message.model_copy(update={"channel": "instagram"}), settings)
+    assert summary_conversation_key(message.model_copy(update={"workspace_id": None}), settings) is None

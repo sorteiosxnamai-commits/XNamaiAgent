@@ -77,10 +77,14 @@ class Settings(BaseSettings):
     admin_api_token: str = Field(default="", alias="ADMIN_API_TOKEN")
 
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-5.4", alias="OPENAI_MODEL")
     # Role-specific models (fall back to OPENAI_MODEL when empty).
-    openai_main_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MAIN_MODEL")
-    openai_fast_model: str = Field(default="gpt-4.1-nano", alias="OPENAI_FAST_MODEL")
+    openai_main_model: str = Field(default="", alias="OPENAI_MAIN_MODEL")
+    openai_fast_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_FAST_MODEL")
+    # Search is opt-in until an approved, workspace-scoped index is published.
+    agent_knowledge_search_enabled: bool = Field(default=False, alias="AGENT_KNOWLEDGE_SEARCH_ENABLED")
+    agent_knowledge_search_timeout_seconds: float = Field(default=5.0, gt=0, le=15, alias="AGENT_KNOWLEDGE_SEARCH_TIMEOUT_SECONDS")
+    agent_knowledge_search_min_score: float = Field(default=0.35, ge=0, le=1, alias="AGENT_KNOWLEDGE_SEARCH_MIN_SCORE")
     openai_agent_name: str = Field(default="XNamaiAgent", alias="OPENAI_AGENT_NAME")
     openai_transcribe_model: str = Field(default="whisper-1", alias="OPENAI_TRANSCRIBE_MODEL")
     openai_tts_model: str = Field(default="gpt-4o-mini-tts", alias="OPENAI_TTS_MODEL")
@@ -227,7 +231,7 @@ class Settings(BaseSettings):
         alias="AGENT_PERSONA_KEY",
     )
     agent_max_recent_turns: int = Field(
-        default=8,
+        default=24,
         alias="AGENT_MAX_RECENT_TURNS",
         ge=1,
         le=40,
@@ -298,17 +302,17 @@ class Settings(BaseSettings):
         alias="AGENT_INSTRUCTION_EXTENSION_PROPOSALS_ENABLED",
     )
     agent_conversation_summary_enabled: bool = Field(
-        default=False,
+        default=True,
         alias="AGENT_CONVERSATION_SUMMARY_ENABLED",
     )
     # Inject compacted conversation summary into compiled system instructions.
     agent_conversation_summary_in_prompt_enabled: bool = Field(
-        default=False,
+        default=True,
         alias="AGENT_CONVERSATION_SUMMARY_IN_PROMPT_ENABLED",
     )
     # off | shadow | enforce — shadow generates but does not inject into reply prompt.
     agent_conversation_summary_mode: Literal["off", "shadow", "enforce"] = Field(
-        default="off",
+        default="enforce",
         alias="AGENT_CONVERSATION_SUMMARY_MODE",
     )
     agent_prompt_compilation_audit_enabled: bool = Field(
@@ -460,7 +464,7 @@ class Settings(BaseSettings):
     # still loads up to AGENT_HISTORY_HARD_CAP from the database.
     # Accept legacy Vercel values up to 200, then normalize in model_validator.
     agent_history_limit: int = Field(
-        default=12,
+        default=24,
         alias="AGENT_HISTORY_LIMIT",
         ge=4,
         le=200,
@@ -1041,7 +1045,7 @@ class Settings(BaseSettings):
 
         - hard_cap remains the DB recovery bound
         - values above 40 are treated as legacy "load size" and coerced to the
-          intended model window (12)
+          intended model window (24)
         """
         hard_cap = int(self.agent_history_hard_cap)
         limit = int(self.agent_history_limit)
@@ -1057,10 +1061,10 @@ class Settings(BaseSettings):
                 {
                     "event": "coerce_legacy_history_limit_to_model_window",
                     "from": limit,
-                    "to": 12,
+                    "to": 24,
                 },
             )
-            limit = 12
+            limit = 24
         object.__setattr__(self, "agent_history_limit", limit)
         return self
 

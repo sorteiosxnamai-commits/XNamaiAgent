@@ -5,6 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def conversation_messages(customer_context: dict, *, limit: int) -> list[dict[str, str]]:
+    """Only conversational roles may cross from stored history into model input."""
+    turns = customer_context.get("_model_conversation_turns")
+    if turns is None:
+        turns = customer_context.get("_conversation_turns") or []
+    clean = [{"role": turn["role"], "content": turn["content"].strip()}
+             for turn in turns if isinstance(turn, dict)
+             and turn.get("role") in {"user", "assistant"}
+             and isinstance(turn.get("content"), str) and turn["content"].strip()]
+    return select_model_history_turns(clean, limit=limit)
+
+
 def select_model_history_turns(
     turns: list[dict[str, Any]] | None,
     *,

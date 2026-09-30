@@ -27,8 +27,8 @@ def test_document_expiration_must_be_valid_and_timezone_aware():
 def test_knowledge_budget_and_version_change_are_deterministic():
     document = {"id": "policy", "content": "Entrega " * 10000}
     before = retrieve_knowledge([document], "Entrega")
-    assert len(before) == 4
-    assert sum(len(item["content"]) for item in before) <= 5600
+    assert len(before) == 6
+    assert sum(len(item["content"]) for item in before) <= 8400
     document["content"] += "updated"
     assert retrieve_knowledge([document], "Entrega")[0]["version"] != before[0]["version"]
 

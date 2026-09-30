@@ -37,7 +37,7 @@ def test_multi_topic_product_question_gets_consultative_guidance():
     assert "principalmente com atacado" in reply
     assert "fones de ouvido" in reply
     assert "mouses" in reply
-    assert "R$ 800,00" in reply
+    assert "R$ 800,00" not in reply
     assert "CPF ou CNPJ" in reply
     assert STORE_URL in reply
     assert reply.count("?") == 1
@@ -74,7 +74,7 @@ def test_fast_critique_recovers_broad_question_from_empty_catalog_reply():
     assert skip_reason == "fast_store_guidance"
     assert verdict is not None and verdict.pass_check is False
     assert fixed.safety_reason is None
-    assert "R$ 800,00" in fixed.reply_text
+    assert "R$ 800,00" not in fixed.reply_text
     assert "CPF ou CNPJ" in fixed.reply_text
     assert "Não encontrei opções" not in fixed.reply_text
 

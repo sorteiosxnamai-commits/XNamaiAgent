@@ -293,4 +293,5 @@ async def test_interpret_message_uses_turn_understanding_schema(monkeypatch):
     assert result._turn_understanding is not None
     assert result._turn_understanding.primary_intent == "commerce_recommend"
     assert captured.get("via") == "responses" or captured.get("text_format") is TurnUnderstanding or captured.get("response_format") is TurnUnderstanding
-    assert captured.get("model") == "gpt-4.1-nano"
+    # Routing is a reasoning task and must use the main model, not the fast role.
+    assert captured.get("model") == "gpt-4.1-mini"

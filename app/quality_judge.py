@@ -7,6 +7,7 @@ from typing import Any, Literal
 from openai import APIError
 from pydantic import BaseModel, Field
 
+from .openai_models import resolve_openai_model
 from .config import get_settings
 from .models import AgentResult, IncomingMessage
 from .runtime_context import get_current_turn
@@ -298,7 +299,7 @@ async def run_quality_judge(
         from .openai_gateway import parse_structured_output
 
         parse_result = await parse_structured_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             text_format=JudgeVerdict,
             messages=[
                 {

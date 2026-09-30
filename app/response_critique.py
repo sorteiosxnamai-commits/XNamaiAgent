@@ -17,6 +17,7 @@ from .commerce_context import (
     PresentedCommerceProduct,
     product_reference_from_product,
 )
+from .openai_models import resolve_openai_model
 from .config import get_settings
 from .greeting_policy import is_generic_greeting_reply
 from .guardrails import detect_trade_in_or_appraisal_request
@@ -430,7 +431,7 @@ async def run_critique_judge(
         from .openai_gateway import parse_structured_output
 
         parse_result = await parse_structured_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             text_format=CritiqueVerdict,
             messages=[
                 {
@@ -695,7 +696,7 @@ async def _regenerate_reply(
             },
         ]
         text_result = await generate_text_output(
-            model=settings.openai_model,
+            model=resolve_openai_model("main", settings=settings),
             messages=messages,
             temperature=0.2,
             call_type="response_composition",
