@@ -830,7 +830,7 @@ def _order_facts_result(
     })
     status_label = str(facts["status"] or "").strip() or "em processamento"
     status_group = str(facts["status_group"] or "").casefold()
-    awaiting_payment = (
+    awaiting_payment = result.get("payment_supported") is not False and (
         state.order_payment_status == "pending"
         or "aguard" in status_label.casefold()
         or status_group in {"open", "pending", "unpaid", "awaiting"}
@@ -865,6 +865,7 @@ def _order_facts_result(
                 "order_lookup_id": None,
             },
             "purchase_stage": (
+                "order_created" if result.get("payment_supported") is False else
                 "payment_confirmed"
                 if state.order_payment_status == "confirmed"
                 else "awaiting_payment"
@@ -874,6 +875,8 @@ def _order_facts_result(
             "pending_action": (
                 "awaiting_payment" if awaiting_payment else None
             ),
+            **({"payment_state": {"order_payment_status": "not_available", "order_payment_url": None}}
+               if result.get("payment_supported") is False else {}),
             "used_commerce_provider": True,
         },
     )
@@ -966,6 +969,20 @@ async def get_order_facts(
             result = {"error": "commerce_upstream_error"}
         if "error" in result:
             last_error = result
+            if result.get("error") in {"order_index_not_ready", "order_reference_unconfirmed",
+                                        "order_status_unconfirmed", "order_index_unavailable"}:
+                return AgentResult(
+                    reply_text=(
+                        "Recebi o número do pedido, mas ainda não consegui confirmar o status "
+                        "na base de pedidos. Isso não significa que o pedido não exista."
+                    ),
+                    intent="commerce", safety_reason="order_status_unconfirmed",
+                    commercial_data={"success": False, "stage": "order_status"},
+                    response_metadata={"domain": "commerce", "active_topic": "order_status",
+                        "order_state": {"order_lookup_id": target},
+                        "order_lookup_error": result.get("error"),
+                        "used_commerce_provider": True},
+                )
             status_code = str(result.get("status_code") or "")
             # Glued/store codes often yield 422; try the next candidate before failing.
             if status_code in {"404", "422"} and target != targets[-1]:

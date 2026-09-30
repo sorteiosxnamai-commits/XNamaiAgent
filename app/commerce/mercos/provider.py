@@ -130,13 +130,13 @@ CAPABILITY_MATRIX: tuple[CapabilitySupport, ...] = (
     ),
     _cap(
         "get_order",
-        "SUPPORTED_VIA_COMPOSITION",
-        "GET /v1/orders/{mercos_id}",
+        "SUPPORTED_LOCAL",
+        "GET /v1/orders -> ai_mercos_order_status",
         False,
-        "endpoint existe e preserva itens (v2); mapeamento de campos "
-        "desconhecido (MERCOS_ADAPTOR_GAP)",
+        "status por numero ou id interno, somente apos sync recente; sem dados pessoais",
     ),
-    _cap("get_order_complete", "UNSUPPORTED", None, False, "sem mapeamento de campos"),
+    _cap("get_order_complete", "SUPPORTED_LOCAL", "ai_mercos_order_status", False,
+         "consulta deterministica de status, sem itens, dados pessoais ou pagamento"),
     _cap(
         "get_order_payment",
         "UNSUPPORTED",
@@ -341,6 +341,17 @@ class MercosCommerceProvider:
             }
 
     # --- handlers ----------------------------------------------------------
+
+    async def run_order_sync(self):
+        from .order_status import OrderStatusIndex
+        return await OrderStatusIndex(tenant_id=self._tenant_id).sync(self._client, max_pages=3)
+
+    async def _do_get_order_complete(self, arguments):
+        from .order_status import OrderStatusIndex
+        return await OrderStatusIndex(tenant_id=self._tenant_id).lookup(arguments.get("order_id"), self._client)
+
+    async def _do_get_order(self, arguments):
+        return await self._do_get_order_complete(arguments)
 
     async def _do_search_products(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from .catalog_search import search_products

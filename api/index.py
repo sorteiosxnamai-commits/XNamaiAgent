@@ -1174,6 +1174,21 @@ async def commerce_product_sync_cron():
     return result
 
 
+@app.post("/api/admin/commerce/sync/orders", dependencies=[Depends(verify_admin_token)])
+async def commerce_order_sync_admin():
+    from app.commerce.provider import get_commerce_provider
+    runner = getattr(get_commerce_provider(), "run_order_sync", None)
+    if not callable(runner):
+        return {"ok": False, "error": "sync_not_supported_by_provider"}
+    return await runner()
+
+
+@app.get("/api/admin/commerce/orders/{reference}", dependencies=[Depends(verify_admin_token)])
+async def commerce_order_status_admin(reference: str):
+    from app.commerce.tools import execute_tool
+    return await execute_tool("get_order_complete", {"order_id": reference})
+
+
 @app.post(
     "/api/admin/commerce/sync/customers",
     dependencies=[Depends(verify_admin_token)],
