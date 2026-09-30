@@ -241,6 +241,8 @@ class CommerceConversationState(BaseModel):
     order_review_version: str | None = None
     confirmed_order_review_version: str | None = None
     order_id: str | None = None
+    order_items_offset: int = 0
+    catalog_listing: dict[str, Any] = Field(default_factory=dict)
     order_status: str | None = None
     order_status_group: str | None = None
     order_session_id: str | None = None
@@ -879,6 +881,7 @@ def evolve_commerce_state(
             "confirmed_order_review_version", "order_id", "order_status",
             "order_status_group", "order_session_id", "order_created_at",
             "order_creation_ambiguous", "order_lookup_id",
+            "order_items_offset",
         ):
             if field in order_state:
                 setattr(state, field, order_state[field])
@@ -894,6 +897,8 @@ def evolve_commerce_state(
             if field in payment_state:
                 setattr(state, field, payment_state[field])
     active_preferences = _compact_preferences(metadata.get("active_preferences"))
+    if isinstance(metadata.get("catalog_listing"), dict):
+        state.catalog_listing = metadata["catalog_listing"]
     if active_preferences:
         state.active_preferences = active_preferences
 
@@ -909,7 +914,8 @@ def evolve_commerce_state(
     products = (result.commercial_data or {}).get("products")
     compact_products: list[PresentedCommerceProduct] = []
     if isinstance(products, list):
-        for position, product in enumerate(products[:MAX_PRESENTED_PRODUCTS], start=1):
+        shown = products if metadata.get("preserve_complete_list") else products[:MAX_PRESENTED_PRODUCTS]
+        for position, product in enumerate(shown, start=1):
             if not isinstance(product, dict):
                 continue
             identity = product_reference_from_product(product)

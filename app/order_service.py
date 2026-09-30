@@ -818,6 +818,7 @@ def _order_facts_result(
     facts = {
         "success": True,
         "order_id": str(result.get("order_id") or result.get("id") or target),
+        **{key: result[key] for key in ("order_number", "items", "items_confirmed", "item_count", "total", "shipping_price", "source") if key in result},
         "status": result.get("status"),
         "status_group": result.get("status_group"),
         "tracking": tracking,

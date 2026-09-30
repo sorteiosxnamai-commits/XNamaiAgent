@@ -136,7 +136,7 @@ CAPABILITY_MATRIX: tuple[CapabilitySupport, ...] = (
         "status por numero ou id interno, somente apos sync recente; sem dados pessoais",
     ),
     _cap("get_order_complete", "SUPPORTED_LOCAL", "ai_mercos_order_status", False,
-         "consulta deterministica de status, sem itens, dados pessoais ou pagamento"),
+         "status e itens confirmados do pedido, sem dados pessoais ou pagamento"),
     _cap(
         "get_order_payment",
         "UNSUPPORTED",

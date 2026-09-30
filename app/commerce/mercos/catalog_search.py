@@ -202,6 +202,15 @@ def search_products(
         return rejection.as_result()
 
     args = dict(arguments or {})
+    if args.get("strict") is True:
+        size = resolve_limit(args.get("limit"))
+        offset = max(0, int(args.get("offset") or 0))
+        query = str(args.get("query") or "").strip()
+        rows = reader.search_wholesale(tenant_id=tenant_id, query=query, limit=size + 1, offset=offset)
+        result = _search_result(rows[:size], page=offset // size + 1, limit=size)
+        result["paging"].update({"offset": offset, "has_more": len(rows) > size})
+        result["applied_filters"] = {"query": query, "strict": True}
+        return result
     limit = resolve_limit(args.get("limit"))
     page = resolve_page(args.get("page"))
     brand = brand_hint(args)

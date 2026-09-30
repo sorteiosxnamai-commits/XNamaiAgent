@@ -1,4 +1,4 @@
-"""Status-only Mercos snapshot. No customer data, items, totals or payment claims.
+"""Mercos order snapshot with status and allowlisted contents, without customer PII.
 
 Production denies GET by id. Only the documented incremental list is used.
 Recent changes and the historical backfill have independent cursors. Absence
@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from .client import MercosAdaptorError
+from .order_contents import normalize_contents
 
 FRESH_SECONDS = 300
 STATUS = {"0": "Cancelado", "1": "Orçamento", "2": "Pedido gerado"}
@@ -31,6 +32,7 @@ def normalize_status(row):
         "status_code": str(row["status"]) if row.get("status") is not None else None,
         "billing_code": str(row["status_faturamento"]) if row.get("status_faturamento") is not None else None,
         "excluded": row.get("excluido") is True,
+        "contents": normalize_contents(row),
     }
 
 
@@ -50,7 +52,8 @@ def status_result(rows, reference):
     return {"ok": True, "success": True, "order_id": row["mercos_id"],
             "order_number": row["order_number"], "status": label,
             "status_group": "cancelled" if row["status_code"] == "0" else "registered",
-            "payment_supported": False, "source": "mercos_order_status_index"}
+            "payment_supported": False, "source": "mercos_order_status_index",
+            **(row.get("contents") or {"items_confirmed": False})}
 
 
 class OrderStatusIndex:
@@ -95,16 +98,18 @@ class OrderStatusIndex:
                     rows = [normalize_status(row) for row in page.data]
                     # History may overlap the live cursor. It must never replace
                     # a newer status (or deletion) already seen by the incremental.
-                    conflict = "DO NOTHING" if historical else """DO UPDATE SET
+                    conflict = """DO UPDATE SET contents=EXCLUDED.contents
+                        WHERE ai_mercos_order_status.contents IS NULL""" if historical else """DO UPDATE SET
                         order_number=EXCLUDED.order_number,status_code=EXCLUDED.status_code,
                         billing_code=EXCLUDED.billing_code,excluded=EXCLUDED.excluded,
-                        verified_at=EXCLUDED.verified_at"""
+                        verified_at=EXCLUDED.verified_at,contents=EXCLUDED.contents"""
                     for row in rows:
+                        from ...db import to_jsonb
                         conn.execute(f"""INSERT INTO public.ai_mercos_order_status
-                            (tenant_id,mercos_id,order_number,status_code,billing_code,excluded,verified_at)
-                            VALUES (%s,%s,%s,%s,%s,%s,clock_timestamp())
+                            (tenant_id,mercos_id,order_number,status_code,billing_code,excluded,contents,verified_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,clock_timestamp())
                             ON CONFLICT (tenant_id,mercos_id) {conflict}""",
-                            (self.tenant_id, row["mercos_id"], row["order_number"], row["status_code"], row["billing_code"], row["excluded"]))
+                            (self.tenant_id, row["mercos_id"], row["order_number"], row["status_code"], row["billing_code"], row["excluded"], to_jsonb(row["contents"]) if row["contents"] is not None else None))
                     next_cursor = page.next_cursor or page.page_cursor or cursor
                     if page.has_more and next_cursor == cursor:
                         raise ValueError("cursor_stalled")
@@ -139,7 +144,7 @@ class OrderStatusIndex:
     def _snapshot(self, reference):
         with self.connect() as conn:
             rows = conn.execute("""SELECT o.mercos_id,o.order_number,o.status_code,o.billing_code,o.excluded,
-                o.verified_at,s.completed_at FROM public.ai_mercos_order_status o
+                o.contents,o.verified_at,s.completed_at FROM public.ai_mercos_order_status o
                 LEFT JOIN public.ai_mercos_order_sync s ON s.tenant_id=o.tenant_id
                 WHERE o.tenant_id=%s AND (o.order_number=%s OR o.mercos_id=%s) LIMIT 2""",
                 (self.tenant_id, reference, reference)).fetchall()

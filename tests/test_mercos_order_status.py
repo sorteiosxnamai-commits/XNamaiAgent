@@ -18,7 +18,8 @@ def row(**overrides):
 
 def test_number_is_not_confused_with_internal_id_and_private_data_is_discarded():
     item = normalize_status(row(cliente_cnpj="private", itens=[{"private": True}], total=900))
-    assert set(item) == {"mercos_id", "order_number", "status_code", "billing_code", "excluded"}
+    assert set(item) == {"mercos_id", "order_number", "status_code", "billing_code", "excluded", "contents"}
+    assert item["contents"] is None  # invalid/private item data never becomes verified contents
     result = status_result([item], "95933")
     assert result["order_id"] == "1000001"
     assert result["status"] == "Pedido gerado — não faturado"
@@ -76,12 +77,17 @@ class TransactionFixture:
                                        "history_completed_at": self.history_completed_at})
         if "SELECT o.mercos_id" in sql:
             return NS(fetchall=lambda: [dict(zip(
-                ("tenant_id", "mercos_id", "order_number", "status_code", "billing_code", "excluded"), item),
+                ("tenant_id", "mercos_id", "order_number", "status_code", "billing_code", "excluded", "contents"),
+                (*item[:6], getattr(item[6], "obj", item[6]) if len(item) > 6 else None)),
                 verified_at=self.verified.get(item[1]),
                 completed_at=datetime.now(timezone.utc) if self.completed else None)
                 for item in self.rows if item[0] == args[0] and args[1] in (item[1], item[2])][:2])
         if "INSERT INTO public.ai_mercos_order_status" in sql:
             existing = next((item for item in self.rows if item[:2] == args[:2]), None)
+            if existing and "WHERE ai_mercos_order_status.contents IS NULL" in sql:
+                if len(existing) == 6 or existing[6] is None:
+                    self.rows[self.rows.index(existing)] = (*existing[:6], args[6])
+                return NS()
             if existing and "DO NOTHING" in sql:
                 return NS()
             if existing:

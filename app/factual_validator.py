@@ -76,7 +76,7 @@ _IMAGE_SENT_RE = re.compile(
 )
 _INSTALLMENT_KEYS = ("installment", "parcel", "interest")
 _URL_KEYS = ("url", "link", "checkout")
-_ORDER_KEYS = ("order_id", "order_code", "pedido_id", "pedido_codigo")
+_ORDER_KEYS = ("order_id", "order_code", "order_number", "pedido_id", "pedido_codigo")
 _MONEY_KEYS = (
     "price",
     "total",
@@ -642,6 +642,22 @@ def validate_factual_response(
         if domain.strip()
     }
     text = result.reply_text or ""
+    # Catalog evidence proves a product exists, never that it belongs to an order.
+    payload = result.commercial_data or {}
+    metadata = result.response_metadata or {}
+    count_claim = re.search(r"\b(?:s[oó]|apenas|tem|possui|apareceu|com|s[aã]o)?\s*(\d+|um|uma)\s+ite(?:m|ns)\b", text, re.IGNORECASE)
+    order_context = "pedido" in text.casefold() or "order" in str(metadata.get("active_topic") or "")
+    order_catalog_mix = metadata.get("goal") == "after_sales" and bool(payload.get("products"))
+    if (count_claim and order_context) or metadata.get("order_contents_requested") or order_catalog_mix:
+        report.checked_claims += 1
+        confirmed = payload.get("items_confirmed") is True and isinstance(payload.get("items"), list)
+        if not confirmed:
+            _add_violation(report, kind="condition", claim="order_contents", reason="order_contents_missing_verified_items")
+        elif count_claim:
+            raw_count = count_claim.group(1).lower()
+            count = 1 if raw_count in {"um", "uma"} else int(raw_count)
+            if count != len(payload["items"]):
+                _add_violation(report, kind="condition", claim=raw_count, reason="order_item_count_mismatch")
 
     # Public entry points are institutional facts; product/payment URLs still
     # require current tool evidence. Do not trust every path on these domains.

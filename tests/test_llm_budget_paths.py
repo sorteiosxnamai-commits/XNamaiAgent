@@ -186,7 +186,7 @@ async def test_deterministic_greeting_records_zero_llm_avoided(monkeypatch):
         monkeypatch.setattr(
             openai_agent,
             "build_contextual_greeting",
-            lambda _s: AgentResult(
+            lambda _s, **_kwargs: AgentResult(
                 reply_text="Oi! Posso ajudar com seu pedido.",
                 intent="general",
                 response_metadata={"domain": "greeting", "response_source": "context_resume_soft"},

@@ -95,12 +95,13 @@ def choose_greeting_reply(
     variants = list(_GREETING_VARIANTS)
     if agent_name and brand:
         variants = [
+            f"Oi! Aqui é a {agent_name}, da {brand}. O que você procura hoje? 😊",
             (
                 f"Olá! Eu sou a {agent_name}, assistente virtual da {brand}. "
                 "Como posso te ajudar? 😊"
             ),
-            f"Oi! Aqui é a {agent_name}, da {brand}. O que você procura hoje? 😊",
-            *variants[1:],
+            f"Olá! Aqui é a {agent_name}, da {brand}. Me conta o que você precisa. 😊",
+            f"Oi! Sou a {agent_name}, da {brand}. Como posso ajudar você hoje? 😊",
         ]
 
     for variant in variants:
@@ -108,6 +109,9 @@ def choose_greeting_reply(
             return variant
 
     # All canned greetings already used — still avoid repeating the last one.
+    if agent_name and brand:
+        last = _fold(last_assistant_content(recent_turns) or "")
+        return next((variant for variant in variants if _fold(variant) != last), variants[0])
     fallback = "Pode me dizer o que você precisa?"
     if not already_said(fallback, recent_turns):
         return fallback

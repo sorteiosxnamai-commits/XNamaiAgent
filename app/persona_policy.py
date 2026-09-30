@@ -74,3 +74,20 @@ def assert_persona_instructions_safe(instructions: str) -> None:
         raise ValueError(
             "persona_volatile_facts_forbidden:" + ",".join(hits)
         )
+
+
+def apply_persona_tone(result, identity):
+    """Keep the published identity's light emoji style on deterministic replies."""
+    if str((identity or {}).get("brand") or "").casefold() != "xnamai":
+        return result
+    if result.handoff_required or result.safety_reason in {
+        "factual_validation_failed", "commerce_provider_unavailable", "order_status_technical_failure"
+    }:
+        return result
+    text = result.reply_text or ""
+    if text and not re.search("[\U0001F300-\U0001FAFF\u2600-\u27BF]", text):
+        # Neutral icon for operational facts; don't smile about a cancelled order.
+        symbol = "📋" if "pedido" in text.casefold() else "😊"
+        result.reply_text = symbol + " " + text
+        result.response_metadata["persona_style_applied"] = True
+    return result

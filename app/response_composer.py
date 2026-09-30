@@ -90,10 +90,10 @@ def compose_outbound_reply(
             [row.model_dump(mode="json") for row in grounded[:40]],
         )
     result = present_agent_result(incoming, result)
-    result.reply_text = truncate_reply(
-        normalize_reply_text(result.reply_text),
-        limit,
-    )
+    if result.response_metadata.get("preserve_complete_list"):
+        result.reply_text = normalize_reply_text(result.reply_text)
+    else:
+        result.reply_text = truncate_reply(normalize_reply_text(result.reply_text), limit)
     if not profile.allow_audio_reply and result.reply_modality == "audio":
         result.reply_modality = "text"
         result.reply_audio_bytes = None

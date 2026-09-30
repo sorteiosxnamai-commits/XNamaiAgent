@@ -772,6 +772,19 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     commerce_state = hydrate_state_from_handles(commerce_state, context_handles)
     customer_context["_commerce_state"] = commerce_state.model_dump(mode="json")
     # Keep memory loaded on soft greetings without dumping order/payment unsolicited.
+    from .order_queries import handle_order_query
+    order_query_result = await handle_order_query(message.text, state=commerce_state, execute=execute_tool)
+    if order_query_result is not None:
+        return _annotate_agent_result(order_query_result, domain="commerce", goal="after_sales",
+            response_source="verified_order_query", used_openai_interpreter=False,
+            used_openai_responder=False, used_commerce_provider=bool(order_query_result.response_metadata.get("used_commerce_provider")))
+    if getattr(get_settings(), "mercos_adaptor_configured", False):
+        from .wholesale_catalog import handle_wholesale_catalog
+        catalog_result = await handle_wholesale_catalog(message.text, state=commerce_state, execute=execute_tool)
+        if catalog_result is not None:
+            return _annotate_agent_result(catalog_result, domain="commerce", goal="find",
+                response_source="wholesale_catalog", used_openai_interpreter=False,
+                used_openai_responder=False, used_commerce_provider=True)
     if (
         soft_greeting
         and has_resumable_commerce(commerce_state)
@@ -779,7 +792,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         and not is_unpaid_order_resume_request(message.text)
         and not is_payment_link_request(message.text)
     ):
-        resume = build_contextual_greeting(commerce_state)
+        resume = build_contextual_greeting(commerce_state, persona_identity=customer_context.get("_active_persona_identity"), recent_turns=model_turns)
         return _annotate_agent_result(
             resume,
             domain=resume.response_metadata.get("domain") or "greeting",
@@ -1217,7 +1230,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         and has_resumable_commerce(commerce_state)
     ):
         if has_resumable_commerce(commerce_state):
-            resume = build_contextual_greeting(commerce_state)
+            resume = build_contextual_greeting(commerce_state, persona_identity=customer_context.get("_active_persona_identity"), recent_turns=model_turns)
             return _annotate_agent_result(
                 resume,
                 domain=resume.response_metadata.get("domain") or "commerce",

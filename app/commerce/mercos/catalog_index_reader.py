@@ -118,6 +118,10 @@ class CatalogIndexProductReader:
         )
         return _to_product(row) if row else None
 
+    def search_wholesale(self, *, tenant_id, query, limit, offset):
+        rows = self._repo().search_wholesale(tenant_id=tenant_id, query=query, limit=limit, offset=offset)
+        return [product for row in rows if (product := _to_product(row)) is not None]
+
     def delete_products(self, tenant_id: str, product_ids: list[str]) -> int:
         """Remove snapshots pontualmente.
 

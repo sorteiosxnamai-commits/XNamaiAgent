@@ -178,6 +178,29 @@ class CatalogIndexRepository:
         """
         return self._fetch(sql, params)
 
+    def search_wholesale(self, *, tenant_id: str, query: str, limit: int = 21, offset: int = 0):
+        from .commerce.catalog_filters import constraints, postgres_pattern
+        if not tenant_id:
+            raise ValueError("tenant_id required")
+        params = {"tenant": tenant_id, "limit": max(1, min(int(limit), 101)), "offset": max(0, int(offset))}
+        clauses = []
+        for index, pattern in enumerate(constraints(query)):
+            key = f"term{index}"
+            params[key] = postgres_pattern(pattern)
+            clauses.append(f"search_text ~ %({key})s")
+        where = " AND ".join(clauses) or "TRUE"
+        return self._fetch(f"""
+            WITH catalog AS (
+              SELECT *, translate(lower(concat_ws(' ', title_normalized, reference, model, brand)),
+                'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') AS search_text
+              FROM public.ai_catalog_index
+              WHERE tenant_id=%(tenant)s
+                AND coalesce(payload->>'ativo','true') <> 'false'
+                AND coalesce(payload->>'excluido','false') <> 'true'
+            ) SELECT * FROM catalog WHERE {where}
+            ORDER BY title_normalized, catalog_item_key LIMIT %(limit)s OFFSET %(offset)s
+        """, params)
+
     def search_by_constraints(
         self,
         *,

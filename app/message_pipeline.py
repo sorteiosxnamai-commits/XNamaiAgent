@@ -220,6 +220,8 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
                 "tenant_id": settings.agent_persona_tenant_id,
                 "workspace_id": workspace_id,
             }
+            from .persona_policy import apply_persona_tone
+            result = apply_persona_tone(result, turn_customer_context.get("_active_persona_identity"))
         return result
     finally:
         reset_publication(publication_token)

@@ -73,7 +73,7 @@ def test_active_persona_identity_is_applied_to_deterministic_greeting():
 
     assert "Mai" in reply
     assert "XNamai" in reply
-    assert "assistente virtual" in reply
+    assert reply == "Oi! Aqui é a Mai, da XNamai. O que você procura hoje? 😊"
     assert reply != "Olá! Como posso ajudar?"
 
 

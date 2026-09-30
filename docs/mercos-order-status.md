@@ -1,4 +1,4 @@
-# Consulta de status de pedidos
+# Consulta de pedidos e itens
 
 A consulta usa a listagem incremental de Pedidos V2 pelo MercosAdaptor. A conta
 de produção recusa `GET /v1/orders/{id}`. `id` interno e `numero` comercial são
@@ -7,9 +7,19 @@ distintos; colisões entre os dois falham sem escolher um pedido arbitrariamente
 ## Atualização e histórico
 
 Aplicar `sql/029_mercos_order_status_index.sql` e depois
-`sql/20260930055006_mercos_order_sync_background.sql`. As tabelas têm RLS e não
+`sql/20260930055006_mercos_order_sync_background.sql` e
+`sql/20260930063843_mercos_order_contents.sql`. As tabelas têm RLS e não
 concedem acesso a `anon`/`authenticated`. Armazenam somente identificadores,
-status, faturamento, exclusão e instantes de verificação, sem dados pessoais.
+status, faturamento, exclusão, instantes de verificação e os itens e totais
+do pedido. A projeção exclui documentos, contatos, endereços e observações.
+
+`get_order_complete` devolve `items_confirmed=true` somente quando a listagem
+Mercos trouxe todos os itens válidos. Itens excluídos não entram na contagem.
+`contents=NULL` é dado ainda não confirmado, nunca pedido vazio. Os preços
+são os registrados no pedido, sem substituir pelos preços atuais do catálogo.
+Perguntas sobre itens e suas continuações precedem a seleção de produtos.
+Respostas com contagem de itens sem evidência são bloqueadas pelo validador.
+Pedidos longos continuam com "continue", preservando a posição e sem cortar linhas.
 
 `POST /api/admin/commerce/sync/orders` (ADMIN_API_TOKEN) e
 `POST /api/cron/commerce/sync/orders` (MERCOS_ORDER_SYNC_SECRET) executam o mesmo serviço:
@@ -22,8 +32,8 @@ status, faturamento, exclusão e instantes de verificação, sem dados pessoais.
    dos 300 segundos configurados no projeto Vercel). O lote possui lock por tenant
    e confirma registros e cursor juntos. Se falhar, o lote é revertido.
 
-O histórico não substitui registros já conhecidos pelo fluxo incremental,
-inclusive cancelamentos e exclusões. Sua conclusão não altera a validade do
+O histórico não substitui status, cancelamentos ou exclusões já conhecidos pelo
+fluxo incremental; somente preenche itens ainda ausentes. Sua conclusão não altera a validade do
 incremental. Depois de concluído, deixa de fazer chamadas de backfill.
 
 Um pedido pode ser consultado quando o incremental completo foi confirmado nos
@@ -60,6 +70,19 @@ Uma falha de histórico não desfaz a atualização recente já confirmada.
 `GET /api/admin/commerce/orders/{numero}` testa a consulta sem enviar mensagem ao
 cliente. A resposta não transforma faturamento em pagamento, não inventa rastreio
 e não expõe dados pessoais. A liberação do fluxo consultivo permanece em 5%.
+
+## Listagem para atacado e persona
+
+As categorias pedidas juntas são consultadas separadamente. A busca obrigatória
+aplica todos os termos e normaliza aliases e potência (`120 W` = `120W`, não
+`1200W`). Nunca remove um filtro para preencher a lista com outra categoria.
+O offset fica no estado da conversa; "continue" percorre as páginas restantes,
+sem limite total de 3, 10 ou 100 produtos. O tamanho de cada resposta é ajustado
+ao canal, e os produtos exibidos permanecem selecionáveis por posição.
+Preços/estoques vencidos são omitidos. Erro de consulta não vira ausência de produto.
+
+Saudações iniciais, repetidas e de retomada usam a identidade publicada.
+As respostas determinísticas da XNamai também mantêm o estilo leve com emojis.
 
 Referências: [Pedidos Mercos V2](https://docs.mercos.com/reference/v2pedidos),
 [agendamento com Cron e Vault](https://supabase.com/docs/guides/functions/schedule-functions).
