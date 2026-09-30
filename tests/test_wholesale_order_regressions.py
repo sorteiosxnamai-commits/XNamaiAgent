@@ -169,6 +169,35 @@ def test_mouse_is_not_a_mousepad_or_toy_rat():
     assert matches("mouse", {"name": "Mouse gamer wireless"})
 
 
+def test_wholesale_repository_uses_real_tenant_guard_and_keeps_database_errors(monkeypatch):
+    from contextlib import contextmanager
+    from app import db
+    from app.catalog_index_repository import CatalogIndexRepository
+    class Connection:
+        broken = False
+        @contextmanager
+        def cursor(self):
+            yield self
+        def execute(self, sql, params):
+            assert params["tenant_id"] == "xnamai"
+            assert "tenant_id=%(tenant_id)s" in sql
+            assert params["offset"] == 140
+            if self.broken:
+                raise RuntimeError("database temporarily unavailable")
+        def fetchall(self):
+            return [{"product_id": "confirmed"}]
+    conn = Connection()
+    @contextmanager
+    def connection():
+        yield conn
+    monkeypatch.setattr(db, "get_conn", connection)
+    repo = CatalogIndexRepository()
+    assert repo.search_wholesale(tenant_id="xnamai", query="mouse", offset=140) == [{"product_id": "confirmed"}]
+    conn.broken = True
+    with pytest.raises(RuntimeError, match="temporarily unavailable"):
+        repo.search_wholesale(tenant_id="xnamai", query="mouse", offset=140)
+
+
 @pytest.mark.asyncio
 async def test_inbound_pipeline_keeps_order_contents_and_category_routes_separate(monkeypatch):
     from tests.test_chatbo_pipeline_replay import Replay

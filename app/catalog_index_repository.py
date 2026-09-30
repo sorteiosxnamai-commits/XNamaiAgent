@@ -182,7 +182,7 @@ class CatalogIndexRepository:
         from .commerce.catalog_filters import constraints, postgres_pattern
         if not tenant_id:
             raise ValueError("tenant_id required")
-        params = {"tenant": tenant_id, "limit": max(1, min(int(limit), 101)), "offset": max(0, int(offset))}
+        params = {"tenant_id": tenant_id, "limit": max(1, min(int(limit), 101)), "offset": max(0, int(offset))}
         clauses = []
         for index, pattern in enumerate(constraints(query)):
             key = f"term{index}"
@@ -194,12 +194,12 @@ class CatalogIndexRepository:
               SELECT *, translate(lower(concat_ws(' ', title_normalized, reference, model, brand)),
                 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') AS search_text
               FROM public.ai_catalog_index
-              WHERE tenant_id=%(tenant)s
+              WHERE tenant_id=%(tenant_id)s
                 AND coalesce(payload->>'ativo','true') <> 'false'
                 AND coalesce(payload->>'excluido','false') <> 'true'
             ) SELECT * FROM catalog WHERE {where}
             ORDER BY title_normalized, catalog_item_key LIMIT %(limit)s OFFSET %(offset)s
-        """, params)
+        """, params, raise_on_error=True)
 
     def search_by_constraints(
         self,
@@ -369,7 +369,7 @@ class CatalogIndexRepository:
             print("[catalog.index.delete_missing.error]", {"error_type": type(exc).__name__})
             return 0
 
-    def _fetch(self, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def _fetch(self, sql: str, params: dict[str, Any], *, raise_on_error: bool = False) -> list[dict[str, Any]]:
         if not str(params.get("tenant_id") or "").strip():
             raise ValueError("tenant_id required")
         try:
@@ -382,6 +382,8 @@ class CatalogIndexRepository:
             return [dict(row) for row in rows]
         except Exception as exc:
             print("[catalog.index.read.error]", {"error_type": type(exc).__name__})
+            if raise_on_error:
+                raise
             return []
 
 

@@ -8,7 +8,8 @@ distintos; colisões entre os dois falham sem escolher um pedido arbitrariamente
 
 Aplicar `sql/029_mercos_order_status_index.sql` e depois
 `sql/20260930055006_mercos_order_sync_background.sql` e
-`sql/20260930063843_mercos_order_contents.sql`. As tabelas têm RLS e não
+`sql/20260930063843_mercos_order_contents.sql` e
+`sql/20260930070744_mercos_order_contents_history.sql`. As tabelas têm RLS e não
 concedem acesso a `anon`/`authenticated`. Armazenam somente identificadores,
 status, faturamento, exclusão, instantes de verificação e os itens e totais
 do pedido. A projeção exclui documentos, contatos, endereços e observações.
@@ -20,6 +21,8 @@ são os registrados no pedido, sem substituir pelos preços atuais do catálogo.
 Perguntas sobre itens e suas continuações precedem a seleção de produtos.
 Respostas com contagem de itens sem evidência são bloqueadas pelo validador.
 Pedidos longos continuam com "continue", preservando a posição e sem cortar linhas.
+As migrações retomam também o histórico antigo para preencher itens dos pedidos
+indexados antes dessa mudança; essa carga continua gradualmente pelo agendador.
 
 `POST /api/admin/commerce/sync/orders` (ADMIN_API_TOKEN) e
 `POST /api/cron/commerce/sync/orders` (MERCOS_ORDER_SYNC_SECRET) executam o mesmo serviço:
