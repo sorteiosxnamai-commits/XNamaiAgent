@@ -44,6 +44,19 @@ CASES = [
         {"role": "user", "content": "Consulte o pedido 95805"},
         {"role": "assistant", "content": "Seu pedido está com status Pedido gerado — não faturado."}],
      "advice": False, "required": ["pagamento"]},
+    {"name": "cpf_choice", "text": "cpf", "history": [
+        {"role": "user", "content": "gostaria de comprar com vocês"},
+        {"role": "assistant", "content": "Você quer comprar com CPF ou CNPJ? 😊"}],
+     "advice": False, "required": ["CPF"], "source": "contextual_registration_choice"},
+    {"name": "cnpj_choice", "text": "cnpj", "history": [
+        {"role": "assistant", "content": "Você quer comprar com CPF ou CNPJ?"}],
+     "advice": False, "required": ["CNPJ"], "source": "contextual_choice"},
+    {"name": "payment_choice", "text": "pix", "history": [
+        {"role": "assistant", "content": "Você prefere Pix ou cartão?"}],
+     "advice": False, "required": ["Pix"], "source": "contextual_choice"},
+    {"name": "delivery_choice", "text": "retirada", "history": [
+        {"role": "assistant", "content": "Você prefere entrega ou retirada?"}],
+     "advice": False, "required": ["retirada"], "source": "contextual_choice"},
 ]
 
 
@@ -53,6 +66,8 @@ def check(case, data):
     if data.get("handoff_required") or data.get("safety_reason"):
         errors.append("fallback_or_handoff")
     evaluation = data.get("evaluation") or {}
+    if case.get("source") and evaluation.get("response_source") != case["source"]:
+        errors.append("unexpected_choice_handler")
     if case["advice"] and (evaluation.get("response_source") != "consultative_openai"
                            or evaluation.get("used_commerce_provider")):
         errors.append("advice_routed_to_operational_flow")

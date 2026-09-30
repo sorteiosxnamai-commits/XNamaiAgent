@@ -52,6 +52,7 @@ async def test_real_webhook_flow_persists_and_reloads_context_for_followup(monke
         limit=8,
         sender_key=None,
         hard_cap=40,
+        workspace_id=None,
     ):
         _ = hard_cap
         rows = [

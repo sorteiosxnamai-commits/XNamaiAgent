@@ -15,12 +15,15 @@ def fake_connection(monkeypatch, module):
 def test_response_audit_preserves_retry_context_and_server_selected_tenant(monkeypatch):
     cursor = fake_connection(monkeypatch, db)
     cursor.fetchone.return_value = {"id": 7}
-    monkeypatch.setattr(db, "get_settings", lambda: SimpleNamespace(database_url="test-only", agent_persona_tenant_id="xnamai"))
+    workspace_id = "aa774d20-509f-4d54-865b-7a5de22b6d30"
+    monkeypatch.setattr(db, "get_settings", lambda: SimpleNamespace(
+        database_url="test-only", agent_persona_tenant_id="xnamai", chatbo_workspace_id=workspace_id))
     monkeypatch.setattr(db, "ensure_tables", lambda: None)
     metadata = {"commerce_state": {"last_catalog_query": "cabo usb c"}, "turn_trace": {"trace_id": "inbox-1"}}
     assert db.insert_agent_response({"reply_text": "Cabo USB C", "response_metadata": metadata,
         "provider_response": {"provider_message_id": "out-1", "_agent_tenant_id": "wrong-tenant"}}) == 7
     saved = cursor.execute.call_args.args[1]["provider_response"].obj
+    assert cursor.execute.call_args.args[1]["workspace_id"] == workspace_id
     assert saved["_agent_tenant_id"] == "xnamai"
     assert saved["_agent_metadata"] == metadata
     assert db._commerce_state_from_provider_response(saved) == metadata["commerce_state"]

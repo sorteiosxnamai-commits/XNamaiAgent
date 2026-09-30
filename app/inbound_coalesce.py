@@ -10,6 +10,7 @@ from typing import Any
 
 from .db import get_conn, resolve_context_filter
 from .models import IncomingMessage
+from .memory_scope import trusted_workspace
 
 CAPTION_ECHO_WINDOW_SECONDS = 60
 
@@ -43,12 +44,14 @@ def recent_image_inbound_for_echo(
     sender_key: str | None,
     sender_phone: str | None = None,
     window_seconds: int = CAPTION_ECHO_WINDOW_SECONDS,
+    workspace_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Return the newest inbound with an image in the echo window, if any."""
     from .config import get_settings
 
     settings = get_settings()
-    if not settings.database_url:
+    workspace_id = trusted_workspace(settings, workspace_id)
+    if not settings.database_url or not workspace_id:
         return None
 
     where_clause, params = resolve_context_filter(
@@ -62,6 +65,7 @@ def recent_image_inbound_for_echo(
     params = {
         **params,
         "window_seconds": max(1, int(window_seconds)),
+        "workspace_id": workspace_id,
     }
     query = f"""
         SELECT
@@ -71,6 +75,7 @@ def recent_image_inbound_for_echo(
           created_at
         FROM public.ai_inbound_messages AS inbound
         WHERE {where_clause}
+          AND inbound.workspace_id = %(workspace_id)s::uuid
           AND created_at >= NOW() - (%(window_seconds)s * INTERVAL '1 second')
           AND (
             COALESCE(channel_metadata->>'image_url_present', 'false') = 'true'
@@ -91,6 +96,13 @@ def recent_image_inbound_for_echo(
         return None
     if not row:
         return None
+    if isinstance(row, dict):
+        return {
+            "id": row.get("id"),
+            "text": row.get("text") or "",
+            "channel_metadata": _metadata_dict(row.get("channel_metadata")),
+            "created_at": row.get("created_at"),
+        }
     return {
         "id": row[0],
         "text": row[1] or "",
@@ -123,6 +135,7 @@ def is_caption_echo_of_recent_image(incoming: IncomingMessage) -> bool:
     if not normalize_caption_text(incoming.text):
         return False
     recent = recent_image_inbound_for_echo(
+        workspace_id=incoming.workspace_id,
         conversation_id=incoming.conversation_id,
         sender_key=incoming.sender_key,
         sender_phone=incoming.sender_phone,
@@ -163,6 +176,7 @@ def attach_recent_image_for_followup(
         return incoming
 
     recent = recent_image_inbound_for_echo(
+        workspace_id=incoming.workspace_id,
         conversation_id=incoming.conversation_id,
         sender_key=incoming.sender_key,
         sender_phone=incoming.sender_phone,

@@ -50,6 +50,10 @@ async def handle_account_flows(
     execute: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
 ) -> AgentResult | None:
     text = message.text
+    from .conversation_choices import handle_short_choice
+    choice_reply = await handle_short_choice(message, state=state, execute=execute)
+    if choice_reply is not None:
+        return choice_reply
     if _asks_if_cpf_is_accepted(text):
         result = await handle_customer_registration_turn(
             "quero me cadastrar",

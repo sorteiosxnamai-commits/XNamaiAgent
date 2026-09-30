@@ -1067,6 +1067,7 @@ async def handle_brevo_conversations_webhook(request: Request) -> JSONResponse:
     try:
         insert_agent_response(
             {
+                "workspace_id": incoming.workspace_id,
                 "inbound_id": inbound_id,
                 "channel": incoming.channel,
                 "sender_key": incoming.sender_key,

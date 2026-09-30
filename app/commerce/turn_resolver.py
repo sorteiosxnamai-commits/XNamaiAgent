@@ -674,6 +674,11 @@ def resolve_commerce_turn(text: str, *, state) -> CommerceTurnResolution:
     que casam a lista apresentada, e so entao busca no catalogo global.
     """
     normalizado = normalize_typos(normalize_text(text))
+    from ..conversation_choices import short_option
+    if short_option(text):
+        # Registration/payment/delivery answers belong to their handlers even
+        # when an old active product remains in memory. No catalog fallback.
+        return CommerceTurnResolution(action=ACTION_TRANSACTION)
     consulta = product_query_for(text)
     referencia, ean = _referencia_explicita(text)
     acao, fato = _detectar_acao(normalizado, state)

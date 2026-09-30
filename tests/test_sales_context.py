@@ -14,6 +14,7 @@ def _settings(*, api_key: str = "test-key") -> SimpleNamespace:
         openai_main_model="gpt-test",
         openai_fast_model="gpt-test",
         database_url="postgresql://test",
+        chatbo_workspace_id="aa774d20-509f-4d54-865b-7a5de22b6d30",
         agent_turn_understanding_enabled=False,
     )
 
@@ -264,7 +265,7 @@ def test_load_recent_conversation_turns_prefers_conversation_and_delivered_repli
         {
             "role": "assistant",
             "content": "Qual estilo você prefere?",
-            "metadata": {"safety_reason": "commerce_clarification"},
+            "metadata": {"safety_reason": "commerce_clarification", "memory_scope_trusted": False},
         },
         {"role": "user", "content": "menos de 5 mil"},
     ]

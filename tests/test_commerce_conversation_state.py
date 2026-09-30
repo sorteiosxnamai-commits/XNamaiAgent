@@ -253,6 +253,8 @@ def test_load_state_uses_existing_jsonb_and_only_delivered_responses(monkeypatch
 
     captured = {}
     expected = _state().model_dump(mode="json")
+    from app.memory_scope import stamp_state
+    workspace_id = "aa774d20-509f-4d54-865b-7a5de22b6d30"
 
     class FakeCursor:
         def __enter__(self):
@@ -273,7 +275,7 @@ def test_load_state_uses_existing_jsonb_and_only_delivered_responses(monkeypatch
                     {
                         "provider_response": {
                             "_agent_context": {
-                                "commerce_state": expected,
+                                "commerce_state": stamp_state(expected, workspace_id),
                             }
                         }
                     }
@@ -291,7 +293,7 @@ def test_load_state_uses_existing_jsonb_and_only_delivered_responses(monkeypatch
     monkeypatch.setattr(
         db,
         "get_settings",
-        lambda: SimpleNamespace(database_url="postgresql://configured"),
+        lambda: SimpleNamespace(database_url="postgresql://configured", chatbo_workspace_id=workspace_id),
     )
     monkeypatch.setattr(db, "get_conn", fake_get_conn)
     monkeypatch.setattr(

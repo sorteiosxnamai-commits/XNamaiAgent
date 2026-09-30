@@ -27,6 +27,10 @@ def _texts_from_turns(recent_turns: list[dict[str, Any]] | None) -> list[str]:
     for turn in recent_turns or []:
         if not isinstance(turn, dict):
             continue
+        # Legacy assistant replies may have been composed with another store's
+        # session. Their prose remains history, but cannot restore order handles.
+        if (turn.get("metadata") or {}).get("memory_scope_trusted") is False:
+            continue
         content = turn.get("content")
         if isinstance(content, str) and content.strip():
             texts.append(content)

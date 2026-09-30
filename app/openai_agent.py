@@ -585,6 +585,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     history_limit = int(getattr(settings, "agent_history_limit", 12))
     history_hard_cap = int(getattr(settings, "agent_history_hard_cap", 80))
     history_lookup = {
+        "workspace_id": message.workspace_id,
         "conversation_id": message.conversation_id,
         "sender_phone": message.sender_phone,
         "before_inbound_id": inbound_id,
@@ -649,6 +650,13 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             "channel": message.channel,
         },
     )
+    from .conversation_choices import handle_short_choice
+    choice_reply = await handle_short_choice(message, state=commerce_state,
+        execute=execute_tool, recent_turns=model_turns)
+    if choice_reply is not None:
+        return _annotate_agent_result(choice_reply, domain="commerce",
+            used_openai_interpreter=False, used_openai_responder=False,
+            used_commerce_provider=False)
     # Read-only explanation is decided from the complete turn before keyword
     # routes can mistake "sim", "como funciona" or feedback for product names.
     # Reuse this interpretation below: never pay for a second classifier call.

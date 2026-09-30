@@ -27,6 +27,12 @@ quando há substituição, `factual_validation_initial` mantém a causa original
 
 ## Avaliação
 
+Respostas curtas como CPF/CNPJ, Pix/cartão e entrega/retirada são resolvidas
+contra a última pergunta entregue. Escolher CPF inicia apenas a coleta local
+do cadastro; criar o cliente continua exigindo validação e confirmação. Escolher
+pagamento ou entrega numa orientação geral não confirma uma operação. Sem uma
+pergunta compatível, o agente esclarece o assunto em vez de buscar um produto.
+
 `scripts/evaluate_ricardo_conversations.py` contém casos anonimizados de orientação,
 confirmação de oferta de catálogo, cadastro, múltiplas perguntas, comparação
 geral, correção, checkout, catálogo e pedidos. Usa `XNAMAI_EVAL_URL` e
@@ -41,3 +47,18 @@ As verificações automáticas cobrem roteamento e evidência. A qualidade das
 explicações também requer leitura das respostas reais; respostas de mocks não
 são prova de qualidade do modelo. Para rollback, desligue a flag nova e publique
 novamente, preservando os caminhos comerciais anteriores.
+
+## Isolamento da memória
+
+Histórico, identidades vinculadas e sessões comerciais usam o workspace
+configurado no servidor. Sessões e identidades novas recebem chaves com esse
+escopo; um telefone igual em duas empresas não compartilha o estado comercial.
+Sem workspace válido, o acesso à memória é recusado.
+
+Snapshots comerciais incluem versão e workspace de origem. Estados antigos sem
+essa marca, inclusive cópias já misturadas em respostas, deixam de alimentar o
+atendimento. Os registros legados são preservados no banco, sem reatribuição.
+O texto do histórico do próprio workspace continua disponível, mas respostas
+antigas sem proveniência não restauram pedidos, documentos ou links de pagamento.
+Na primeira retomada, pode ser necessário confirmar novamente os dados de um
+pedido ou cadastro em andamento; a marca não autoriza ações nem comprova fatos.

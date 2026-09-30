@@ -5,6 +5,7 @@ from typing import Any
 
 from .commerce_context import CommerceConversationState
 from .models import IncomingMessage
+from .memory_scope import scoped_key, trusted_workspace, unscoped_key
 
 
 def normalize_digits(value: str | None) -> str | None:
@@ -71,8 +72,15 @@ def resolve_person_key_candidates(
     cpf: str | None = None,
     email: str | None = None,
     state: CommerceConversationState | dict[str, Any] | None = None,
+    workspace_id: str | None = None,
 ) -> list[str]:
-    """Return durable person_key aliases worth loading/saving commerce sessions for."""
+    """Return only aliases owned by this server workspace; never adopt global links."""
+    from .db import ensure_tables, get_conn, get_settings
+
+    settings = get_settings()
+    workspace_id = trusted_workspace(settings, workspace_id)
+    if not workspace_id:
+        return []
     by_type = _identity_map_from_state(state)
     phone = normalize_digits(sender_phone) or by_type.get("phone")
     cpf_digits = normalize_digits(cpf) or by_type.get("cpf")
@@ -108,10 +116,8 @@ def resolve_person_key_candidates(
         if token not in candidates:
             candidates.append(token)
 
+    candidates = [scoped_key(workspace_id, key) for key in candidates]
     try:
-        from .db import ensure_tables, get_conn, get_settings
-
-        settings = get_settings()
         probes = [
             (kind, value)
             for kind, value in (
@@ -130,19 +136,21 @@ def resolve_person_key_candidates(
                         """
                         SELECT DISTINCT person_key
                         FROM public.ai_customer_identity_links
-                        WHERE (identity_type, identity_value) IN (
+                        WHERE workspace_id = %(workspace_id)s::uuid
+                          AND (identity_type, identity_value) IN (
                           SELECT * FROM unnest(%(types)s::text[], %(values)s::text[])
                             AS t(identity_type, identity_value)
                         )
                         """,
                         {
                             "types": [item[0] for item in probes],
-                            "values": [item[1] for item in probes],
+                            "values": [scoped_key(workspace_id, item[1]) for item in probes],
+                            "workspace_id": workspace_id,
                         },
                     )
                     for row in cur.fetchall() or []:
                         person_key = str(row.get("person_key") or "").strip()
-                        if person_key and person_key not in candidates:
+                        if unscoped_key(workspace_id, person_key) and person_key not in candidates:
                             candidates.append(person_key)
     except Exception as exc:
         print("[sales.identity] person_key_resolve_failed", {
@@ -159,6 +167,7 @@ def resolve_person_key_for_message(
         sender_key=getattr(message, "sender_key", None) if message else None,
         sender_phone=getattr(message, "sender_phone", None) if message else None,
         state=state,
+        workspace_id=getattr(message, "workspace_id", None),
     )
     return keys[0] if keys else None
 
@@ -207,7 +216,8 @@ def upsert_customer_identity_links(
     from .db import ensure_tables, get_conn, get_settings
 
     settings = get_settings()
-    if not settings.database_url:
+    workspace_id = trusted_workspace(settings, getattr(message, "workspace_id", None))
+    if not settings.database_url or not workspace_id:
         return
 
     identities = identities_from_message_and_state(message, state)
@@ -228,6 +238,7 @@ def upsert_customer_identity_links(
         if not by_type.get("phone"):
             return
 
+    person_key = scoped_key(workspace_id, person_key)
     ensure_tables()
     try:
         with get_conn() as conn:
@@ -236,24 +247,26 @@ def upsert_customer_identity_links(
                     """
                     SELECT DISTINCT person_key
                     FROM public.ai_customer_identity_links
-                    WHERE (identity_type, identity_value) IN (
+                    WHERE workspace_id = %(workspace_id)s::uuid
+                          AND (identity_type, identity_value) IN (
                       SELECT * FROM unnest(%(types)s::text[], %(values)s::text[])
                         AS t(identity_type, identity_value)
                     )
                     """,
                     {
                         "types": [item[0] for item in identities],
-                        "values": [item[1] for item in identities],
+                        "values": [scoped_key(workspace_id, item[1]) for item in identities],
+                        "workspace_id": workspace_id,
                     },
                 )
                 existing_keys = {
                     str(row["person_key"])
                     for row in (cur.fetchall() or [])
-                    if row.get("person_key")
+                    if unscoped_key(workspace_id, str(row.get("person_key") or ""))
                 }
                 preferred = person_key
                 for key in sorted(existing_keys):
-                    if key.startswith("cpf:"):
+                    if (unscoped_key(workspace_id, key) or "").startswith("cpf:"):
                         preferred = key
                         break
                 if existing_keys:
@@ -262,26 +275,30 @@ def upsert_customer_identity_links(
                         UPDATE public.ai_customer_identity_links
                         SET person_key = %(preferred)s, updated_at = now()
                         WHERE person_key = ANY(%(keys)s)
+                          AND workspace_id = %(workspace_id)s::uuid
                         """,
-                        {"preferred": preferred, "keys": list(existing_keys | {person_key})},
+                        {"preferred": preferred, "keys": list(existing_keys | {person_key}),
+                         "workspace_id": workspace_id},
                     )
                 for identity_type, identity_value, channel in identities:
                     cur.execute(
                         """
                         INSERT INTO public.ai_customer_identity_links
-                          (person_key, identity_type, identity_value, channel, updated_at)
+                          (person_key, workspace_id, identity_type, identity_value, channel, updated_at)
                         VALUES
-                          (%(person_key)s, %(identity_type)s, %(identity_value)s, %(channel)s, now())
+                          (%(person_key)s, %(workspace_id)s::uuid, %(identity_type)s, %(identity_value)s, %(channel)s, now())
                         ON CONFLICT (identity_type, identity_value) DO UPDATE
                         SET
                           person_key = EXCLUDED.person_key,
                           channel = COALESCE(EXCLUDED.channel, public.ai_customer_identity_links.channel),
                           updated_at = now()
+                        WHERE public.ai_customer_identity_links.workspace_id = EXCLUDED.workspace_id
                         """,
                         {
                             "person_key": preferred,
                             "identity_type": identity_type,
-                            "identity_value": identity_value,
+                            "identity_value": scoped_key(workspace_id, identity_value),
+                            "workspace_id": workspace_id,
                             "channel": channel,
                         },
                     )
@@ -295,12 +312,14 @@ def resolve_linked_identity_candidates(
     sender_phone: str | None,
     cpf: str | None = None,
     email: str | None = None,
+    workspace_id: str | None = None,
 ) -> list[tuple[str | None, str | None]]:
     """Return extra (sender_key, phone) pairs linked to the same person."""
     from .db import ensure_tables, get_conn, get_settings
 
     settings = get_settings()
-    if not settings.database_url:
+    workspace_id = trusted_workspace(settings, workspace_id)
+    if not settings.database_url or not workspace_id:
         return []
 
     probes: list[tuple[str, str]] = []
@@ -328,7 +347,8 @@ def resolve_linked_identity_candidates(
                     WITH seed AS (
                       SELECT DISTINCT person_key
                       FROM public.ai_customer_identity_links
-                      WHERE (identity_type, identity_value) IN (
+                      WHERE workspace_id = %(workspace_id)s::uuid
+                          AND (identity_type, identity_value) IN (
                         SELECT * FROM unnest(%(types)s::text[], %(values)s::text[])
                           AS t(identity_type, identity_value)
                       )
@@ -336,10 +356,12 @@ def resolve_linked_identity_candidates(
                     SELECT identity_type, identity_value
                     FROM public.ai_customer_identity_links
                     WHERE person_key IN (SELECT person_key FROM seed)
+                      AND workspace_id = %(workspace_id)s::uuid
                     """,
                     {
                         "types": [item[0] for item in probes],
-                        "values": [item[1] for item in probes],
+                        "values": [scoped_key(workspace_id, item[1]) for item in probes],
+                        "workspace_id": workspace_id,
                     },
                 )
                 rows = cur.fetchall() or []
@@ -351,7 +373,7 @@ def resolve_linked_identity_candidates(
     linked_phones: set[str] = set()
     for row in rows:
         kind = str(row.get("identity_type") or "")
-        value = str(row.get("identity_value") or "")
+        value = unscoped_key(workspace_id, str(row.get("identity_value") or ""))
         if kind == "sender_key" and value:
             linked_keys.add(value)
         elif kind == "phone" and value:

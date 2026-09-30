@@ -6,6 +6,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from .config import get_settings
 from .runtime_context import register_database_call
+from .memory_scope import restore_state, scoped_key, stamp_state, trusted_state, trusted_workspace
 
 
 def connect_database_url(database_url: str) -> psycopg.Connection:
@@ -185,6 +186,13 @@ def ensure_tables() -> None:
                   created_at timestamptz NOT NULL DEFAULT now(),
                   updated_at timestamptz NOT NULL DEFAULT now()
                 );
+
+                -- Scope columns already exist in the shared production schema.
+                -- Keep fresh bootstrap databases consistent without adopting legacy rows.
+                ALTER TABLE public.ai_inbound_messages ADD COLUMN IF NOT EXISTS workspace_id uuid;
+                ALTER TABLE public.ai_agent_responses ADD COLUMN IF NOT EXISTS workspace_id uuid;
+                ALTER TABLE public.ai_customer_identity_links ADD COLUMN IF NOT EXISTS workspace_id uuid;
+                ALTER TABLE public.ai_customer_commerce_sessions ADD COLUMN IF NOT EXISTS workspace_id uuid;
 
                 CREATE INDEX IF NOT EXISTS idx_ai_customer_commerce_sessions_updated_at
                 ON public.ai_customer_commerce_sessions(updated_at DESC);
@@ -702,6 +710,9 @@ def insert_inbound_message(message: dict[str, Any]) -> int | None:
     ensure_tables()
 
     safe_message = _prepare_inbound_message(message)
+    safe_message["workspace_id"] = trusted_workspace(settings, safe_message.get("workspace_id"))
+    if not safe_message["workspace_id"]:
+        return None
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -791,6 +802,9 @@ def claim_inbound_message(message: dict[str, Any]) -> tuple[bool, int | None]:
         return True, None
 
     safe_message = _prepare_inbound_message(message)
+    safe_message["workspace_id"] = trusted_workspace(settings, safe_message.get("workspace_id"))
+    if not safe_message["workspace_id"]:
+        return False, None
 
     if not safe_message.get("message_id"):
         return True, insert_inbound_message(message)
@@ -847,10 +861,15 @@ def is_latest_inbound_message(
     conversation_id: str | None,
     sender_key: str | None,
     sender_phone: str | None,
+    workspace_id: str | None = None,
 ) -> bool:
     """Check whether no later inbound row exists for this conversation/contact."""
     settings = get_settings()
     if not settings.database_url or not inbound_id:
+        return True
+    workspace_id = trusted_workspace(settings, workspace_id)
+    if not workspace_id:
+        # No scoped evidence exists to suppress this turn.
         return True
     conversation_filter, params = resolve_context_filter(
         conversation_id,
@@ -862,6 +881,7 @@ def is_latest_inbound_message(
 
     ensure_tables()
     params["inbound_id"] = inbound_id
+    params["workspace_id"] = workspace_id
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -869,6 +889,7 @@ def is_latest_inbound_message(
                 SELECT 1
                 FROM public.ai_inbound_messages AS inbound
                 WHERE inbound.id > %(inbound_id)s
+                  AND inbound.workspace_id = %(workspace_id)s::uuid
                   AND {conversation_filter}
                 LIMIT 1
                 """,
@@ -881,6 +902,7 @@ def _history_identity_candidates(
     conversation_id: str | None,
     sender_key: str | None,
     sender_phone: str | None,
+    workspace_id: str | None = None,
 ) -> list[tuple[str | None, str | None, str | None]]:
     candidates: list[tuple[str | None, str | None, str | None]] = [
         (conversation_id, sender_key, sender_phone),
@@ -897,6 +919,7 @@ def _history_identity_candidates(
         for linked_key, linked_phone in resolve_linked_identity_candidates(
             sender_key=sender_key,
             sender_phone=sender_phone,
+            workspace_id=workspace_id,
         ):
             candidates.append((None, linked_key, linked_phone))
     except Exception as exc:
@@ -914,6 +937,7 @@ def load_recent_conversation_turns(
     limit: int = 8,
     sender_key: str | None = None,
     hard_cap: int = 40,
+    workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Load a chronological transcript containing only delivered replies.
 
@@ -922,7 +946,8 @@ def load_recent_conversation_turns(
     recovery so payment links from earlier in the thread still surface.
     """
     settings = get_settings()
-    if not settings.database_url:
+    workspace_id = trusted_workspace(settings, workspace_id)
+    if not settings.database_url or not workspace_id:
         return []
 
     safe_hard_cap = max(1, min(int(hard_cap), 200))
@@ -939,6 +964,7 @@ def load_recent_conversation_turns(
             conversation_id,
             sender_key,
             sender_phone,
+            workspace_id,
         ):
             conversation_filter, identity_params = resolve_context_filter(
                 conv,
@@ -954,23 +980,27 @@ def load_recent_conversation_turns(
             params: dict[str, Any] = {
                 "before_inbound_id": before_inbound_id,
                 "limit": safe_limit,
+                "workspace_id": workspace_id,
             }
             params.update(identity_params)
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         f"""
-                        SELECT inbound.id, inbound.text, delivered.reply_text, delivered.safety_reason
+                        SELECT inbound.id, inbound.text, delivered.reply_text, delivered.safety_reason,
+                               delivered.provider_response
                         FROM public.ai_inbound_messages AS inbound
                         LEFT JOIN LATERAL (
-                            SELECT response.reply_text, response.safety_reason
+                            SELECT response.reply_text, response.safety_reason, response.provider_response
                             FROM public.ai_agent_responses AS response
                             WHERE response.inbound_id = inbound.id
+                              AND response.workspace_id = %(workspace_id)s::uuid
                               AND response.provider_send_ok = true
                             ORDER BY response.id DESC
                             LIMIT 1
                         ) AS delivered ON true
                         WHERE {conversation_filter}
+                          AND inbound.workspace_id = %(workspace_id)s::uuid
                           {before_filter}
                         ORDER BY inbound.id DESC
                         LIMIT %(limit)s
@@ -995,8 +1025,10 @@ def load_recent_conversation_turns(
             turns.append({"role": "user", "content": inbound_text})
         if reply_text:
             assistant_turn: dict[str, Any] = {"role": "assistant", "content": reply_text}
+            snapshot = _commerce_state_from_provider_response(row.get("provider_response"))
+            assistant_turn["metadata"] = {"memory_scope_trusted": trusted_state(snapshot, workspace_id)}
             if row.get("safety_reason"):
-                assistant_turn["metadata"] = {"safety_reason": str(row["safety_reason"])}
+                assistant_turn["metadata"]["safety_reason"] = str(row["safety_reason"])
             turns.append(assistant_turn)
     return turns[-safe_limit:]
 
@@ -1017,10 +1049,15 @@ def _load_commerce_states_for_filter(
     identity_params: dict[str, Any],
     before_inbound_id: int | None,
     limit: int = 8,
+    workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
+    workspace_id = trusted_workspace(get_settings(), workspace_id)
+    if not workspace_id:
+        return []
     params: dict[str, Any] = {
         "before_inbound_id": before_inbound_id,
         "limit": max(1, min(int(limit), 20)),
+        "workspace_id": workspace_id,
     }
     params.update(identity_params)
     before_filter = (
@@ -1037,6 +1074,8 @@ def _load_commerce_states_for_filter(
                 JOIN public.ai_inbound_messages AS inbound
                   ON inbound.id = response.inbound_id
                 WHERE {conversation_filter}
+                  AND inbound.workspace_id = %(workspace_id)s::uuid
+                  AND response.workspace_id = %(workspace_id)s::uuid
                   {before_filter}
                   AND response.provider_send_ok = true
                   AND response.provider_response ? '_agent_context'
@@ -1049,7 +1088,7 @@ def _load_commerce_states_for_filter(
     states: list[dict[str, Any]] = []
     for row in rows:
         provider_response = row.get("provider_response") if isinstance(row, dict) else None
-        state = _commerce_state_from_provider_response(provider_response)
+        state = restore_state(_commerce_state_from_provider_response(provider_response), workspace_id)
         if state:
             states.append(state)
     return states
@@ -1057,10 +1096,13 @@ def _load_commerce_states_for_filter(
 
 def load_customer_commerce_sessions(
     person_keys: list[str],
+    *, workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Load durable commerce sessions for one or more person_key aliases."""
     settings = get_settings()
-    keys = [str(key).strip() for key in person_keys if str(key or "").strip()]
+    workspace_id = trusted_workspace(settings, workspace_id)
+    keys = [scoped_key(workspace_id, key) for key in person_keys] if workspace_id else []
+    keys = list(dict.fromkeys(key for key in keys if key))
     if not settings.database_url or not keys:
         return []
     ensure_tables()
@@ -1072,9 +1114,10 @@ def load_customer_commerce_sessions(
                     SELECT person_key, commerce_state, resumable_score, updated_at
                     FROM public.ai_customer_commerce_sessions
                     WHERE person_key = ANY(%(keys)s)
+                      AND workspace_id = %(workspace_id)s::uuid
                     ORDER BY resumable_score DESC, updated_at DESC
                     """,
-                    {"keys": keys},
+                    {"keys": keys, "workspace_id": workspace_id},
                 )
                 rows = cur.fetchall() or []
     except (psycopg.Error, RuntimeError) as exc:
@@ -1084,7 +1127,8 @@ def load_customer_commerce_sessions(
     sessions: list[dict[str, Any]] = []
     for row in rows:
         state = row.get("commerce_state") if isinstance(row, dict) else None
-        if isinstance(state, dict) and state:
+        state = restore_state(state, workspace_id)
+        if state:
             sessions.append(state)
     return sessions
 
@@ -1097,6 +1141,7 @@ def persist_customer_commerce_session(
     conversation_id: str | None = None,
     sender_key: str | None = None,
     sender_phone: str | None = None,
+    workspace_id: str | None = None,
 ) -> None:
     """Persist durable working memory under all known person_key aliases."""
     from .context_resume import (
@@ -1105,13 +1150,15 @@ def persist_customer_commerce_session(
     )
 
     settings = get_settings()
-    keys = [str(key).strip() for key in person_keys if str(key or "").strip()]
+    workspace_id = trusted_workspace(settings, workspace_id)
+    keys = [scoped_key(workspace_id, key) for key in person_keys] if workspace_id else []
+    keys = list(dict.fromkeys(key for key in keys if key))
     if not settings.database_url or not keys or not isinstance(commerce_state, dict):
         return
 
     ensure_tables()
     try:
-        existing_sessions = load_customer_commerce_sessions(keys)
+        existing_sessions = load_customer_commerce_sessions(keys, workspace_id=workspace_id)
         donor = (
             max(existing_sessions, key=commerce_state_resumable_score)
             if existing_sessions
@@ -1128,6 +1175,7 @@ def persist_customer_commerce_session(
                         """
                         INSERT INTO public.ai_customer_commerce_sessions (
                           person_key,
+                          workspace_id,
                           commerce_state,
                           channel,
                           conversation_id,
@@ -1138,6 +1186,7 @@ def persist_customer_commerce_session(
                         )
                         VALUES (
                           %(person_key)s,
+                          %(workspace_id)s::uuid,
                           %(commerce_state)s,
                           %(channel)s,
                           %(conversation_id)s,
@@ -1167,10 +1216,12 @@ def persist_customer_commerce_session(
                           ),
                           resumable_score = EXCLUDED.resumable_score,
                           updated_at = now()
+                        WHERE public.ai_customer_commerce_sessions.workspace_id = EXCLUDED.workspace_id
                         """,
                         {
                             "person_key": key,
-                            "commerce_state": to_jsonb(merged),
+                            "workspace_id": workspace_id,
+                            "commerce_state": to_jsonb(stamp_state(merged, workspace_id)),
                             "channel": channel,
                             "conversation_id": conversation_id,
                             "sender_key": sender_key,
@@ -1194,6 +1245,7 @@ def load_commerce_conversation_state(
     sender_phone: str | None,
     before_inbound_id: int | None,
     sender_key: str | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Load delivered commerce state, recovering order context across identities."""
     from .context_resume import (
@@ -1203,7 +1255,8 @@ def load_commerce_conversation_state(
     from .customer_identity import resolve_person_key_candidates
 
     settings = get_settings()
-    if not settings.database_url:
+    workspace_id = trusted_workspace(settings, workspace_id)
+    if not settings.database_url or not workspace_id:
         return {}
 
     identity_candidates: list[tuple[str | None, str | None, str | None]] = [
@@ -1222,6 +1275,7 @@ def load_commerce_conversation_state(
         for linked_key, linked_phone in resolve_linked_identity_candidates(
             sender_key=sender_key,
             sender_phone=sender_phone,
+            workspace_id=workspace_id,
         ):
             identity_candidates.append((None, linked_key, linked_phone))
     except Exception as exc:
@@ -1249,6 +1303,7 @@ def load_commerce_conversation_state(
                     conversation_filter=conversation_filter,
                     identity_params=identity_params,
                     before_inbound_id=before_inbound_id,
+                    workspace_id=workspace_id,
                 )
             )
     except (psycopg.Error, RuntimeError) as exc:
@@ -1265,8 +1320,9 @@ def load_commerce_conversation_state(
         sender_key=sender_key,
         sender_phone=sender_phone,
         state=merged or None,
+        workspace_id=workspace_id,
     )
-    durable_sessions = load_customer_commerce_sessions(person_keys)
+    durable_sessions = load_customer_commerce_sessions(person_keys, workspace_id=workspace_id)
     durable = (
         max(durable_sessions, key=commerce_state_resumable_score)
         if durable_sessions
@@ -1318,7 +1374,9 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
     safe_data = dict(data or {})
 
     safe_data.setdefault("inbound_id", None)
-    safe_data.setdefault("workspace_id", None)
+    safe_data["workspace_id"] = trusted_workspace(settings, safe_data.get("workspace_id"))
+    if not safe_data["workspace_id"]:
+        return None
     safe_data.setdefault("channel", "unknown")
     safe_data.setdefault("sender_key", None)
     safe_data.setdefault("sender_phone", None)

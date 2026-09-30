@@ -49,7 +49,7 @@ async def test_phone_less_social_conversation_reloads_commerce_state(monkeypatch
         lambda: SimpleNamespace(audio_inbound_enabled=False, audio_outbound_enabled=False),
     )
 
-    def load_state(*, conversation_id, sender_phone, before_inbound_id, sender_key=None):
+    def load_state(*, conversation_id, sender_phone, before_inbound_id, sender_key=None, workspace_id=None):
         assert sender_phone is None
         return stored.get(conversation_id or sender_key, {})
 

@@ -396,7 +396,9 @@ def registration_prompt(
     if wanted:
         field = missing[0]
         if field == "document":
-            lines.append("Claro. Me envie seu CPF ou CNPJ para começarmos.")
+            kind = _person_type(draft.get("person_type"), draft.get("document"))
+            label = {"F": "CPF", "J": "CNPJ"}.get(kind, "CPF ou CNPJ")
+            lines.append(f"Claro. Me envie seu {label} para começarmos.")
         elif field == "legal_name":
             lines.append("Certo. Agora me envie sua razão social." if _person_type(draft.get("person_type"), draft.get("document")) == "J" else "Certo. Agora me envie seu nome completo.")
         elif field == "email":

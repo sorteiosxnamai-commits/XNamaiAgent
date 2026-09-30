@@ -318,6 +318,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
         runtime.inbound_snapshot = inbound_snapshot
     log_event("turn.start", inbound_snapshot)
     state_lookup = {
+        "workspace_id": incoming.workspace_id,
         "conversation_id": incoming.conversation_id,
         "sender_phone": incoming.sender_phone,
         "before_inbound_id": inbound_id,
@@ -354,6 +355,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
                 sender_key=incoming.sender_key,
                 sender_phone=incoming.sender_phone,
                 state=commerce_state,
+                workspace_id=incoming.workspace_id,
             )
         ),
         "customer_context": summarize_customer_context(customer_context),
@@ -390,7 +392,11 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
     with runtime_stage("agent_decision"):
         result = await generate_agent_reply_async(incoming, customer_context)
     commerce_state = evolve_commerce_state(commerce_state, result)
-    result.response_metadata["commerce_state"] = commerce_state.model_dump(mode="json")
+    from .memory_scope import stamp_state, trusted_workspace
+
+    result.response_metadata["commerce_state"] = stamp_state(
+        commerce_state.model_dump(mode="json"), trusted_workspace(settings, incoming.workspace_id),
+    )
     result.response_metadata["working_memory"] = build_working_memory(commerce_state)
     upsert_customer_identity_links(incoming, commerce_state)
     persist_customer_commerce_session(
@@ -398,7 +404,9 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
             sender_key=incoming.sender_key,
             sender_phone=incoming.sender_phone,
             state=commerce_state,
+            workspace_id=incoming.workspace_id,
         ),
+        workspace_id=incoming.workspace_id,
         commerce_state=commerce_state.model_dump(mode="json"),
         channel=incoming.channel,
         conversation_id=incoming.conversation_id,
@@ -458,6 +466,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
         operational_turns = customer_context.get("_conversation_turns")
         if not operational_turns:
             operational_turns = load_recent_conversation_turns(
+                workspace_id=incoming.workspace_id,
                 conversation_id=incoming.conversation_id,
                 sender_phone=incoming.sender_phone,
                 before_inbound_id=inbound_id,
