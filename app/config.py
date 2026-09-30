@@ -681,6 +681,7 @@ class Settings(BaseSettings):
     auto_create_tables: bool = Field(default=False, alias="AUTO_CREATE_TABLES")
     remarketing_enabled: bool = Field(default=False, alias="REMARKETING_ENABLED")
     remarketing_cron_secret: str = Field(default="", alias="CRON_SECRET")
+    mercos_order_sync_secret: str = Field(default="", alias="MERCOS_ORDER_SYNC_SECRET")
     remarketing_touch_hours: str = Field(default="1,12,23", alias="REMARKETING_TOUCH_HOURS")
     remarketing_meta_window_hours: int = Field(default=24, alias="REMARKETING_META_WINDOW_HOURS")
     remarketing_batch_size: int = Field(default=25, alias="REMARKETING_BATCH_SIZE")
@@ -958,7 +959,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "openai_api_key", "admin_api_token", "brevo_webhook_secret", "brevo_api_key",
-        "remarketing_cron_secret", "mercos_adaptor_api_key",
+        "remarketing_cron_secret", "mercos_order_sync_secret", "mercos_adaptor_api_key",
         "meta_app_secret", "meta_ig_app_secret", "meta_verify_token",
         "meta_page_access_token",
         "ycloud_api_key", "ycloud_webhook_secret",

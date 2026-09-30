@@ -15,6 +15,7 @@ from app.security import (
     verify_brevo_webhook,
     verify_chatbo_sync_token,
     verify_remarketing_cron,
+    verify_order_sync_cron,
 )
 from app.persona_admin_api import router as persona_admin_router
 from app.webhook_parser import (
@@ -1185,7 +1186,7 @@ async def commerce_order_sync_admin():
     return result
 
 
-@app.post("/api/cron/commerce/sync/orders", dependencies=[Depends(verify_remarketing_cron)])
+@app.post("/api/cron/commerce/sync/orders", dependencies=[Depends(verify_order_sync_cron)])
 async def commerce_order_sync_cron():
     return await commerce_order_sync_admin()
 

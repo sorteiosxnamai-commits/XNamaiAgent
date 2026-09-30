@@ -58,6 +58,14 @@ async def verify_remarketing_cron(
         raise HTTPException(status_code=401, detail="invalid_remarketing_cron_token")
 
 
+async def verify_order_sync_cron(authorization: str | None = Header(default=None)) -> None:
+    secret = get_settings().mercos_order_sync_secret
+    if not secret:
+        raise HTTPException(status_code=500, detail="order_sync_secret_not_configured")
+    if not authorization or not _secure_equals(authorization, f"Bearer {secret}"):
+        raise HTTPException(status_code=401, detail="invalid_order_sync_token")
+
+
 async def verify_chatbo_sync_token(
     authorization: str | None = Header(default=None),
 ) -> None:

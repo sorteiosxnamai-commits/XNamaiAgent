@@ -12,7 +12,7 @@ concedem acesso a `anon`/`authenticated`. Armazenam somente identificadores,
 status, faturamento, exclusão e instantes de verificação, sem dados pessoais.
 
 `POST /api/admin/commerce/sync/orders` (ADMIN_API_TOKEN) e
-`POST /api/cron/commerce/sync/orders` (CRON_SECRET) executam o mesmo serviço:
+`POST /api/cron/commerce/sync/orders` (MERCOS_ORDER_SYNC_SECRET) executam o mesmo serviço:
 
 1. Até duas páginas de alterações recentes, com cursor persistido.
 2. Após alcançar as alterações mais recentes, uma página do histórico completo,
@@ -42,7 +42,7 @@ Ele chama somente o endpoint autenticado da aplicação; a aplicação faz apena
 GET no MercosAdaptor. O job `xnamai-mercos-order-sync` é independente dos demais.
 
 Após publicar o endpoint e aplicar a migração, configurar com DATABASE_URL e
-CRON_SECRET no ambiente, sem registrar seus valores:
+MERCOS_ORDER_SYNC_SECRET no ambiente, sem registrar seus valores:
 
 ```powershell
 python scripts/configure_order_sync.py --base-url https://x-namai-agent.vercel.app

@@ -1,6 +1,6 @@
 """Install/update the XNamai order sync schedule; secrets stay in Vault.
 
-Requires DATABASE_URL and the existing REMARKETING_CRON_SECRET (or CRON_SECRET).
+Requires DATABASE_URL and the dedicated MERCOS_ORDER_SYNC_SECRET.
 Run after deploying the authenticated order cron endpoint and its migration.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ def main():
     parser.add_argument("--base-url", required=True)
     args = parser.parse_args()
     database = os.environ.get("DATABASE_URL", "")
-    secret = os.environ.get("REMARKETING_CRON_SECRET") or os.environ.get("CRON_SECRET", "")
+    secret = os.environ.get("MERCOS_ORDER_SYNC_SECRET", "")
     if not database or not secret:
         raise SystemExit("DATABASE_URL and cron secret required")
     try:
