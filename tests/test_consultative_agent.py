@@ -27,6 +27,24 @@ def message():
                            conversation_id="conversation-a")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["Leonardo", None])
+async def test_catalog_intro_has_customer_name_only_when_provided(monkeypatch, name):
+    import json
+    import app.persona_repository as repository
+    import app.prompt_compiler as compiler
+    monkeypatch.setattr(repository, "get_active_persona", lambda *a: NS(metadata={}))
+    monkeypatch.setattr(compiler, "resolve_system_instructions", lambda **k: "safe")
+    async def gateway(**kwargs):
+        data_messages = [m["content"] for m in kwargs["messages"] if m["content"].startswith("Contexto operacional")]
+        hints = json.loads(data_messages[0].split("\n", 1)[1]) if data_messages else {}
+        assert hints.get("customer_display_name") == name
+        return NS(text="Claro! Nosso catálogo completo está disponível online.", limit_reached=False)
+    incoming = message().model_copy(update={"sender_name": name, "text": "Pode enviar o catálogo?"})
+    result = await consult(incoming, {}, interpretation("none", "store_general"), settings=settings(), gateway=gateway, informational_only=True)
+    assert result.safety_reason is None
+
+
 def test_rollout_is_sticky_scoped_and_can_be_disabled():
     configured = settings()
     assert eligible(message(), interpretation(), CommerceConversationState(), configured)

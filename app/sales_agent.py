@@ -1298,6 +1298,10 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
     if resultado.outcome == OUTCOME_PURCHASE_GUIDANCE:
         from .published_knowledge import published_policy
         minimum = published_policy("minimum_order")
+        catalog_policies = "".join(
+            policy + "\n\n" for topic in ("commercial_positioning", "catalog_pricing")
+            if (policy := published_policy(topic))
+        )
         return AgentResult(
             reply_text=(
                 "Para comprar na XNamai, primeiro faça seu cadastro. Com CNPJ, "
@@ -1305,6 +1309,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 "Com CPF, o cadastro é feito pelo atendimento.\n\n"
                 "Depois da liberação, escolha os produtos e as quantidades, "
                 "adicione ao carrinho, finalize o pedido e selecione a forma de entrega.\n\n"
+                + catalog_policies
                 + ((minimum + "\n\n") if minimum else "Confirme o pedido mínimo atual com a equipe.\n\n")
                 +
                 "Você quer se cadastrar com CPF ou CNPJ?"
@@ -1314,6 +1319,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
             response_metadata=_metadados(
                 used_commerce_provider=False,
                 active_topic="purchase_guidance",
+                preserve_conversational_answer=True,
                 club_offer_shown=bool(getattr(state, "club_offer_shown", False)),
             ),
         )
@@ -1338,6 +1344,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 purchase_stage="draft_building",
                 order_draft_open=True,
                 club_offer_shown=offered or getattr(state, "club_offer_shown", False),
+                preserve_conversational_answer=offered,
             ),
         )
 
@@ -1357,6 +1364,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 used_commerce_provider=False,
                 active_topic="product_catalog",
                 club_offer_shown=offered or bool(getattr(state, "club_offer_shown", False)),
+                preserve_conversational_answer=offered,
             ),
         )
 
@@ -1451,6 +1459,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 presented_products=True,
                 active_topic="product_catalog",
                 club_offer_shown=offered or getattr(state, "club_offer_shown", False),
+                preserve_complete_list=True,
             ),
         )
 
@@ -1471,6 +1480,7 @@ def _render_commerce_turn(resultado, state=None) -> AgentResult | None:
                 presented_products=True,
                 active_topic="product_catalog",
                 club_offer_shown=offered or getattr(state, "club_offer_shown", False),
+                preserve_complete_list=True,
             ),
         )
 
@@ -3324,6 +3334,7 @@ async def _handle_sales_message_inner(
                 response_metadata={
                     "active_topic": "store_product_overview",
                     "guidance_topics": list(store_guidance.topics),
+                    "preserve_conversational_answer": True,
                 },
             ),
             interpretation=interpretation,

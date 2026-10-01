@@ -2,17 +2,20 @@
 
 ## Destino
 
-Confirme no painel da Vercel o projeto **XNAMAI agente**, a equipe proprietária e
-o repositório `XNamaiAgent`. O vínculo local encontrado em
-`.vercel/project.json` aponta para outro projeto e **não é autorização
-para publicar nesse destino**. Relacione o projeto correto antes de usar deploy.
+O destino confirmado é o projeto Vercel **x-namai-agent**, ID
+`prj_juEvLKJRdVkoBOKP39rJkscaZX97`, associado ao repositório `XNamaiAgent`.
+Confira o vínculo `.vercel/project.json` antes de publicar; outros projetos
+não são o destino deste agente.
 
 ## Preparação da base
 
-`docs/knowledge/xnamai.review.json` contém apenas candidatos migrados das regras
-antigas do repositório. Todos estão em `draft`: os valores não foram confirmados
-em produção. Revise conteúdo, fonte e validade, mude para `approved` somente os
-documentos confirmados e preserve os documentos já existentes da persona ativa.
+`docs/knowledge/xnamai.review.json` contém candidatos migrados e políticas
+confirmadas pelo responsável: pedido mínimo, preços do catálogo para membros do
+Club com acréscimo de 15% para não membros, e posicionamento comercial. Use apenas
+documentos `approved`; mensalidade e demais candidatos `draft` não estão aprovados
+nesse arquivo. Preserve os documentos já existentes da persona ativa ao incorporar
+novas políticas. A regra do catálogo não confirma assinatura nem autoriza recalcular
+preços ou totais de pedidos retornados pelo provedor.
 Não envie conversas de clientes ao índice. Uma política por tópico; ambiguidades
 devem ser resolvidas antes da publicação.
 
@@ -37,6 +40,16 @@ própria `OPENAI_API_KEY`. `workspace_id` é obrigatório e deve ser o UUID real
    simultâneos. Falha retorna erro; não ativa nem altera a versão publicada.
 4. Confira `completed == total`, conteúdo e manifesto. Ative o novo ID pela rota
    `/activate` já existente. Mantenha o ID da versão anterior para rollback.
+
+Ao alterar também o tom, crie a versão por `POST /api/admin/agents/xnamai/personas`
+com as instruções revisadas e os metadados atuais, substituindo apenas os documentos
+aprovados para o ajuste e removendo `knowledge_index` antes de reindexar. Remova
+instruções antigas contraditórias (por exemplo, proibição de explicar preços do Club).
+A apresentação inicial do catálogo deve ser acolhedora, com nome quando conhecido,
+link, cadastro correto para CPF/CNPJ, posicionamento aprovado e regra de preços;
+continuações não devem repetir toda a apresentação. Valide `/api/test/agent` com
+identidades sintéticas, incluindo preço para não membro e cadastro por CPF, antes
+de considerar o ajuste concluído.
 
 Stores são mantidos entre etapas e versões. Uploads que falham no vínculo são
 removidos; uma queda entre criação remota e commit do banco pode deixar recursos

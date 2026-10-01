@@ -56,9 +56,10 @@ def test_persona_uses_emojis_naturally_without_forcing_them():
     persona = (Path(__file__).resolve().parents[1] / "persona_xnamai.txt").read_text(
         encoding="utf-8"
     )
-    assert "Use emoji sempre que ele ajudar" in persona
-    assert "sem forçar" in persona
-    assert "sem colocar emoji em toda mensagem" in persona
+    assert "Use emoji quando ajudar" in persona
+    assert "Normalmente use um" in persona
+    assert "na apresentação inicial do catálogo, podem ser dois" in persona
+    assert "Evite emojis em reclamações, falhas, privacidade, pagamento" in persona
 
 
 def test_no_vip_identity_is_preconfigured():

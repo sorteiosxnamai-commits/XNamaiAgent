@@ -9,7 +9,7 @@ from tests.persona_fakes import InMemoryPersonaStore
 
 ROOT = Path(__file__).resolve().parents[1]
 PERSONA_PATH = ROOT / "persona_xnamai.txt"
-EXPECTED_HASH = "d1c506b1dea675647bef1638890299f64eed20624871cca57aba19f04e8cd324"
+EXPECTED_HASH = "0d4e82a7d381c08baacaf5be94470a2547a423bd4de5e7fb58e0e97c31b12e47"
 
 
 def test_persona_file_hash_is_stable():

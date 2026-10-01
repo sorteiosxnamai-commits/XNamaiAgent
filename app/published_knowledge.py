@@ -7,7 +7,8 @@ import re
 from .persona_knowledge import approved_documents
 
 _PUBLICATION: ContextVar[list] = ContextVar("published_institutional_documents", default=[])
-POLICY_TOPICS = frozenset({"minimum_order", "club_plan", "payment_methods", "delivery", "registration", "how_to_buy"})
+POLICY_TOPICS = frozenset({"minimum_order", "club_plan", "catalog_pricing", "commercial_positioning",
+                         "payment_methods", "delivery", "registration", "how_to_buy"})
 
 
 def bind_publication(metadata):

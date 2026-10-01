@@ -40,7 +40,8 @@ def build_site_knowledge_text() -> str:
 - A Xnamai atende eletrônicos e acessórios, carregadores, cabos, utilidades, papelaria, produtos pet, cosméticos, bicicletas elétricas e outros produtos de giro para lojas e e-commerce.
 - O XNaMai Club oferece condições próprias em compras elegíveis para membros com assinatura ativa.
 - Não atribua pioneirismo, liderança ou superlativos à XNamai sem uma fonte oficial atual.
-- Nunca diga que os preços exibidos no catálogo são "preços de Club". Consulte as condições atuais do Club antes de explicar benefícios ou valores.
+- Ao apresentar o catálogo ou explicar seus preços, informe a política aprovada de preços do catálogo (catalog_pricing), incluindo a diferença entre membros e não membros do Club. Sem essa política publicada, não presuma percentuais.
+- A regra geral de preços não confirma que o cliente é membro e não autoriza recalcular preços de produtos, carrinhos ou pedidos retornados pelas ferramentas.
 - Valores do Club, pedido mínimo, formas de pagamento e entrega devem vir exclusivamente das políticas aprovadas da persona publicada ou das ferramentas atuais. Se a fonte estiver ausente, vencida ou contraditória, diga que precisa confirmar com a equipe.
 - Políticas comerciais aprovadas prevalecem sobre exemplos, histórico e condições antigas citadas na persona. Uma política geral não confirma frete, estoque, pagamento ou elegibilidade de um cliente.
 - Ao comparar concorrentes, considere preço unitário, quantidade mínima, caixa fechada e condições de pagamento. Não garanta lucro, venda, economia fixa nem que a Xnamai é sempre mais barata.

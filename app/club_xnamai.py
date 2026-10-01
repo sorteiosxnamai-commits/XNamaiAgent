@@ -9,6 +9,7 @@ from .commerce_context import CommerceConversationState
 from .models import AgentResult
 from .site_knowledge import CLUB_URL, STORE_URL
 from .club_provider import PublicPlan
+from .published_knowledge import published_policy
 
 
 _CLUB_TERMS = (
@@ -87,7 +88,9 @@ def is_club_followup(text: str | None, state: CommerceConversationState) -> bool
 
 
 def club_offer_text() -> str:
-    return (
+    policy = published_policy("catalog_pricing")
+    introduction = f"{policy}\n\n" if policy else ""
+    return introduction + (
         "Conheça o XNaMai Club e consulte as condições atuais para membros. Catálogo oficial: "
         f"{STORE_URL} | Plano e regras atuais do Club: {CLUB_URL}"
     )
@@ -145,6 +148,9 @@ def handle_club_turn(
             "com flexibilidade para comprar a quantidade necessária. Para ser membro, "
             "escolha um plano e entre ou crie sua conta no Club."
         )
+        pricing = published_policy("catalog_pricing")
+        if pricing:
+            intro = f"{pricing}\n\n{intro}"
         if plans:
             descriptions = [
                 f"{plan.name}: R$ {plan.monthly_price_cents / 100:.2f}/mês".replace(".", ",")
@@ -166,6 +172,7 @@ def handle_club_turn(
         intent="commerce",
         response_metadata={
             "domain": "commerce",
+            "preserve_conversational_answer": True,
             "active_topic": "xnamai_club",
             "club_offer_shown": True,
             "club_membership_status": membership or state.club_membership_status,

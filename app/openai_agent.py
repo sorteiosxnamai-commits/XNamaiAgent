@@ -1275,6 +1275,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
                     response_metadata={
                         "active_topic": "store_product_overview",
                         "guidance_topics": list(store_guidance.topics),
+                        "preserve_conversational_answer": True,
                     },
                 ),
                 domain="commerce",

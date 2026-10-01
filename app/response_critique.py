@@ -214,6 +214,7 @@ def apply_fast_deterministic_critique(
             "fast_critique": "store_guidance_recovered",
             "active_topic": "store_product_overview",
             "guidance_topics": list(guidance.topics),
+            "preserve_conversational_answer": True,
             "used_commerce_provider": False,
         })
         verdict = CritiqueVerdict(

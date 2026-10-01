@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .site_knowledge import STORE_URL
+from .published_knowledge import published_policy
 
 if TYPE_CHECKING:
     from .models import SalesInterpretation
@@ -192,8 +193,12 @@ def build_store_guidance(
         + STORE_URL
     )
 
+    for topic in ("commercial_positioning", "catalog_pricing"):
+        policy = published_policy(topic)
+        if policy:
+            blocks.append(policy)
+
     if topics.intersection({"price", "wholesale", "retail", "registration"}):
-        from .published_knowledge import published_policy
         minimum = published_policy("minimum_order")
         if minimum:
             blocks.append(minimum)

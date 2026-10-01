@@ -74,6 +74,11 @@ _PERCENT_DISCOUNT_RE = re.compile(
     r"\b\d{1,2}\s*%\s*(?:de\s+)?(?:desconto|off)\b",
     flags=re.IGNORECASE,
 )
+_SURCHARGE_PERCENT_RE = re.compile(
+    r"\bacr[eé]scimo\b[^.!?\n%]{0,100}\d+(?:[.,]\d+)?\s*%"
+    r"|\b\d+(?:[.,]\d+)?\s*%\s*(?:a mais|adiciona(?:l|is)|de acr[eé]scimo)\b",
+    re.IGNORECASE,
+)
 _IMMEDIATE_DELIVERY_RE = re.compile(
     r"\b(pronta entrega|entrega imediata|envio imediato|sai hoje)\b",
     flags=re.IGNORECASE,
@@ -595,6 +600,18 @@ def _check_commercial_conditions(
             pack.has_promotional_price,
             "percent_discount_without_promotional_price_evidence",
         )
+    # A published general surcharge cannot prove a customer's membership or
+    # authorize a different percentage on their order. Only its quotation is
+    # supported; leave all other commercial checks in place.
+    from .published_knowledge import published_policy
+    def normalize_policy(value):
+        return re.sub(r"\s+", " ", re.sub(r"[*_]", "", value)).strip().casefold()
+    pricing = published_policy("catalog_pricing")
+    unsupported_text = text
+    if pricing:
+        unsupported_text = normalize_policy(text).replace(normalize_policy(pricing), "")
+    if _SURCHARGE_PERCENT_RE.search(unsupported_text):
+        _claim("condition", "catalog_surcharge", False, "catalog_surcharge_without_published_policy")
     if _IMMEDIATE_DELIVERY_RE.search(text):
         supported = any(
             value is True for value in _payload_values(payload, ("immediate_delivery_supported",))

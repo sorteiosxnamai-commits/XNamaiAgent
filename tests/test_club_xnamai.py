@@ -6,6 +6,38 @@ from app.models import AgentResult
 from app.site_knowledge import CLUB_URL, STORE_URL
 
 
+def test_club_presentation_quotes_current_approved_catalog_pricing():
+    from app.published_knowledge import bind_publication, reset_publication
+    policy = "Os preços do catálogo são exclusivos para membros do Club Xnamai. Para não membros, há acréscimo de 15%."
+    token = bind_publication({"knowledge_documents": [{"id": "catalog-pricing", "topic": "catalog_pricing",
+        "status": "approved", "content": policy}]})
+    try:
+        result = handle_club_turn("quero conhecer o Club Xnamai", state=CommerceConversationState())
+        assert policy in result.reply_text
+        assert CLUB_URL in result.reply_text
+    finally:
+        reset_publication(token)
+
+
+def test_self_reported_membership_does_not_verify_subscription_or_recalculate_existing_order():
+    from app.published_knowledge import bind_publication, reset_publication
+    token = bind_publication({"knowledge_documents": [{"id": "catalog-pricing", "topic": "catalog_pricing",
+        "status": "approved", "content": "Não membros pagam acréscimo de 15%."}]})
+    state = CommerceConversationState(order_id="95805", cart_id="cart-1")
+    before = state.model_dump()
+    try:
+        result = handle_club_turn("já sou membro do Club Xnamai", state=state)
+        assert "Não consigo confirmar sua assinatura" in result.reply_text
+        assert result.response_metadata["used_commerce_provider"] is False
+        assert not result.commercial_data
+        assert state.model_dump() == before
+        evolved = evolve_commerce_state(state, result)
+        assert evolved.order_id == "95805" and evolved.cart_id == "cart-1"
+        assert "R$" not in result.reply_text
+    finally:
+        reset_publication(token)
+
+
 def test_non_member_receives_official_club_offer():
     result = handle_club_turn(
         "ainda não sou membro do Club Xnamai",

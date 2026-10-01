@@ -1,5 +1,7 @@
 {
   "knowledge_documents": [
+    {"id": "catalog-pricing", "topic": "catalog_pricing", "status": "approved", "content": "Os preços do catálogo são exclusivos para membros do Club Xnamai. Para quem não é membro, há um acréscimo de 15%.", "source": "Regra comercial confirmada explicitamente pelo responsável pela XNamai nesta conversa, em 2026-10-01."},
+    {"id": "commercial-positioning", "topic": "commercial_positioning", "status": "approved", "content": "A XNamai busca oferecer preços de caixa fechada mesmo comprando poucas unidades, sem precisar levar grandes quantidades de cada produto.", "source": "Modelo de resposta comercial fornecido pelo responsável pela XNamai nesta conversa, em 2026-10-01. Posicionamento comercial, sem garantia de menor preço ou desconto individual."},
     {"id": "minimum-order", "topic": "minimum_order", "status": "approved", "content": "O pedido mínimo é de R$ 800,00.", "source": "Valor confirmado explicitamente pelo usuário responsável pela XNamai nesta conversa, em 2026-09-30."},
     {"id": "club-plan", "topic": "club_plan", "status": "draft", "content": "A mensalidade do XNaMai Club é de R$ 149,97 por mês.", "source": "Regra antiga de app/site_knowledge.py; confirmar no canal oficial do Club antes de aprovar."},
     {"id": "payment-methods", "topic": "payment_methods", "status": "draft", "content": "As formas de pagamento são Pix, cartão e dinheiro na retirada, com sinal para reservar e separar. Boleto não é aceito.", "source": "Persona anterior do repositório; confirmar com a equipe antes de aprovar."},

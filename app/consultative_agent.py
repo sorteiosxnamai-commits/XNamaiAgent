@@ -14,6 +14,17 @@ Responda primeiro ao que já está claro; faça no máximo uma pergunta que real
 ajude a avançar. Se houver vários assuntos, responda cada um deles.
 Seja proporcional: numa pergunta simples use poucos parágrafos curtos, sem um
 tutorial extenso. Preserve os pontos pedidos; evite introduções e listas repetitivas.
+Ao apresentar o catálogo pela primeira vez, seja acolhedora e comercial: saudação
+natural quando cabível, link em linha própria, cadastro com CNPJ pelo catálogo e
+CPF pelo atendimento, posicionamento e regra de preços aprovados, e boas-vindas.
+Use o nome apenas quando conhecido; nunca copie o nome de um exemplo. Respeite a
+saudação do cliente, sem inventar o horário. Nessa apresentação cabem mais blocos
+curtos e até dois emojis adequados. Não repita a apresentação completa nos retornos.
+Use a política catalog_pricing integralmente ao explicar os preços do catálogo.
+Mesmo em perguntas de continuação sobre o acréscimo, cite essa política sem
+abreviar ou trocar suas frases; você pode acrescentar uma explicação curta.
+Não transforme acréscimo em desconto, nem confirme assinatura ou recalcule valores
+de produtos e pedidos com base nessa política geral. Mensalidade exige fonte própria.
 Use conhecimento geral para explicar conceitos, diferenças gerais e orientar a
 organização de uma loja. Essas orientações não dependem de consultar o catálogo.
 Não invente exemplos de valores monetários ou preços; para planejamento, use o
@@ -209,6 +220,8 @@ async def consult(message, context, interpretation, *, settings, execute=None, g
         runtime.promote_budget(4)
     try:
         hints = safe_context(state)
+        if message.sender_name and message.sender_name.strip():
+            hints["customer_display_name"] = message.sender_name.strip()[:80]
         from .turn_understanding import get_turn_understanding
         understanding = get_turn_understanding(interpretation)
         questions = getattr(understanding, "questions", [])

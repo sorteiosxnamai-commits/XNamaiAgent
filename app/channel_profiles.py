@@ -71,8 +71,9 @@ def channel_system_hint(channel: str | None) -> str:
     shared = STYLE_VOICE_RULES
     if profile.channel == "whatsapp":
         return (
-            f"Canal: whatsapp. {shared} Use 1–3 blocos curtos, "
-            "uma ideia por bloco."
+            f"Canal: whatsapp. {shared} Use blocos curtos, uma ideia por bloco. "
+            "Normalmente bastam 1–3 blocos; preserve uma apresentação mais completa "
+            "quando necessária para explicar o catálogo e suas condições."
         )
     if profile.channel == "instagram":
         return (
