@@ -553,6 +553,30 @@ async def generate_openai_reply_async(message: IncomingMessage, customer_context
 
 
 async def generate_agent_reply_async(message: IncomingMessage, customer_context: dict) -> AgentResult:
+    """All response paths share one continuity and presentation contract."""
+    result = await _generate_agent_reply_async(message, customer_context)
+    interpretation = customer_context.get("_turn_interpretation")
+    if interpretation is not None and interpretation._source == "openai":
+        from .turn_understanding import get_turn_understanding
+        understanding = get_turn_understanding(interpretation)
+        if understanding is not None and understanding.confidence >= .75:
+            if understanding.user_goal:
+                result.response_metadata.setdefault("conversation_goal", understanding.user_goal[:400])
+            delta = understanding.conversation_summary_delta
+            memory = delta.model_dump(mode="json") if delta is not None else {}
+            memory.setdefault("current_goal", understanding.user_goal[:240] or None)
+            preferences = {k: v for k, v in understanding.soft_preferences.model_dump(mode="json").items()
+                           if v not in (None, "", [], {}) and k not in {"budget_min", "budget_max"}}
+            if preferences:
+                memory["preferences"] = preferences
+            if memory:
+                result.response_metadata["conversation_summary_delta"] = memory
+    if result.response_metadata.get("used_openai_responder") and not result.handoff_required:
+        result.response_metadata.setdefault("preserve_conversational_answer", True)
+    return result
+
+
+async def _generate_agent_reply_async(message: IncomingMessage, customer_context: dict) -> AgentResult:
     blocked_reason = detect_blocked_request(message.text)
     if blocked_reason:
         return _annotate_agent_result(
@@ -635,6 +659,25 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     commerce_state = CommerceConversationState.from_payload(
         customer_context.get("_commerce_state")
     )
+    from .conversation_routing import pending_order_reference
+    pending_reference = pending_order_reference(message.text, commerce_state, model_turns)
+    if pending_reference:
+        result = await get_order_facts(state=commerce_state, execute=execute_tool, order_id=pending_reference)
+        result.response_metadata["active_topic"] = "order_status"
+        return _annotate_agent_result(result, domain="commerce", goal="after_sales",
+            response_source="verified_order_query", used_openai_interpreter=False,
+            used_openai_responder=False, used_commerce_provider=True)
+    from .order_service import is_existing_cart_report
+    if is_existing_cart_report(message.text):
+        return _annotate_agent_result(
+            AgentResult(
+                reply_text=("Entendi, você já montou o carrinho. Você chegou a finalizar "
+                    "e recebeu um número de pedido, ou os produtos ainda estão no carrinho?"),
+                intent="commerce",
+                response_metadata={"domain": "commerce", "active_topic": "order_status"}),
+            domain="commerce", response_source="existing_cart_clarification",
+            used_openai_interpreter=False, used_openai_responder=False,
+            used_commerce_provider=False)
     log_event(
         "history.loaded",
         {
@@ -651,8 +694,10 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         },
     )
     from .conversation_choices import handle_short_choice
+    from .conversation_routing import enabled as conversation_first_enabled, owns_conversation
     choice_reply = await handle_short_choice(message, state=commerce_state,
-        execute=execute_tool, recent_turns=model_turns)
+        execute=execute_tool, recent_turns=model_turns,
+        defer_ambiguous=conversation_first_enabled(settings))
     if choice_reply is not None:
         return _annotate_agent_result(choice_reply, domain="commerce",
             used_openai_interpreter=False, used_openai_responder=False,
@@ -661,7 +706,6 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     # routes can mistake "sim", "como funciona" or feedback for product names.
     # Reuse this interpretation below: never pay for a second classifier call.
     early_interpretation = None
-    from .conversation_routing import enabled as conversation_first_enabled, owns_advice
     if (conversation_first_enabled(settings) and not _is_greeting(message.text)
             and not message.transcription_failed and not message.image_url):
         third_party_reply = _third_party_guardrail(message, detect_primary_intent(message.text))
@@ -669,9 +713,29 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             return _annotate_agent_result(third_party_reply, domain="guardrail", response_source="guardrail",
                 used_openai_interpreter=False, used_openai_responder=False, used_commerce_provider=False)
         early_interpretation = await interpret_message(message, recent_turns=model_turns, commerce_state=commerce_state)
+        customer_context["_turn_interpretation"] = early_interpretation
+        semantic_choice = await handle_short_choice(message, state=commerce_state,
+            execute=execute_tool, recent_turns=model_turns, defer_ambiguous=True,
+            interpretation=early_interpretation)
+        if semantic_choice is not None:
+            return _annotate_agent_result(semantic_choice, domain="commerce",
+                used_openai_interpreter=True, used_openai_responder=False, used_commerce_provider=False)
+        if (early_interpretation._source == "openai" and early_interpretation.confidence >= .75
+                and early_interpretation.order_action):
+            # Read-only order intent must reach the order tool before generic
+            # product resolution. The current message/state owns the identifier.
+            reference = extract_order_reference(message.text)
+            numeric = (message.text or "").strip().lstrip("#").strip()
+            if not reference and numeric.isascii() and numeric.isdigit() and 3 <= len(numeric) <= 10:
+                reference = numeric
+            result = await get_order_facts(state=commerce_state, execute=execute_tool, order_id=reference)
+            result.response_metadata["active_topic"] = "order_status"
+            return _annotate_agent_result(result, domain="commerce", goal="after_sales",
+                response_source="verified_order_query", used_openai_interpreter=True,
+                used_openai_responder=False, used_commerce_provider=True)
         from .order_queries import resolve_order_query
         order_query_pending = resolve_order_query(message.text, commerce_state)
-        if owns_advice(early_interpretation, commerce_state) and not order_query_pending and not is_order_lookup_request(message.text):
+        if owns_conversation(early_interpretation, commerce_state) and not order_query_pending and not is_order_lookup_request(message.text):
             from .consultative_agent import consult
             consultation = await consult(message, customer_context, early_interpretation,
                 settings=settings, state=commerce_state, informational_only=True)
@@ -702,22 +766,6 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_responder=False,
             used_commerce_provider=bool(account_result.response_metadata.get("used_commerce_provider")),
             fallback_reason=account_result.safety_reason,
-        )
-    from .order_service import is_existing_cart_report
-
-    if is_existing_cart_report(message.text):
-        return _annotate_agent_result(
-            AgentResult(
-                reply_text=(
-                    "Entendi, você já montou o carrinho. Você chegou a finalizar "
-                    "e recebeu um número de pedido, ou os produtos ainda estão no carrinho?"
-                ),
-                intent="commerce",
-                response_metadata={"domain": "commerce", "active_topic": "order_status"},
-            ),
-            domain="commerce", response_source="existing_cart_clarification",
-            used_openai_interpreter=False, used_openai_responder=False,
-            used_commerce_provider=False,
         )
     # Perguntas institucionais sobre COMO comprar nao sao consultas de SKU.
     # Resolva antes do interpretador para que "XNamai" nunca vire nome de
@@ -755,6 +803,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
     pending_followup = getattr(commerce_state, "pending_followup", None)
     owns_more_specific_pending = bool(
         commerce_state.pending_action or commerce_state.pending_commerce_action
+        or commerce_state.active_product or commerce_state.last_presented_products
     )
     if pending_followup and not owns_more_specific_pending:
         verdict = resolve_followup_response(message.text, pending_followup)
@@ -840,7 +889,8 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
             used_openai_responder=bool(order_query_result.response_metadata.get("used_openai_responder")), used_commerce_provider=bool(order_query_result.response_metadata.get("used_commerce_provider")))
     if getattr(get_settings(), "mercos_adaptor_configured", False):
         from .wholesale_catalog import handle_wholesale_catalog
-        catalog_result = await handle_wholesale_catalog(message.text, state=commerce_state, execute=execute_tool)
+        catalog_result = await handle_wholesale_catalog(message.text, state=commerce_state, execute=execute_tool,
+                                                       interpretation=early_interpretation)
         if catalog_result is not None:
             from .conversation_routing import has_institutional_questions
             if has_institutional_questions(early_interpretation):
@@ -1213,6 +1263,7 @@ async def generate_agent_reply_async(message: IncomingMessage, customer_context:
         recent_turns=model_turns,
         commerce_state=commerce_state,
     )
+    customer_context["_turn_interpretation"] = interpretation
     used_openai_interpreter = interpretation._source == "openai"
     interpreted_domain = interpretation.domain
     interpretation, domain_context_applied = apply_commerce_domain_context(

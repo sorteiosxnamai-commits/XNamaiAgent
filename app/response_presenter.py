@@ -123,7 +123,7 @@ def present_reply_text_thin(
     if intent in {"handoff", "out_of_scope"}:
         value = limit_questions(value, max_questions=0)
     max_blocks = _max_blocks(profile)
-    if profile.channel in {"whatsapp", "instagram", "facebook"} and not (metadata.get("preserve_complete_list") or metadata.get("preserve_conversational_answer")):
+    if profile.channel in {"instagram", "facebook"} and not (metadata.get("preserve_complete_list") or metadata.get("preserve_conversational_answer")):
         value = split_whatsapp_blocks(value, max_blocks=max_blocks)
     return preserve_urls(original, value).strip()
 

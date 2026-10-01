@@ -23,6 +23,46 @@ CATEGORIES = {
 }
 
 
+def structured_filters(query):
+    """Recover versioned filters from legacy query strings without relaxing them."""
+    value = fold(query).strip()
+    found = [(m.start(), m.end(), category) for category, pattern in CATEGORIES.items()
+             if (m := re.search(pattern, value))]
+    category = ""
+    if found:
+        start, end, category = min(found)
+        value = value[:start] + value[end:]
+    powers = re.findall(r"\b(\d+(?:[.,]\d+)?)\s*(?:w|watts?)\b", value)
+    value = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:w|watts?)\b", " ", value)
+    return {"version": 1, "category": category, "power": powers[-1] if powers else None,
+            "terms": " ".join(value.split())}
+
+
+def filters_query(filters):
+    return " ".join(str(part) for part in (filters.get("category"),
+        (str(filters["power"]) + "w") if filters.get("power") else None,
+        filters.get("terms")) if part)
+
+
+def refine_filters(previous, refinement):
+    result = dict(previous)
+    # "com microfone" describes the speaker, it does not switch to microphones.
+    source = refinement
+    if re.match(r"^(?:com|sem)\b", fold(refinement)):
+        source = str(result.get("category") or "") + " " + refinement
+    incoming = structured_filters(source)
+    if incoming["category"] and incoming["category"] != result.get("category"):
+        return incoming
+    if incoming["power"]:
+        result["power"] = incoming["power"]
+    terms = result.get("terms") or ""
+    new_terms = incoming["terms"]
+    if re.search(r"\b(?:com|sem) fio\b", new_terms):
+        terms = re.sub(r"\b(?:com|sem) fio\b", "", terms)
+    result["terms"] = " ".join((terms + " " + new_terms).split())
+    return result
+
+
 def constraints(query):
     value = fold(query)
     patterns = []

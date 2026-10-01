@@ -2265,7 +2265,8 @@ async def test_agent(request: Request, _: None = Depends(verify_admin_token)):
         "safety_reason": agent_result.safety_reason,
         "evaluation": {key: agent_result.response_metadata.get(key) for key in (
             "response_source", "informational_only", "used_openai_interpreter", "used_openai_responder",
-            "used_commerce_provider", "consultative_tool_calls", "consultative_searches", "factual_validation", "factual_validation_initial")},
+            "used_commerce_provider", "consultative_tool_calls", "consultative_searches", "factual_validation", "factual_validation_initial",
+            "conversation_memory", "claim_repair", "pending_action")},
         "customer_context": customer_context,
     }
 

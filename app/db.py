@@ -16,6 +16,7 @@ def connect_database_url(database_url: str) -> psycopg.Connection:
         row_factory=dict_row,
         connect_timeout=10,
         prepare_threshold=None,
+        autocommit=False,
     )
 
 
@@ -929,6 +930,22 @@ def _history_identity_candidates(
     return candidates
 
 
+def _reply_before_inbound_filter(before_inbound_id: int | None) -> str:
+    # Inbound IDs order user messages, not deliveries. A delayed reply to an
+    # older message is not evidence that the customer saw its question before
+    # sending the current "sim". A missing current inbound also grants no trust.
+    if before_inbound_id is None:
+        return ""
+    return """
+        AND response.created_at < (
+            SELECT current_inbound.created_at
+            FROM public.ai_inbound_messages AS current_inbound
+            WHERE current_inbound.id = %(before_inbound_id)s
+              AND current_inbound.workspace_id = %(workspace_id)s::uuid
+        )
+    """
+
+
 def load_recent_conversation_turns(
     *,
     conversation_id: str | None,
@@ -996,6 +1013,7 @@ def load_recent_conversation_turns(
                             WHERE response.inbound_id = inbound.id
                               AND response.workspace_id = %(workspace_id)s::uuid
                               AND response.provider_send_ok = true
+                              {_reply_before_inbound_filter(before_inbound_id)}
                             ORDER BY response.id DESC
                             LIMIT 1
                         ) AS delivered ON true
@@ -1078,8 +1096,9 @@ def _load_commerce_states_for_filter(
                   AND response.workspace_id = %(workspace_id)s::uuid
                   {before_filter}
                   AND response.provider_send_ok = true
+                  {_reply_before_inbound_filter(before_inbound_id)}
                   AND response.provider_response ? '_agent_context'
-                ORDER BY response.id DESC
+                ORDER BY inbound.id DESC, response.id DESC
                 LIMIT %(limit)s
                 """,
                 params,
@@ -1096,9 +1115,9 @@ def _load_commerce_states_for_filter(
 
 def load_customer_commerce_sessions(
     person_keys: list[str],
-    *, workspace_id: str | None = None,
+    *, workspace_id: str | None = None, before_inbound_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Load durable commerce sessions for one or more person_key aliases."""
+    """Load sessions, treating later updates as operation facts, not authority."""
     settings = get_settings()
     workspace_id = trusted_workspace(settings, workspace_id)
     keys = [scoped_key(workspace_id, key) for key in person_keys] if workspace_id else []
@@ -1111,13 +1130,19 @@ def load_customer_commerce_sessions(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT person_key, commerce_state, resumable_score, updated_at
+                    SELECT person_key, commerce_state, resumable_score, updated_at,
+                           (%(before_inbound_id)s::bigint IS NULL OR updated_at < (
+                               SELECT current_inbound.created_at
+                               FROM public.ai_inbound_messages AS current_inbound
+                               WHERE current_inbound.id = %(before_inbound_id)s::bigint
+                                 AND current_inbound.workspace_id = %(workspace_id)s::uuid
+                           )) AS predates_inbound
                     FROM public.ai_customer_commerce_sessions
                     WHERE person_key = ANY(%(keys)s)
                       AND workspace_id = %(workspace_id)s::uuid
                     ORDER BY resumable_score DESC, updated_at DESC
                     """,
-                    {"keys": keys, "workspace_id": workspace_id},
+                    {"keys": keys, "workspace_id": workspace_id, "before_inbound_id": before_inbound_id},
                 )
                 rows = cur.fetchall() or []
     except (psycopg.Error, RuntimeError) as exc:
@@ -1129,6 +1154,14 @@ def load_customer_commerce_sessions(
         state = row.get("commerce_state") if isinstance(row, dict) else None
         state = restore_state(state, workspace_id)
         if state:
+            if before_inbound_id is not None and row.get("predates_inbound") is not True:
+                from .commerce_context import CommerceConversationState
+                from .conversation_lifecycle import operation_snapshot
+                # Retries still need IDs/ambiguity from already executed
+                # operations. They must not inherit a review first delivered
+                # after this inbound, or a future conversational question.
+                state = operation_snapshot(CommerceConversationState.from_payload(state),
+                    CommerceConversationState()).model_dump(mode="json")
             sessions.append(state)
     return sessions
 
@@ -1322,7 +1355,8 @@ def load_commerce_conversation_state(
         state=merged or None,
         workspace_id=workspace_id,
     )
-    durable_sessions = load_customer_commerce_sessions(person_keys, workspace_id=workspace_id)
+    durable_sessions = load_customer_commerce_sessions(person_keys, workspace_id=workspace_id,
+        before_inbound_id=before_inbound_id)
     durable = (
         max(durable_sessions, key=commerce_state_resumable_score)
         if durable_sessions
@@ -1330,6 +1364,18 @@ def load_commerce_conversation_state(
     )
     if durable:
         merged = merge_commerce_states(merged, durable)
+        # The last delivered reply may still contain a review which a later
+        # operation snapshot revoked (e.g. cancellation whose reply failed).
+        # Recovering a richer old reply must never restore that permission.
+        for key in ("pending_action", "pending_commerce_action", "order_review_version",
+                    "confirmed_order_review_version", "order_confirmation_status"):
+            if key in durable and durable[key] in (None, "not_ready"):
+                merged[key] = durable[key]
+        registration = durable.get("customer_registration") or {}
+        if registration.get("status") and registration["status"] != "review":
+            merged["customer_registration"] = registration
+            if merged.get("pending_action") == "awaiting_customer_registration_confirmation":
+                merged["pending_action"] = None
 
     print("[sales.context.state] loaded", {
         "candidates": len(collected),
@@ -1438,4 +1484,12 @@ def insert_agent_response(data: dict[str, Any]) -> int | None:
             )
 
             row = cur.fetchone()
-            return get_returning_id(row)
+            response_id = get_returning_id(row)
+    if response_id is not None and safe_data.get("provider_send_ok"):
+        try:
+            from .conversation_lifecycle import commit_delivered_conversation
+            commit_delivered_conversation(data, response_id)
+        except Exception as exc:
+            # The delivery receipt must not be rolled back by optional memory.
+            print("[conversation.commit] failed", {"error_type": type(exc).__name__})
+    return response_id

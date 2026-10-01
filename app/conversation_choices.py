@@ -47,8 +47,19 @@ def resolve_choice(text, state, recent_turns=None):
         if assistant:
             content = assistant.get("content") or ""
             if "?" not in content:
-                return None
-            question = next((part for part in reversed(re.split(r"(?<=[.!?])\s+", content)) if "?" in part), "")
+                # An invitation is a conversational pending choice even without
+                # a question mark. Only the last topic can supply that choice.
+                tail = next((part for part in reversed(re.split(r"(?<=[.!?])\s+", content))
+                             if re.search(r"[a-z]", normalize_text(part))), "")
+                folded_tail = normalize_text(tail)
+                if option[0] != "registration" or not re.search(
+                        r"\b(?:cadastro|cadastrar|cpf|cnpj)\b", folded_tail):
+                    return None
+                if not re.search(r"\b(?:cpf|cnpj|pessoa fisica|pessoa juridica)\b", normalize_text(content)):
+                    return None
+                question = content
+            else:
+                question = next((part for part in reversed(re.split(r"(?<=[.!?])\s+", content)) if "?" in part), "")
     if not question:
         return None
     folded = normalize_text(question)
@@ -65,7 +76,7 @@ def resolve_choice(text, state, recent_turns=None):
     return Choice(kind, value, question)
 
 
-async def handle_short_choice(message, *, state, execute, recent_turns=None):
+async def handle_short_choice(message, *, state, execute, recent_turns=None, defer_ambiguous=False, interpretation=None):
     """Only local collection or informational replies; never provider mutations."""
     if message.image_url or message.transcription_failed:
         return None
@@ -73,6 +84,17 @@ async def handle_short_choice(message, *, state, execute, recent_turns=None):
     if not option:
         return None
     choice = resolve_choice(message.text, state, recent_turns)
+    if choice is None and recent_turns and interpretation is not None:
+        from .turn_understanding import get_turn_understanding
+        understanding = get_turn_understanding(interpretation)
+        if (interpretation._source == "openai" and understanding and understanding.confidence >= .75
+                and option[0] == "registration" and understanding.registration_choice == option[1]):
+            question = next((t.get("content", "") for t in reversed(recent_turns) if t.get("role") == "assistant"), "")
+            choice = Choice("registration", option[1], question)
+    if choice is None and recent_turns and defer_ambiguous:
+        # Missing punctuation or a welcome after an offer must not force a
+        # redundant menu. Let the shared interpreter read the whole exchange.
+        return None
     # Existing data collection and verified checkout selections keep their owner.
     # A stale offer (link/photo/cart) cannot override a newer CPF/CNPJ question.
     registration_choice = bool(choice and choice.kind == "registration"
@@ -118,7 +140,7 @@ async def handle_short_choice(message, *, state, execute, recent_turns=None):
             reply += "\n\nEssa preferência ainda precisa ser confirmada no fechamento do pedido. Você já finalizou o pedido no catálogo?"
     else:
         reply = {
-            "registration": "Você quer orientação para comprar com CPF ou CNPJ, ou está preenchendo um cadastro?",
+            "registration": f"Você quer saber como comprar com {value.upper()} ou iniciar seu cadastro?",
             "payment": "Você quer saber como funciona essa forma de pagamento ou usá-la em um pedido?",
             "delivery": "Você quer saber como funciona a entrega ou retirada, ou combinar isso para um pedido?",
         }[kind]

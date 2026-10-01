@@ -88,6 +88,7 @@ def test_the_rest_of_the_connection_contract_is_unchanged(conexao_espiada):
         pass
     assert registro["row_factory"] is dict_row
     assert registro["connect_timeout"] == 10
+    assert registro["autocommit"] is False
     assert registro["dsn"] == "postgresql://exemplo/db"
 
 

@@ -201,6 +201,9 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             consultation.source_ids = list(dict.fromkeys(
                 consultation.source_ids + evidence.report()["sources"]
             ))
+        # Share the lifecycle carrier through enrichment functions that copy
+        # customer_context (known contacts must not lose the final commit).
+        turn_customer_context["_turn_state"] = {}
         result = await _process_incoming_message(incoming, turn_customer_context)
         if persona_required:
             result = _fail_closed_on_ai_composition_failure(incoming, result)
@@ -222,6 +225,39 @@ async def process_incoming_message(incoming: IncomingMessage, customer_context: 
             }
             from .persona_policy import apply_persona_tone
             result = apply_persona_tone(result, turn_customer_context.get("_active_persona_identity"))
+        turn_state = turn_customer_context.get("_turn_state") or {}
+        if turn_state:
+            from .conversation_lifecycle import finalize_dialogue, persist_state
+            from .memory_scope import stamp_state, trusted_workspace
+            previous = CommerceConversationState.from_payload(turn_state.get("previous"))
+            proposed = CommerceConversationState.from_payload(turn_state.get("proposed"))
+            # Critique/composition may replace presented products. Resolve
+            # references from the accepted answer, retaining operation facts.
+            proposed = evolve_commerce_state(proposed, result)
+            final_state = finalize_dialogue(result, proposed, previous)
+            result.response_metadata["commerce_state"] = stamp_state(
+                final_state.model_dump(mode="json"), trusted_workspace(settings, incoming.workspace_id))
+            result.response_metadata["working_memory"] = build_working_memory(final_state)
+            result.response_metadata["conversation_commit"] = {
+                "version": 1, "conversation_id": incoming.conversation_id,
+                "pending_delivery": bool((incoming.raw or {}).get("inbound_id")),
+            }
+            # Real channel turns commit conversational memory after successful
+            # delivery in insert_agent_response; manual replays commit locally.
+            if not (incoming.raw or {}).get("inbound_id"):
+                persist_state(incoming, final_state, persist=persist_customer_commerce_session)
+                from .conversation_memory import update_conversation_memory
+                result.response_metadata["conversation_memory"] = update_conversation_memory(
+                    incoming, result, settings, previous_state=previous.model_dump(mode="json"))
+            log_event("conversation.finalized", {
+                "response_source": result.response_metadata.get("response_source"),
+                "active_topic": final_state.active_topic,
+                "pending_action": final_state.pending_action,
+                "has_pending_question": bool(final_state.pending_followup),
+                "presented_product_count": len(final_state.last_presented_products),
+                "pending_delivery": result.response_metadata["conversation_commit"]["pending_delivery"],
+                "memory_reason": (result.response_metadata.get("conversation_memory") or {}).get("reason"),
+            })
         return result
     finally:
         reset_publication(publication_token)
@@ -328,6 +364,8 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
         commerce_state = CommerceConversationState.from_payload(
             load_commerce_conversation_state(**state_lookup)
         )
+    turn_state = customer_context.setdefault("_turn_state", {})
+    turn_state["previous"] = commerce_state.model_dump(mode="json")
     # New product photo starts a fresh identification — never price the
     # previous SKU while Vision analyzes the newly received product.
     if (incoming.image_url or "").strip():
@@ -392,6 +430,7 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
     with runtime_stage("agent_decision"):
         result = await generate_agent_reply_async(incoming, customer_context)
     commerce_state = evolve_commerce_state(commerce_state, result)
+    turn_state["proposed"] = commerce_state.model_dump(mode="json")
     from .memory_scope import stamp_state, trusted_workspace
 
     result.response_metadata["commerce_state"] = stamp_state(
@@ -399,20 +438,12 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
     )
     result.response_metadata["working_memory"] = build_working_memory(commerce_state)
     upsert_customer_identity_links(incoming, commerce_state)
-    persist_customer_commerce_session(
-        person_keys=resolve_person_key_candidates(
-            sender_key=incoming.sender_key,
-            sender_phone=incoming.sender_phone,
-            state=commerce_state,
-            workspace_id=incoming.workspace_id,
-        ),
-        workspace_id=incoming.workspace_id,
-        commerce_state=commerce_state.model_dump(mode="json"),
-        channel=incoming.channel,
-        conversation_id=incoming.conversation_id,
-        sender_key=incoming.sender_key,
-        sender_phone=incoming.sender_phone,
-    )
+    if inbound_id is not None:
+        from .conversation_lifecycle import operation_snapshot, persist_state
+        previous = CommerceConversationState.from_payload(turn_state["previous"])
+        operational = operation_snapshot(commerce_state, previous)
+        if operational != previous:
+            persist_state(incoming, operational, persist=persist_customer_commerce_session)
     decision = build_agent_decision(
         incoming,
         result,
@@ -434,6 +465,11 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
         ).split(",")
         if domain.strip()
     }
+    if getattr(settings, "agent_factual_validation_mode", "enforce") == "enforce":
+        from .conversation_repair import repair_informational_claims
+        result = await repair_informational_claims(incoming, result, decision=decision,
+            settings=settings, state=commerce_state.model_dump(mode="json"),
+            trusted_domains=trusted_fact_domains)
     result = apply_factual_validation(
         result,
         decision=decision,
@@ -653,6 +689,9 @@ async def _process_incoming_message(incoming: IncomingMessage, customer_context:
                 from app.conversation_summary_scope import summary_conversation_key
 
                 envelope = AgentTurnEnvelope.model_validate(envelope_payload)
+                # Conversation summaries now have one final/delivered lifecycle.
+                # Contact/instruction proposals retain their existing policy.
+                envelope = envelope.model_copy(update={"conversation_summary_delta": None})
                 memory_result = process_agent_memory_proposals(
                     envelope=envelope,
                     tenant_id=str(

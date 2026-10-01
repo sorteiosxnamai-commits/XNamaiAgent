@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -31,11 +32,11 @@ _ORDER_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _STOCK_POSITIVE_RE = re.compile(
-    r"\b(em estoque|dispon[ií]vel|pronto para envio)\b",
+    r"\b(em estoque|dispon[ií]ve(?:l|is)|pront[oa]s? para envio)\b",
     flags=re.IGNORECASE,
 )
 _STOCK_NEGATIVE_RE = re.compile(
-    r"\b(esgotado|sem estoque|indispon[ií]vel)\b",
+    r"\b(esgotad[oa]s?|sem estoque|indispon[ií]ve(?:l|is))\b",
     flags=re.IGNORECASE,
 )
 _PROMO_RE = re.compile(
@@ -79,6 +80,27 @@ _SURCHARGE_PERCENT_RE = re.compile(
     r"|\b\d+(?:[.,]\d+)?\s*%\s*(?:a mais|adiciona(?:l|is)|de acr[eé]scimo)\b",
     re.IGNORECASE,
 )
+_PERCENT_RE = re.compile(r"(?<!\w)(\d+(?:[.,]\d+)?)\s*(?:%|por cento\b)", re.IGNORECASE)
+_NON_MEMBER_RE = re.compile(
+    r"\b(?:quem (?:ainda )?nao (?:e|for) (?:membro|assinante|associad[oa]|d[oa] (?:club|clube))"
+    r"|quem nao faz parte d[oa] (?:club|clube)"
+    r"|(?:clientes? )?nao[ -](?:membros?|assinantes?|associad[oa]s?)"
+    r"|(?:clientes? )?sem (?:o )?(?:club|clube)"
+    r"|quem nao (?:tem|possui) (?:uma )?assinatura(?: ativa)?"
+    r"|se voce nao for (?:membro|assinante|associad[oa]))"
+    r"(?: (?:do|da|ao) (?:club|clube))?(?: xnamai)?\b"
+)
+_SURCHARGE_WORDS = frozenset((
+    "para os o a as um uma de do da dos das no na nos nas em e com ao aos por sobre "
+    "ha tem tera existe aplica aplicam aplicado aplicada acrescimo acrescimos "
+    "acrescido acrescida acrescidos acrescidas acrescenta acrescentam acrescentado acrescentados "
+    "adicional adicionais adiciona adicionam adicionado adicionados soma somam "
+    "somado somados se incide recebem recebe pagam paga pagar valores valor "
+    "precos preco catalogo informado informados exibido exibidos publicado "
+    "publicados tabelado tabelados base referencia mais fica ficam maior maiores "
+    "sao ser sera serao tem possuem possui sem assinatura regra geral comercial "
+    "xnamai club clube atual atualmente padrao normalmente percentual"
+).split())
 _IMMEDIATE_DELIVERY_RE = re.compile(
     r"\b(pronta entrega|entrega imediata|envio imediato|sai hoje)\b",
     flags=re.IGNORECASE,
@@ -560,6 +582,148 @@ def _has_value(values: list[Any]) -> bool:
     return any(value not in (None, "", [], {}, False) for value in values)
 
 
+def _fold_claim(text: str) -> str:
+    value = unicodedata.normalize("NFKD", text.casefold())
+    return re.sub(r"\s+", " ", "".join(c for c in value if not unicodedata.combining(c)))
+
+
+def _claim_sentences(text: str) -> list[str]:
+    # Keep decimal percentages together. Line breaks separate independent claims.
+    return [part.strip() for part in re.split(r"(?<=[.!?;])\s+|\n+", text) if part.strip()]
+
+
+_INSTITUTIONAL_AVAILABILITY_SUBJECT = (
+    r"(?:(?:o|a|nosso|nossa|este|esse)\s+)?"
+    r"(?:catalogo|site|portal|link(?:\s+(?:do|para o)\s+(?:catalogo|site|portal))?"
+    r"|acesso\s+(?:ao|para o)\s+(?:catalogo|site|portal))"
+    r"(?:\s+(?:online|digital|completo|oficial))*(?:\s+da\s+xnamai)?"
+)
+_INSTITUTIONAL_AVAILABILITY_PREFIX_RE = re.compile(
+    rf"{_INSTITUTIONAL_AVAILABILITY_SUBJECT}"
+    r"(?:\s+(?:ja|agora|tambem|ainda|sempre|nao))*"
+    r"(?:\s+(?:esta|fica|segue|permanece|estara|ficara))?"
+    r"(?:\s+(?:ja|agora|tambem|ainda|sempre|nao))*\s*"
+)
+
+
+def _stock_claims(text: str) -> tuple[bool, bool]:
+    """Classify each availability claim by its local subject, never the topic.
+
+    Public catalog access is not product inventory. Only an explicit, bounded
+    institutional subject exempts that occurrence; nearby product claims or an
+    ambiguous "está disponível" still require current inventory evidence.
+    """
+    def concerns_stock(match: re.Match) -> bool:
+        claim = _fold_claim(match.group())
+        if not re.fullmatch(r"(?:in)?disponive(?:l|is)", claim):
+            return True
+        # Never exempt "o produto do catálogo está disponível": the subject
+        # must occupy the whole clause before this specific availability word.
+        prefix = re.split(r"[.!?;:,\n]", text[:match.start()])[-1]
+        prefix = _fold_claim(re.sub(r"[*_`]+", "", prefix)).strip()
+        prefix = re.sub(r"^[\W\d_]+", "", prefix)
+        return _INSTITUTIONAL_AVAILABILITY_PREFIX_RE.fullmatch(prefix) is None
+
+    return (any(concerns_stock(match) for match in _STOCK_POSITIVE_RE.finditer(text)),
+            any(concerns_stock(match) for match in _STOCK_NEGATIVE_RE.finditer(text)))
+
+
+def _institutional_surcharge(sentence: str) -> Decimal | None:
+    """Parse only a generic non-member surcharge, never a customer adjustment.
+
+    This small grammar preserves the three facts of the published policy:
+    audience, direction and percentage. A matching number alone is not evidence.
+    Unknown entity/action words fail closed instead of licensing a product/order.
+    """
+    folded = _fold_claim(sentence)
+    percentages = list(_PERCENT_RE.finditer(folded))
+    audience = list(_NON_MEMBER_RE.finditer(folded))
+    if len(percentages) != 1 or len(audience) != 1:
+        return None
+    value = Decimal(percentages[0].group(1).replace(",", "."))
+    without_audience = _NON_MEMBER_RE.sub(" ", folded)
+    if re.search(r"\b(?:nao|sem|desconto|off|menos|ate|membro|membros|assinante|assinantes)\b|-\s*\d", without_audience):
+        return None
+    if not re.search(r"\b(?:acrescimo|acrescid[oa]s?|acrescenta\w*|adicional|adicionais|a mais|maior|maiores|soma|somam|somado|somados)\b|\bmais\s+(?=\d)|\+\s*(?=\d)", without_audience):
+        return None
+    words = set(re.findall(r"\w+", _PERCENT_RE.sub(" ", without_audience)))
+    return value if words <= _SURCHARGE_WORDS else None
+
+
+def _check_catalog_pricing(report: FactualValidationReport, text: str) -> None:
+    from .published_knowledge import published_policy
+
+    policy = published_policy("catalog_pricing")
+    policy_values = [_institutional_surcharge(part) for part in _claim_sentences(policy or "")]
+    policy_values = [value for value in policy_values if value is not None]
+    approved_percent = (policy_values[0] if len(policy_values) == 1
+                        and len(_PERCENT_RE.findall(policy or "")) == 1 else None)
+    for sentence in _claim_sentences(text):
+        folded = _fold_claim(sentence)
+        percent = _PERCENT_RE.search(folded)
+        surcharge = bool(_SURCHARGE_PERCENT_RE.search(sentence) or re.search(
+            r"\b(?:acrescimo|acrescid\w*|acrescenta\w*|adiciona\w*|soma\w*|a mais|mais caro\w*)\b", folded))
+        membership_price = bool(percent and re.search(r"\b(?:membro\w*|assinante\w*|club|clube)\b", folded))
+        if (percent and surcharge) or membership_price or (surcharge and _NON_MEMBER_RE.search(folded)):
+            report.checked_claims += 1
+            parsed_percent = _institutional_surcharge(sentence)
+            if parsed_percent is not None and parsed_percent == approved_percent:
+                report.supported_claims.append(FactClaim(kind="condition", claim="catalog_surcharge",
+                    reason="published_catalog_pricing_supported"))
+            else:
+                _add_violation(report, kind="condition", claim="catalog_surcharge",
+                    reason="catalog_surcharge_without_published_policy")
+
+        # Membership in memory is self-reported, never subscription evidence.
+        # Conditional guidance ("se você for membro") is not a confirmation.
+        direct_membership = re.search(
+            r"\bvoce\s+(?:(?:ja|ainda|nao)\s+)*(?:e|esta|tem|possui|continua|segue)\s+"
+            r"(?:(?:como|um|uma|com|a|sua)\s+)*(?:membro|assinante|assinatura|associad[oa]|d[oa] (?:club|clube))\b"
+            r"|\b(?:sua assinatura|seu cadastro)\b[^.!?;]{0,35}"
+            r"\b(?:ativa|ativo|confirmada|confirmado|membro|assinante|associad[oa])\b",
+            folded,
+        )
+        conditional = re.match(r"\W*(?:se|caso)\b", folded)
+        prefix = folded[:direct_membership.start()] if direct_membership else ""
+        negated_confirmation = re.search(
+            r"\bnao (?:(?:consigo|posso) (?:confirmar|verificar|afirmar|comprovar)|confirma|comprova)"
+            r"(?: (?:que|se))?\s*$", prefix)
+        if direct_membership and not conditional and not negated_confirmation and not folded.rstrip().endswith("?"):
+            report.checked_claims += 1
+            _add_violation(report, kind="condition", claim="club_membership",
+                reason="club_membership_missing_verified_subscription")
+
+
+def _order_contents_claims(text: str, metadata: dict) -> tuple[bool, list[int]]:
+    """Separate order-content assertions from advice about product demand."""
+    folded = _fold_claim(text)
+    order_reference = bool(re.search(r"\b(?:seu|este|esse|aquele|no|do|o) pedido\b|\bpedido\s*#?\d+\b", folded))
+    order_topic = "order" in str(metadata.get("active_topic") or "")
+    counts: list[int] = []
+    details = False
+    for sentence in _claim_sentences(text):
+        normalized = _fold_claim(sentence)
+        # Generic advice is not a report on the customer's order, even if an
+        # older order is still the active topic. Do not exempt specific orders.
+        specific = re.search(r"\b(?:seu|este|esse|aquele) pedido\b|\bpedido\s*#?\d+\b", normalized)
+        if not specific and re.match(r"\W*(?:se|caso|quando|para)\b", normalized):
+            continue
+        count = re.search(r"\b(\d+|um|uma)\s+ite(?:m|ns)\b", normalized)
+        asserting = count and (
+            re.search(r"\b(?:tem|possui|contem|inclui|apareceu|apareceram|consta|constam|encontrei|sao|ha|veio|vieram|com)\b", normalized[:count.start()])
+            or re.match(r"\s*(?:apareceu|apareceram|consta|constam|vieram)\b", normalized[count.end():])
+            or re.fullmatch(r"\W*(?:(?:so|apenas)\s+)?(?:\d+|um|uma)\s+ite(?:m|ns)(?:\s+no total)?\W*", normalized)
+        )
+        own_reference = re.search(r"\bpedido\b", normalized)
+        if count and (order_reference or order_topic) and (asserting or own_reference):
+            counts.append(1 if count.group(1) in {"um", "uma"} else int(count.group(1)))
+        if re.search(r"\b(?:seu|este|esse|o) pedido\b[^.!?;]{0,50}\b(?:contem|inclui)\b"
+                     r"|\b(?:itens|produtos) (?:do|no|deste|desse) (?:seu )?pedido\b[^.!?;]{0,40}\b(?:sao|estao|constam|aparecem)\b"
+                     r"|\b(?:estes|esses|encontrei)\b[^.!?;]{0,30}\b(?:itens|produtos) (?:do|no) (?:seu )?pedido\b", normalized):
+            details = True
+    return details or bool(counts), counts
+
+
 def _check_commercial_conditions(
     report: FactualValidationReport,
     *,
@@ -600,18 +764,6 @@ def _check_commercial_conditions(
             pack.has_promotional_price,
             "percent_discount_without_promotional_price_evidence",
         )
-    # A published general surcharge cannot prove a customer's membership or
-    # authorize a different percentage on their order. Only its quotation is
-    # supported; leave all other commercial checks in place.
-    from .published_knowledge import published_policy
-    def normalize_policy(value):
-        return re.sub(r"\s+", " ", re.sub(r"[*_]", "", value)).strip().casefold()
-    pricing = published_policy("catalog_pricing")
-    unsupported_text = text
-    if pricing:
-        unsupported_text = normalize_policy(text).replace(normalize_policy(pricing), "")
-    if _SURCHARGE_PERCENT_RE.search(unsupported_text):
-        _claim("condition", "catalog_surcharge", False, "catalog_surcharge_without_published_policy")
     if _IMMEDIATE_DELIVERY_RE.search(text):
         supported = any(
             value is True for value in _payload_values(payload, ("immediate_delivery_supported",))
@@ -670,19 +822,16 @@ def validate_factual_response(
     # Catalog evidence proves a product exists, never that it belongs to an order.
     payload = result.commercial_data or {}
     metadata = result.response_metadata or {}
-    count_claim = re.search(r"\b(?:s[oó]|apenas|tem|possui|apareceu|com|s[aã]o)?\s*(\d+|um|uma)\s+ite(?:m|ns)\b", text, re.IGNORECASE)
-    order_context = "pedido" in text.casefold() or "order" in str(metadata.get("active_topic") or "")
+    content_claim, item_counts = _order_contents_claims(text, metadata)
     order_catalog_mix = metadata.get("goal") == "after_sales" and bool(payload.get("products"))
-    if (count_claim and order_context) or metadata.get("order_contents_requested") or order_catalog_mix:
+    if content_claim or metadata.get("order_contents_requested") or order_catalog_mix:
         report.checked_claims += 1
         confirmed = payload.get("items_confirmed") is True and isinstance(payload.get("items"), list)
         if not confirmed:
             _add_violation(report, kind="condition", claim="order_contents", reason="order_contents_missing_verified_items")
-        elif count_claim:
-            raw_count = count_claim.group(1).lower()
-            count = 1 if raw_count in {"um", "uma"} else int(raw_count)
+        for count in item_counts if confirmed else []:
             if count != len(payload["items"]):
-                _add_violation(report, kind="condition", claim=raw_count, reason="order_item_count_mismatch")
+                _add_violation(report, kind="condition", claim=str(count), reason="order_item_count_mismatch")
 
     # Public entry points are institutional facts; product/payment URLs still
     # require current tool evidence. Do not trust every path on these domains.
@@ -811,14 +960,15 @@ def validate_factual_response(
                 reason="promo_without_promotional_price_evidence",
             )
 
+    positive_stock_claim, negative_stock_claim = _stock_claims(text)
     if (pack.stock_available is None
             and (pack.stock_unconfirmed or (result.response_metadata or {}).get("response_source") == "consultative_openai")
-            and (_STOCK_POSITIVE_RE.search(text) or _STOCK_NEGATIVE_RE.search(text))):
+            and (positive_stock_claim or negative_stock_claim)):
         report.checked_claims += 1
         _add_violation(report, kind="stock", claim="availability",
                        reason="stock_missing_evidence")
     if pack.stock_available is not None and decision.domain == "commerce":
-        if _STOCK_POSITIVE_RE.search(text):
+        if positive_stock_claim:
             report.checked_claims += 1
             if pack.stock_available:
                 report.supported_claims.append(
@@ -842,7 +992,7 @@ def validate_factual_response(
                         reason="stock_claim_conflicts_with_evidence",
                     )
                 )
-        if _STOCK_NEGATIVE_RE.search(text):
+        if negative_stock_claim:
             report.checked_claims += 1
             if not pack.stock_available:
                 report.supported_claims.append(
@@ -899,6 +1049,8 @@ def validate_factual_response(
                 reason="payment_confirmed_missing_evidence",
             )
 
+    if decision.domain in {"commerce", "store_general"}:
+        _check_catalog_pricing(report, text)
     if decision.domain == "commerce":
         _check_commercial_conditions(report, text=text, pack=pack, result=result)
 

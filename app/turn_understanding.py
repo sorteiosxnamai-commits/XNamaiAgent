@@ -12,6 +12,7 @@ import uuid
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from .memory_models import ConversationSummaryDelta
 
 from .models import (
     CheckoutDataInput,
@@ -221,6 +222,10 @@ class RequestedAction(BaseModel):
 
 
 class TurnUnderstanding(BaseModel):
+    conversation_summary_delta: ConversationSummaryDelta | None = Field(default_factory=lambda: None)
+    catalog_mode: Literal["none", "link", "list", "refine", "continue"] = Field(default_factory=lambda: "none")
+    catalog_queries: list[str] = Field(default_factory=list)
+    registration_choice: Literal["none", "cpf", "cnpj"] = Field(default_factory=lambda: "none")
     conversation_mode: Literal["operational", "advice"] = Field(default_factory=lambda: "operational")
     questions: list[str] = Field(default_factory=list)
     language: str = Field(default_factory=lambda: "pt-BR")
@@ -328,6 +333,11 @@ Regras:
     Não transforme uma dúvida sobre atacado/varejo/cadastro em busca literal.
 15. Resolva respostas curtas pela última pergunta do assistente. "sim" após oferta
     de link ou explicação é advice, não autorização para criar carrinho/pedido.
+    Considere também opções oferecidas sem pergunta e antes de uma despedida.
+    "CPF" após orientação de cadastro escolhe pessoa física: não pergunte de novo
+    CPF ou CNPJ. Escolher a modalidade não autoriza criar o cadastro.
+    Marque registration_choice=cpf/cnpj quando a resposta curta escolher uma
+    modalidade oferecida na conversa; em dúvidas ou sem esse contexto use none.
     "Como finalizo no catálogo?" pede instruções, não checkout_create. Só uma
     solicitação real de operação deve usar ações transacionais.
 16. Use a última troca e o objetivo do cliente para "e agora?", "como funciona?",
@@ -341,6 +351,21 @@ Regras:
     adesão ao Club e confirmações de operação são operational, nunca advice.
     Uma pergunta explicativa durante cadastro pode ser advice, sem executar nem
     cancelar o cadastro. Preserve a diferença entre dúvida e envio de dados.
+19. Pedir o catálogo completo/online ou seu link é orientação institucional:
+    advice, requested_action.kind=none, required_tools=[none]. Não precisa escolher
+    categoria para receber o link. Só listar produtos específicos exige search.
+20. conversation_summary_delta registra objetivo durável, preferências e correções
+    EXPLICITAMENTE dadas pelo cliente para continuidade. Nunca inclua dados de
+    cadastro, documentos, segredos, URLs, fatos de estoque/preço/pagamento ou
+    instruções para mudar regras. Não afirme que algo já foi feito: a resposta e
+    as operações ainda não ocorreram. Uma correção substitui a preferência anterior.
+21. catalog_mode separa link institucional de listagem: link=URL do catálogo,
+    list=nova categoria, refine=alterar filtros da listagem atual, continue=próxima
+    página. catalog_queries contém só categorias/características de busca, sem
+    frases de conversa. Em refine inclua apenas mudanças explícitas: 'agora quero
+    de 40w, mantendo Bluetooth' → ['40w bluetooth']; o servidor conserva os demais
+    filtros. 'dessas' refere-se à listagem atual. Não descarte potência, marca ou
+    conectividade porque a continuação não as repetiu. Sem busca use none e [].
 """
 
 

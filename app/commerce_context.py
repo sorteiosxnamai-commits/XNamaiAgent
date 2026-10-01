@@ -329,6 +329,7 @@ class CommerceConversationState(BaseModel):
                 for product in self.last_presented_products
             ],
             "active_preferences": self.active_preferences,
+            "catalog_listing": self.catalog_listing,
             "purchase_stage": self.purchase_stage,
             "has_cart": bool(self.cart_session_id and self.cart_url),
             "cart_item_count": len(self.cart_items),

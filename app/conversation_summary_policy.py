@@ -45,14 +45,20 @@ class ConversationSummary(BaseModel):
 
 
 _SENSITIVE_RE = re.compile(
-    r"\b(cvv|cvc|cart[aã]o|password|senha|token|api[_-]?key|cpf)\b"
-    r"|\b\d{13,19}\b",
+    r"\b(cvv|cvc|cart[aã]o|password|senha|token|api[_-]?key|cpf|cnpj|rg|cep)\b"
+    r"|\b\d{10,19}\b|\b\d{3}\.\d{3}\.\d{3}-\d{2}\b"
+    r"|\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b"
+    r"|[\w.+-]+@[\w.-]+\.[a-z]{2,}"
+    r"|(?:\+?55\s*)?\(?\d{2}\)?\s*\d{4,5}[ -]\d{4}\b"
+    r"|\b(meu nome|nome completo|me chamo|my name|endere[cç]o|address|rua|avenida)\b",
     flags=re.IGNORECASE,
 )
 _INJECTION_RE = re.compile(
     r"\b(ignore|ignorar|desconsidere|override|system\s+message|"
     r"developer\s+message|ignore previous|finja que|mude as regras)\b"
-    r"|<\s*script\b|javascript:|\bdrop\s+table\b|\bunion\s+select\b",
+    r"|\b(responda|sempre responda|revele|obede[cç]a|instru[cç][aã]o|"
+    r"prompt|system|developer|assistant|always respond|reveal|forget previous)\b"
+    r"|<[^>]+>|javascript:|\bdrop\s+table\b|\bunion\s+select\b",
     flags=re.IGNORECASE,
 )
 _URL_RE = re.compile(r"https?://|www\.", flags=re.IGNORECASE)
@@ -63,6 +69,9 @@ _COMMERCIAL_VOLATILE_RE = re.compile(
     r"|\bfrete\b"
     r"|\b(status|rastreio)\s+(do\s+)?pedido\b"
     r"|\bpedido\s*#?\s*\d{3,}\b"
+    r"|\bpre[cç]o\b[^\n.]{0,35}\d"
+    r"|\bpedido\b[^\n.]{0,40}\b(faturado|cancelado|enviado|entregue|aprovado)\b"
+    r"|\bpagamento\s+(aprovado|confirmado|pendente|recusado)\b"
     r"|\bpagamento\.php\b",
     flags=re.IGNORECASE,
 )

@@ -38,6 +38,7 @@ TRANSPORT_MODULES = {"app/openai_gateway.py", "app/openai_runtime.py"}
 CUSTOMER_FACING_CALL_TYPES = {
     "response_composition",
     "response_composition_envelope",
+    "claim_repair",
     "clarification",
     "tool_loop",
     "legacy",

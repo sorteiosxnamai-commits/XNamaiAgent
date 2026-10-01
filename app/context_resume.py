@@ -51,7 +51,7 @@ def commerce_state_resumable_score(state: dict[str, Any] | CommerceConversationS
         score += 10
     if payload.get("active_product") or payload.get("last_presented_products"):
         score += 5
-    if payload.get("conversation_goal") or payload.get("pending_followup"):
+    if payload.get("conversation_goal") or payload.get("pending_followup") or payload.get("active_topic"):
         score += 1
     return score
 
@@ -96,6 +96,15 @@ def merge_commerce_states(
             merged[key] = primary[key]
     if "pending_followup" in (primary or {}):
         merged["pending_followup"] = primary["pending_followup"]
+    # A richer previous order is evidence, never fresh authorization. Explicit
+    # clearing in the latest snapshot must not resurrect an undelivered review.
+    for key in ("pending_action", "pending_commerce_action", "order_confirmation_status",
+                "order_review_version", "confirmed_order_review_version"):
+        if key in (primary or {}):
+            if (key == "pending_action" and primary[key] is None
+                    and donor.get(key) == "awaiting_payment" and not primary.get("order_id")):
+                continue  # Recover known payment context, never permission to act.
+            merged[key] = primary[key]
     if primary_registration:
         merged["customer_registration"] = primary_registration
         if merged.get("pending_action") in _REGISTRATION_PENDING_ACTIONS:

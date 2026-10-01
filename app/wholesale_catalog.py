@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import re
 
-from .commerce.catalog_filters import CATEGORIES, fold, matches
+from .commerce.catalog_filters import CATEGORIES, fold, matches, structured_filters, filters_query, refine_filters
 from .commerce.product_facts import without_unconfirmed_facts
 from .models import AgentResult
 from .order_queries import money
 
 MORE = r"(?:mais|continue|continua|proximos|mostrar mais|ver mais|tem mais|mais produtos|mais opcoes)[?.! ]*"
+
+
+def _query_entry(query, filters=None):
+    filters = filters or structured_filters(query)
+    return {"query": query, "label": query, "offset": 0, "done": False, "filters": filters}
 
 
 def requested_queries(text, state, interpretation=None):
@@ -17,13 +22,43 @@ def requested_queries(text, state, interpretation=None):
         return None
     if re.search(r"\b(esse|essa|este|esta|ele|ela)\b", value) and state.active_product:
         return None
-    if re.search(r"\b(?:quero|preciso|separa|separe)\s+\d+\s+(?:unidades?\s+(?:de\s+)?)?", value):
+    if re.search(r"\b(?:quero|preciso|separa|separe)\s+\d+\s+(?!watts?\b|w\b)(?:unidades?\s+(?:de\s+)?)?", value):
         return None
     if interpretation is not None and (interpretation.purchase_action or interpretation.order_action or interpretation.payment_action):
         return None
     previous = (state.catalog_listing or {}).get("queries") or []
+    if state.active_topic and state.active_topic not in {"product_catalog", "catalog", "products"}:
+        previous = []
+    # Semantic interpretation supplies filter changes; the server owns merging
+    # and strict execution. This handles paraphrases without more phrase routes.
+    from .turn_understanding import get_turn_understanding
+    understanding = get_turn_understanding(interpretation) if interpretation else None
+    if understanding and getattr(interpretation, "_source", None) == "openai" and understanding.confidence >= .75:
+        mode = understanding.catalog_mode
+        changes = [q.strip()[:300] for q in understanding.catalog_queries[:6] if q.strip()]
+        if mode == "link":
+            return None
+        if mode == "continue" and previous:
+            return [dict(q) for q in previous]
+        if mode == "refine" and len(previous) == 1 and len(changes) == 1:
+            base = previous[0].get("filters") or structured_filters(previous[0]["query"])
+            merged = refine_filters(base, changes[0])
+            return [_query_entry(filters_query(merged), merged)]
+        if mode == "list" and changes:
+            return [_query_entry(q) for q in changes]
     if previous and re.fullmatch(MORE, value):
         return [dict(q) for q in previous]
+    # Resolve pronouns before detecting category names inside requested features.
+    # Persist explicit filters rather than asking the model to reconstruct them.
+    refinement = re.sub(r"^(?:dess[ae]s|dest[ae]s|desses produtos|dessas opcoes)\b[, ]*", "", value)
+    contextual = refinement != value
+    refinement = re.sub(r"^(?:(?:so|somente|apenas|quero|os|as|o|a|de)\s+)+", "", refinement).strip(" .!?")
+    if previous and len(previous) == 1 and (contextual or re.match(
+            r"^(?:so\b|somente\b|apenas\b|de\b|com\b|sem\b|\d+\s*(?:w|watts?)\b)", value)):
+        base = previous[0].get("filters") or structured_filters(previous[0]["query"])
+        merged = refine_filters(base, refinement)
+        query = filters_query(merged)
+        return [_query_entry(query, merged)]
     found = []
     for category, pattern in CATEGORIES.items():
         for match in re.finditer(pattern, value):
@@ -49,16 +84,9 @@ def requested_queries(text, state, interpretation=None):
         rest = re.sub(r"(?:\s+e\s*)?$", "", rest.strip(" ,.;?!"))
         query = (category + " " + rest).strip()
         if query not in [q["query"] for q in queries]:
-            queries.append({"query": query, "label": query, "offset": 0, "done": False})
+            queries.append(_query_entry(query))
     if queries:
         return queries
-    if previous and len(previous) == 1 and re.match(r"^(?:so\b|somente\b|apenas\b|de\b|com\b|sem\b|\d+\s*(?:w|watts?)\b)", value):
-        refine = re.sub(r"^(?:(?:so|somente|apenas|quero|de)\s+)+", "", value).strip(" .!?")
-        base = previous[0]["query"]
-        if re.search(r"\d+(?:[.,]\d+)?\s*(?:w|watts?)\b", refine):
-            base = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:w|watts?)\b", "", base)
-        query = " ".join((base + " " + refine).split())
-        return [{"query": query, "label": query, "offset": 0, "done": False}]
     if re.search(r"\b(?:quais produtos|que produtos|listar produtos|lista de produtos|mostrar produtos|ver catalogo|mostra o catalogo)\b", value):
         return [{"query": "", "label": "Catálogo", "offset": 0, "done": False}]
     # The interpreter can identify categories beyond the common alias vocabulary.

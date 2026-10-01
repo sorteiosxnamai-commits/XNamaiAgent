@@ -454,7 +454,7 @@ def test_the_openai_route_also_answers_generic_browse_before_the_tool_loop():
 
     from app import openai_agent
 
-    fonte = inspect.getsource(openai_agent.generate_agent_reply_async)
+    fonte = inspect.getsource(openai_agent._generate_agent_reply_async)
     assert "_generic_catalog_fast_path(message, only_browse=True)" in fonte
     assert fonte.index("_generic_catalog_fast_path") < fonte.index(
         "generate_openai_reply_async(message, customer_context, facts)"

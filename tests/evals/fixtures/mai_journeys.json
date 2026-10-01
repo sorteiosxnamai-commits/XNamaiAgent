@@ -1,0 +1,29 @@
+[
+  {"id":"catalog_registration","turns":[
+    {"text":"Boa tarde! Pode me enviar o catálogo?","contains":["https://xnamai.meuspedidos.com.br/","15%"],"no_commerce_lookup":true},
+    {"text":"cpf","contains":["CPF"],"forbidden":["qual produto","CPF ou CNPJ"],"no_commerce_lookup":true,"pending_action":"awaiting_customer_registration_data"},
+    {"text":"Meu nome é Leonardo de Teste","contains":["CPF"],"forbidden":["qual produto"],"no_commerce_lookup":true,"pending_action":"awaiting_customer_registration_data"}
+  ]},
+  {"id":"advice","turns":[
+    {"text":"Tenho uma loja de bairro e quero melhorar o mix sem prender muito dinheiro. Não quero consultar produtos agora.","no_commerce_lookup":true},
+    {"text":"E como descubro quais giram mais?","no_commerce_lookup":true},
+    {"text":"Pode resumir isso em três passos?","no_commerce_lookup":true},
+    {"text":"Agora quero entender como faço cadastro com CNPJ.","contains":["CNPJ","https://xnamai.meuspedidos.com.br/"]},
+    {"text":"E com CPF?","contains":["CPF","atendimento"]}
+  ]},
+  {"id":"order","turns":[
+    {"text":"Fiz um pedido no carrinho.","contains":["pedido","finalizar"]},
+    {"text":"95805","forbidden":["produto no catálogo"],"sources":["verified_order_query"]},
+    {"text":"Okay e o que faço agora?","forbidden":["produto no catálogo","qual produto"]},
+    {"text":"Não quero consultar outro pedido, só entender o que significa não faturado.","contains":["fatur"],"no_commerce_lookup":true}
+  ]},
+  {"id":"catalog_filters","turns":[
+    {"text":"Liste caixas de som 120w.","product_filter":"caixa de som 120w"},
+    {"text":"Dessas, só as com Bluetooth.","product_filter":"caixa de som 120w bluetooth"},
+    {"text":"Agora quero de 40w, mantendo Bluetooth.","product_filter":"caixa de som 40w bluetooth"}
+  ]},
+  {"id":"club_policy","turns":[
+    {"text":"Posso comprar sem ser membro do Club Xnamai?","contains":["15%"],"no_commerce_lookup":true},
+    {"text":"Pode explicar isso de um jeito mais simples?","contains":["15%"],"no_commerce_lookup":true}
+  ]}
+]

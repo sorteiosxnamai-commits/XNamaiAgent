@@ -33,6 +33,44 @@ def owns_advice(interpretation, state):
     return True
 
 
+def owns_conversation(interpretation, state):
+    """One conversational owner; ambiguity about wording is not a SKU query."""
+    if owns_advice(interpretation, state):
+        return True
+    understanding = get_turn_understanding(interpretation)
+    if (interpretation._source != "openai" or understanding is None
+            or interpretation.domain not in {"commerce", "store_general", "greeting"}
+            or understanding.confidence < .75):
+        return False
+    # Reuse exactly the same action boundary, including hidden checkout fields.
+    candidate = understanding.model_copy(update={"conversation_mode": "advice"})
+    if understanding.catalog_mode == "link" and candidate.requested_action and candidate.requested_action.kind in {"none", "search"}:
+        candidate.requested_action = candidate.requested_action.model_copy(update={"kind": "none"})
+        candidate.required_tools = ["none"]
+    from .turn_understanding import attach_turn_understanding
+    adapted = attach_turn_understanding(interpretation.model_copy(), candidate)
+    return owns_advice(adapted, state)
+
+
+def pending_order_reference(text, state, recent_turns):
+    """A numeric answer to an order-number request is never a catalog search."""
+    import re
+    from .commerce.generic_catalog import normalize_text
+    candidate = (text or "").strip().lstrip("#").strip()
+    if not re.fullmatch(r"[0-9]{3,10}", candidate):
+        return None
+    if state.pending_action and state.pending_action not in {"awaiting_order_number", "awaiting_order_id"}:
+        return None
+    last = next((turn.get("content", "") for turn in reversed(recent_turns or [])
+                 if turn.get("role") == "assistant"), "")
+    if last:
+        # A later product question supersedes an older order topic.
+        value = normalize_text(last)
+        expected = re.search(r"\b(?:numero|codigo|referencia)\s+(?:(?:de|do|desse|deste|seu|meu)\s+){0,3}pedido\b", value)
+        return candidate if expected else None
+    return candidate if state.active_topic == "order_status" else None
+
+
 def has_institutional_questions(interpretation):
     """Mixed catalog requests keep complete listing plus answer other questions."""
     understanding = get_turn_understanding(interpretation) if interpretation else None

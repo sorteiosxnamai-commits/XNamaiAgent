@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, Awaitable, Callable, Literal
 
@@ -19,6 +20,7 @@ from .commerce_context import (
 )
 from .openai_models import resolve_openai_model
 from .config import get_settings
+
 from .greeting_policy import is_generic_greeting_reply
 from .guardrails import detect_trade_in_or_appraisal_request
 from .handoff_service import build_human_handoff_result
@@ -40,6 +42,9 @@ from .turn_runtime import LLMCallBudgetExceeded
 
 
 ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+
+# Observation cannot delay an already validated reply through provider retries.
+SHADOW_CRITIQUE_TIMEOUT_SECONDS = 8.0
 
 CRITIQUE_JUDGE_SYSTEM_PROMPT = (
     "Você é o JUÍZ redundante do agente XNamai. "
@@ -844,7 +849,7 @@ async def apply_response_critique_loop(
         return result, report
 
     try:
-        return await _run_response_critique_loop(
+        review = _run_response_critique_loop(
             incoming=incoming,
             result=result,
             recent_turns=recent_turns,
@@ -855,6 +860,19 @@ async def apply_response_critique_loop(
             execute=execute,
             seed_verdict=fast_verdict if seeded_fail else None,
         )
+        if critique_mode == "shadow":
+            try:
+                return await asyncio.wait_for(review, timeout=SHADOW_CRITIQUE_TIMEOUT_SECONDS)
+            except TimeoutError:
+                report.approved = False  # Not graded, never a claim of approval.
+                result.response_metadata["response_critique"] = {
+                    **report.model_dump(mode="json"), "skipped": True,
+                    "skip_reason": "shadow_timeout",
+                }
+                print("[agent.critique.skip]", {"reason": "shadow_timeout",
+                    "timeout_seconds": SHADOW_CRITIQUE_TIMEOUT_SECONDS})
+                return result, report
+        return await review
     except Exception as exc:
         # Critique must never take down the WhatsApp reply path.
         print("[agent.critique.error]", {
