@@ -1,5 +1,8 @@
 # XNamaiAgent — atendimento comercial da Xnamai
 
+Novo caminho de agente direto, preview autenticado e rollback:
+[guia do agente direto](docs/direct-agent.md). O legado permanece como padrão.
+
 Ativação, indexação no servidor, avaliação e rollback das melhorias de qualidade:
 [guia de implantação](docs/agent-quality-rollout.md). O destino Vercel deve ser
 confirmado como XNAMAI agente antes de publicar; o vínculo local legado não basta.

@@ -94,6 +94,10 @@ async def enrich_agent_result(incoming: IncomingMessage, result: AgentResult) ->
 
 
 async def process_incoming_message(incoming: IncomingMessage, customer_context: dict) -> AgentResult:
+    if getattr(get_settings(), "xnamai_agent_engine", "legacy") == "direct":
+        from .direct.pipeline import process_direct_message
+        return await process_direct_message(incoming, customer_context)
+
     from .business_policy import bind_policy, reset_policy
     from .persona_consultation import consult_active_persona
     from .turn_cache import begin_turn_cache, end_turn_cache

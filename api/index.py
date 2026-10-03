@@ -18,6 +18,7 @@ from app.security import (
     verify_order_sync_cron,
 )
 from app.persona_admin_api import router as persona_admin_router
+from app.direct.admin import router as direct_admin_router
 from app.webhook_parser import (
     inbound_skip_reason,
     parse_brevo_conversations_payload,
@@ -66,6 +67,7 @@ from app.observability import (
 
 app = FastAPI(title="XNamaiAgent Webhook", version="1.0.0")
 app.include_router(persona_admin_router)
+app.include_router(direct_admin_router)
 
 
 def _commerce_health() -> dict:
@@ -364,6 +366,7 @@ async def health():
         "ok": True,
         "agent_version": AGENT_VERSION,
         "agent_mode": "openai_with_db_context",
+        "agent_engine": getattr(settings, "xnamai_agent_engine", "legacy"),
         # DIAGNÓSTICO TEMPORÁRIO: separa "a Vercel não entregou" de "o Settings
         # perdeu". env_ignore_empty torna ausente e vazio indistinguíveis no
         # Settings, então a leitura raw de os.environ é a única testemunha.

@@ -41,6 +41,10 @@ class _KeepMeaningfulEmptySource(EnvSettingsSource):
 
 
 class Settings(BaseSettings):
+    xnamai_agent_engine: Literal["legacy", "direct"] = Field(default="legacy", alias="XNAMAI_AGENT_ENGINE")
+    direct_openai_model: str = Field(default="", alias="DIRECT_OPENAI_MODEL")
+    direct_max_rounds: int = Field(default=4, ge=2, le=8, alias="DIRECT_MAX_ROUNDS")
+    direct_timeout_seconds: float = Field(default=65, ge=5, le=120, alias="DIRECT_TIMEOUT_SECONDS")
     agent_conversation_first_enabled: bool = Field(default=False, alias="AGENT_CONVERSATION_FIRST_ENABLED")
     agent_consultative_enabled: bool = Field(default=False, alias="AGENT_CONSULTATIVE_ENABLED")
     agent_consultative_traffic_percent: float = Field(default=0, ge=0, le=100, alias="AGENT_CONSULTATIVE_TRAFFIC_PERCENT")

@@ -1,7 +1,9 @@
 """Toda chamada LLM que escreve para o cliente recebe a persona publicada.
 
 A persona vive fora do Python (persona publicada no banco / GPT). O codigo so
-a INJETA por uma fonte unica: ``prompt_compiler.resolve_system_instructions``.
+a INJETA por ``prompt_compiler.resolve_system_instructions`` no legado.
+O motor direto usa a persona ativa validada por workspace em
+``direct.context.persona_context``; seu envio real é coberto em test_direct_agent.
 
 Duas guardas:
 1. Estrutural — cada chamada LLM do runtime declara ``call_type`` literal e
@@ -77,6 +79,10 @@ def _llm_call_sites() -> list[tuple[str, str, int, str | None, bool]]:
                 for c in calls
             }
             resolves_persona = "resolve_system_instructions" in names
+            if rel == "app/direct/agent.py" and fn.name == "run_turn":
+                # The direct engine deliberately bypasses legacy prompt overlays.
+                # It must still serialize the validated published persona itself.
+                resolves_persona = "persona_context" in names
             for call in calls:
                 name = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
                 if name not in LLM_ENTRYPOINTS:
