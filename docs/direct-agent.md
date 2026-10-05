@@ -65,9 +65,19 @@ token administrativo nem sessão assinada.
   o contrato existente de handoff, sem prometer atribuição concluída.
 
 O texto completo da persona ativa orienta identidade, personalidade e atendimento.
-Ferramentas não oferecem cadastro, pedido, pagamento nem consulta privada de
-cliente. Compras são orientadas ao catálogo oficial. Regras comerciais do legado
-não ampliam permissões do agente direto.
+Ferramentas do modelo não oferecem cadastro, pedido, pagamento nem consulta
+privada de cliente. O cadastro reutiliza o handler determinístico do legado antes
+do modelo: valida disponibilidade, coleta os campos, apresenta revisão mascarada,
+exige confirmação e consulta duplicidade antes da criação. O provider mantém a
+trava durável por documento e não repete um POST de resultado desconhecido.
+O preview administrativo recusa cadastro e nunca consulta ou cria clientes reais.
+Compras são orientadas ao catálogo oficial.
+
+Estado operacional é recuperado pelo mesmo mecanismo do legado e isolado por
+workspace e identidade. Revisões só autorizam criação depois da entrega; um
+"sim" após mudança de assunto pede nova revisão. Turnos identificados como
+cadastro são excluídos do histórico enviado ao modelo, e o rascunho não entra
+nas instruções. As ferramentas de consulta continuam separadas das mutações.
 
 Conversations API mantém contexto remoto. O ID é salvo nos metadados existentes.
 Somente turnos entregues com mesmo tenant, workspace, provedor, canal, conversa e cliente

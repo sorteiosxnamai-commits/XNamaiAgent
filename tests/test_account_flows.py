@@ -19,7 +19,9 @@ def test_recognizes_cpf_registration_policy_questions(text):
 
 
 @pytest.mark.asyncio
-async def test_answers_cpf_policy_without_calling_commerce_or_model():
+async def test_answers_cpf_policy_without_calling_commerce_or_model(monkeypatch):
+    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities",
+        lambda: frozenset({"create_customer", "lookup_customer_by_document"}))
     calls = []
 
     async def execute(name, payload):

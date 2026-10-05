@@ -59,15 +59,17 @@ async def handle_account_flows(
             "quero me cadastrar",
             state=state,
             execute=execute,
-            registration_enabled=True,
+            registration_enabled=registration_capability_available(
+                capability_catalog.runtime_commerce_capabilities()
+            ),
             commit_enabled=registration_capability_available(
                 capability_catalog.runtime_commerce_capabilities()
             ),
             sender_name=message.sender_name,
             sender_phone=message.sender_phone,
         )
-        if result is None:
-            return None
+        if result is None or result.safety_reason == "customer_registration_unavailable":
+            return result
         result.reply_text = (
             "Sim. A XNamai atende cadastro e compras tanto por CPF quanto por CNPJ. "
             "O cadastro por CPF é feito pelo atendimento. Para fazer por aqui, "
@@ -92,7 +94,9 @@ async def handle_account_flows(
         text,
         state=state,
         execute=execute,
-        registration_enabled=True,
+        registration_enabled=registration_capability_available(
+            capability_catalog.runtime_commerce_capabilities()
+        ),
         commit_enabled=registration_capability_available(
             capability_catalog.runtime_commerce_capabilities()
         ),

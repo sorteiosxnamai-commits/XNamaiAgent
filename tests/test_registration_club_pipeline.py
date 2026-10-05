@@ -171,20 +171,21 @@ async def test_channel_name_is_not_used_as_legal_name(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_registration_collects_before_commit_capability_is_ready(monkeypatch):
+async def test_registration_refuses_before_collecting_when_capabilities_are_missing(monkeypatch):
     conversation = Conversation(monkeypatch, capabilities=frozenset())
     result = await conversation.say("gostaria de me cadastrar")
-    assert result.safety_reason is None
-    assert "cpf" in result.reply_text.casefold()
-    assert conversation.pending == "awaiting_customer_registration_data"
+    assert result.safety_reason == "customer_registration_unavailable"
+    assert conversation.registration["draft"] == {}
+    assert conversation.pending is None
     assert conversation.calls == []
 
 
 @pytest.mark.asyncio
-async def test_create_without_duplicate_check_only_allows_collection(monkeypatch):
+async def test_create_without_duplicate_check_refuses_collection(monkeypatch):
     conversation = Conversation(monkeypatch, capabilities=frozenset({"create_customer"}))
     result = await conversation.say("quero me cadastrar")
-    assert "CPF" in result.reply_text
+    assert result.safety_reason == "customer_registration_unavailable"
+    assert conversation.pending is None
     assert conversation.calls == []
 
 

@@ -8,6 +8,7 @@ from app.direct.agent import DirectOpenAIAgent
 from app.direct.context import knowledge_documents, load_history, load_persona
 from app.direct.media import input_content
 from app.direct.tools import DirectTools
+from app.direct.registration import load_state, registration_turn, attach_state
 
 
 async def run_direct_turn(incoming, *, history=None, previous=None):
@@ -25,9 +26,21 @@ async def run_direct_turn(incoming, *, history=None, previous=None):
             tools = DirectTools(provider=get_commerce_provider(), incoming=incoming,
                                 documents=knowledge_documents(persona))
             tools.products = list((previous or {}).get("direct_products") or [])[-60:]
-            result = await DirectOpenAIAgent(get_async_openai_client(), settings).run_turn(
-                incoming=incoming, workspace_id=workspace, history=history,
-                previous=previous or {}, tools=tools, content=await input_content(incoming), persona=persona)
+            state = await load_state(incoming, previous)
+            content = await input_content(incoming)
+            result = await registration_turn(incoming, state, tools.provider, history, previous)
+            if result is not None:
+                result.response_metadata.update({"engine": "direct",
+                    "direct_registration": True,
+                    "direct_products": tools.products,
+                    "direct_agent": {"model": None, "calls": 0, "tools": [],
+                        "input_tokens": 0, "output_tokens": 0, "latency_ms": 0,
+                        "prompt_version": "direct-registration-v1", "knowledge_document_count": 0}})
+            else:
+                result = await DirectOpenAIAgent(get_async_openai_client(), settings).run_turn(
+                    incoming=incoming, workspace_id=workspace, history=history,
+                    previous=previous or {}, tools=tools, content=content, persona=persona)
+            result = await attach_state(incoming, result, state)
             result.response_metadata["persona_runtime"] = {
                 "workspace_id": workspace, "persona_version_id": persona.id}
             log_event("direct.turn.completed", {k: v for k, v in result.response_metadata["direct_agent"].items()

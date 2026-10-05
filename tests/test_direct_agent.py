@@ -210,6 +210,14 @@ def test_history_query_strictly_scoped_and_delivered(monkeypatch):
     assert "COALESCE(i.sender_key" in query and "i.id < %(before)s" in query
     assert params["workspace"] == WORKSPACE and params["before"] == 10
     assert len(history) == 2 and previous["engine"] == "direct"
+    cur.fetchall.return_value = [
+        {"text": "maria@example.com", "reply_text": "Revise seu cadastro",
+         "metadata": {"customer_registration_state": {"status": "review"}}},
+        {"text": "Oi", "reply_text": "Olá", "metadata": {"engine": "direct"}},
+    ]
+    history, previous = context.load_history(incoming(raw={"inbound_id": 11}), WORKSPACE)
+    assert history == [{"role": "user", "content": "Oi"}, {"role": "assistant", "content": "Olá"}]
+    assert previous["customer_registration_state"]["status"] == "review"
 
 
 @pytest.mark.asyncio

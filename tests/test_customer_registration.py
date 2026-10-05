@@ -278,8 +278,8 @@ def test_customer_payload_is_redacted_from_observability():
 
 
 @pytest.mark.asyncio
-async def test_create_customer_alone_collects_but_does_not_commit(monkeypatch):
-    """Coleta continua disponível; confirmação exige busca e mutation."""
+async def test_create_customer_without_lookup_refuses_before_collection(monkeypatch):
+    """Sem busca de duplicidade, não pedir dados que não podem ser usados."""
     import app.openai_agent as agent
 
     monkeypatch.setattr(agent, "load_recent_conversation_turns", lambda *_a, **_k: [])
@@ -291,8 +291,8 @@ async def test_create_customer_alone_collects_but_does_not_commit(monkeypatch):
         agent.IncomingMessage(text="quero me cadastrar"),
         {"_commerce_state": CommerceConversationState()},
     )
-    assert result.safety_reason is None
-    assert "CPF" in result.reply_text
+    assert result.safety_reason == "customer_registration_unavailable"
+    assert result.response_metadata["customer_registration_state"]["draft"] == {}
 
 
 @pytest.mark.asyncio

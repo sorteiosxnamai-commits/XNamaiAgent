@@ -116,7 +116,8 @@ async def handle_short_choice(message, *, state, execute, recent_turns=None, def
         from .customer_registration import handle_customer_registration_turn, registration_capability_available
         from .capability_catalog import runtime_commerce_capabilities
         result = await handle_customer_registration_turn(
-            "quero me cadastrar como pessoa física", state=state, execute=execute, registration_enabled=True,
+            "quero me cadastrar como pessoa física", state=state, execute=execute,
+            registration_enabled=registration_capability_available(runtime_commerce_capabilities()),
             commit_enabled=registration_capability_available(runtime_commerce_capabilities()),
             sender_name=message.sender_name, sender_phone=message.sender_phone,
         )

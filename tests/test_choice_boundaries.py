@@ -14,7 +14,7 @@ from app.models import IncomingMessage
     "choose_checkout_channel",
 ])
 async def test_current_document_question_supersedes_old_non_authorizing_action(monkeypatch, pending):
-    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset())
+    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset({"create_customer", "lookup_customer_by_document"}))
     state = CommerceConversationState(
         pending_action=pending,
         pending_followup={"question": "Você quer comprar com CPF ou CNPJ?"},

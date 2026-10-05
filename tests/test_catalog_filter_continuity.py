@@ -83,7 +83,7 @@ async def test_refined_provider_call_keeps_all_constraints():
 
 @pytest.mark.asyncio
 async def test_cpf_after_unpunctuated_registration_offer_collects_without_mutation(monkeypatch):
-    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset())
+    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset({"create_customer", "lookup_customer_by_document"}))
     history = [{"role": "assistant", "content": "Com CNPJ, entre no catálogo. Com CPF, o cadastro é pelo atendimento. Se quiser, já te explico como fazer o cadastro."}]
     state = CommerceConversationState()
     assert resolve_choice("cpf", state, history).value == "cpf"
@@ -117,7 +117,7 @@ async def test_ambiguous_punctuation_defers_to_contextual_interpreter():
 async def test_semantic_cpf_choice_activates_local_collection_without_creation(monkeypatch, choice, source, confidence, collects):
     from app.models import SalesInterpretation
     from app.turn_understanding import TurnUnderstanding, attach_turn_understanding
-    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset())
+    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset({"create_customer", "lookup_customer_by_document"}))
     interpretation = SalesInterpretation(domain="store_general", confidence=confidence,
         references_previous_context=True, needs_clarification=False)
     interpretation._source = source

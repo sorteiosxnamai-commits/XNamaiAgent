@@ -17,7 +17,7 @@ def context(question="Você quer comprar com CPF ou CNPJ?"):
 @pytest.mark.parametrize("text", ["cpf", "CPF", "com CPF", "prefiro cpf", "pessoa física", "pf"])
 @pytest.mark.asyncio
 async def test_cpf_answer_starts_collection_even_with_old_product_without_search_or_creation(monkeypatch, text):
-    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset())
+    monkeypatch.setattr("app.capability_catalog.runtime_commerce_capabilities", lambda: frozenset({"create_customer", "lookup_customer_by_document"}))
     execute = AsyncMock(side_effect=AssertionError("No external lookup or mutation for choosing CPF"))
     result = await handle_short_choice(IncomingMessage(text=text), state=context(), execute=execute)
     assert result.response_metadata["pending_action"] == "awaiting_customer_registration_data"

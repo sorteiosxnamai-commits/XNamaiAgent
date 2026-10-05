@@ -72,6 +72,10 @@ def load_history(incoming, workspace_id, *, limit=30):
             rows = list(reversed(cur.fetchall()))
     history = []
     for row in rows:
+        metadata = row.get("metadata") or {}
+        if metadata.get("customer_registration_state") or metadata.get("direct_registration"):
+            # Keep registration data in operational state, outside model history.
+            continue
         history.extend([{"role": "user", "content": row["text"] or "[Mídia recebida]"},
                         {"role": "assistant", "content": row["reply_text"]}])
     return history, (rows[-1].get("metadata") or {}) if rows else {}
