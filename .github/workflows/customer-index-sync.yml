@@ -27,8 +27,8 @@ jobs:
     steps:
       - name: Run incremental customer sync
         env:
-          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          AGENT_BASE_URL: https://x-namai-agent.vercel.app
+          CRON_SECRET: a176286cfee99557339f3d6a3dbbf7f6c7cf0d37ebfaf212083f9819d239d419
         run: |
           set -euo pipefail
           if [ -z "${AGENT_BASE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
