@@ -91,10 +91,11 @@ async def run_configured_customer_sync() -> dict[str, Any]:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))",
+                    "SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS acquired",
                     (_CUSTOMER_SYNC_LOCK_KEY,),
                 )
-                acquired = bool(cur.fetchone()[0])
+                # get_conn() uses dict_row: read by name, not by index.
+                acquired = bool(cur.fetchone()["acquired"])
             if not acquired:
                 return {"ok": False, "error": "sync_already_running"}
             try:

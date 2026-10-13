@@ -27,7 +27,8 @@ class _FakeCursor:
     def execute(self, sql, params=None):
         self._calls.append(sql.strip().split("\n")[0])
         if "pg_try_advisory_lock" in sql:
-            self._last = (self._lock_acquired,)
+            # Real get_conn() uses dict_row: rows are keyed by column name.
+            self._last = {"acquired": self._lock_acquired}
         elif "pg_advisory_unlock" in sql:
             self._calls.append("UNLOCK")
 
